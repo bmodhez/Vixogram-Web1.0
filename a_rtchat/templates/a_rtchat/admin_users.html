@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="min-h-[calc(100vh-7rem)] py-6">
+  <div class="w-full max-w-4xl mx-auto bg-gray-900/60 border border-gray-800 rounded-2xl shadow-2xl p-6">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-bold text-emerald-400">Manage users</h1>
+        <p class="text-sm text-gray-300 mt-1">Block/unblock users from the frontend.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="{% url 'moderation-logs' %}" class="text-sm bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors">Moderation logs</a>
+        <a href="{% url 'home' %}" class="text-sm bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors">Back to chat</a>
+      </div>
+    </div>
+
+    <form method="get" class="mt-6 flex gap-2">
+      <input
+        type="text"
+        name="q"
+        value="{{ q }}"
+        placeholder="Search by username/email/name..."
+        class="w-full bg-gray-800/60 border border-gray-700 text-gray-100 rounded-xl px-4 py-3 placeholder-gray-400 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
+      />
+      <button type="submit" class="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-xl px-5 py-3 transition-colors">
+        Search
+      </button>
+    </form>
+
+    <div class="mt-6 overflow-x-auto rounded-xl border border-gray-800">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-900/80">
+          <tr class="text-left text-gray-300">
+            <th class="px-4 py-3">User</th>
+            <th class="px-4 py-3">Email</th>
+            <th class="px-4 py-3">Role</th>
+            <th class="px-4 py-3">Chat</th>
+            <th class="px-4 py-3">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-800">
+          {% for u in users %}
+            <tr class="bg-gray-900/40 text-gray-200">
+              <td class="px-4 py-3 font-semibold">{{ u.username }}</td>
+              <td class="px-4 py-3 text-gray-300">{{ u.email|default:'—' }}</td>
+              <td class="px-4 py-3">
+                {% if u.is_superuser %}
+                  <span class="text-amber-400 font-semibold">Superuser</span>
+                {% elif u.is_staff %}
+                  <span class="text-emerald-400 font-semibold">Staff</span>
+                {% else %}
+                  <span class="text-gray-300">User</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3">
+                {% if u.profile.chat_blocked %}
+                  <span class="text-red-400 font-semibold">Blocked</span>
+                {% else %}
+                  <span class="text-emerald-400 font-semibold">Allowed</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3">
+                {% if u.is_superuser %}
+                  <span class="text-xs text-gray-400">Protected</span>
+                {% elif u.id == user.id %}
+                  <span class="text-xs text-gray-400">You</span>
+                {% else %}
+                  <form method="post" action="{% url 'admin-user-toggle-block' u.id %}" class="inline">
+                    {% csrf_token %}
+                    {% if not u.profile.chat_blocked %}
+                      <button type="submit" data-confirm="Block {{ u.username }} from chatting? They can still view chats but can’t send messages or use private chats." data-confirm-title="Block user" class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg transition-colors">
+                        Block
+                      </button>
+                    {% else %}
+                      <button type="submit" class="text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg transition-colors">
+                        Unblock
+                      </button>
+                    {% endif %}
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr class="bg-gray-900/40 text-gray-300">
+              <td class="px-4 py-6" colspan="5">No users found.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

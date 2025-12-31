@@ -1,37 +1,52 @@
 {% extends 'layouts/box.html' %}
 
-{% block content %} 
+{% block box_title %}Edit chatroom{% endblock %}
 
-<h1>Edit Chat</h1>
+{% block box_subtitle %}
+    <p class="text-sm text-gray-400 mt-1">Update the room name and manage members.</p>
+{% endblock %}
 
-<form method="post">
-    {% csrf_token %}
-    {{ form }}
+{% block box_body %}
+    <form method="post" class="space-y-5">
+        {% csrf_token %}
 
-    <div class="my-4">
-    <h2>Members</h2>
-    {% for member in chat_group.members.all %}
-    <div class="flex justify-between items-center">
-        <div class="flex items-center gap-2 py-2">
-            <img class="w-14 h-14 rounded-full object-cover" src="{{ member.profile.avatar }}" />
-            <div>
-                <span class="font-bold">{{ member.profile.name }}</span> 
-                <span class="text-sm font-light text-gray-600">@{{ member.username }}</span>
+        <div>
+            <label for="id_groupchat_name" class="block text-sm font-semibold text-gray-200 mb-2">Room name</label>
+            {{ form.groupchat_name }}
+        </div>
+
+        <div class="border border-gray-800 rounded-2xl p-4 bg-gray-900/40">
+            <div class="text-sm font-semibold text-gray-200 mb-3">Members</div>
+            <div class="space-y-2">
+                {% for member in chat_group.members.all %}
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <img class="w-10 h-10 rounded-full object-cover border border-gray-800" src="{{ member.profile.avatar }}" />
+                            <div class="min-w-0">
+                                <div class="text-sm font-semibold text-gray-100 truncate">{{ member.profile.name }}</div>
+                                <div class="text-xs text-gray-400 truncate">@{{ member.username }}</div>
+                            </div>
+                        </div>
+
+                        {% if member != chat_group.admin %}
+                            <label class="inline-flex items-center gap-2 text-xs text-gray-300">
+                                <input type="checkbox" name="remove_members" value="{{ member.id }}" class="h-4 w-4 rounded border-gray-700 bg-gray-900 text-red-500 focus:ring-emerald-500" />
+                                Remove
+                            </label>
+                        {% else %}
+                            <span class="text-[11px] text-emerald-400">Admin</span>
+                        {% endif %}
+                    </div>
+                {% endfor %}
             </div>
         </div>
-        
-        {% if member != chat_group.admin %}
-        <div class="inline-block pr-4">
-            <input type="checkbox" name="remove_members" value="{{ member.id }}" class="relative p-5 cursor-pointer appearance-none rounded-md border after:absolute after:left-0 after:top-0 after:h-full after:w-full after:bg-[url('https://img.icons8.com/ffffff/32/multiply.png')] after:bg-center checked:bg-red-500 hover:ring hover:ring-gray-300 focus:outline-none" />
+
+        <div class="flex items-center justify-between">
+            <a href="{% url 'chatroom-delete' chat_group.group_name %}" class="text-sm text-red-400 hover:text-red-300">Delete chatroom</a>
+            <div class="flex items-center gap-2">
+                <a href="{% url 'chatroom' chat_group.group_name %}" class="text-sm bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors">Cancel</a>
+                <button type="submit" class="text-sm bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition-colors">Save</button>
+            </div>
         </div>
-        {% endif %}
-    </div> 
-    {% endfor %}
-    </div>
-
-    <button class="mt-2" type="submit">Update</button>
-</form>
-
-<a href="{% url 'chatroom-delete' chat_group.group_name %}" class="flex justify-end mt-4 text-gray-400 hover:text-red-500" >Delete Chatroom</a>
-
+    </form>
 {% endblock %}

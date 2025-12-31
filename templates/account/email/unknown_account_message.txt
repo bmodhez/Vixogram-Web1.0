@@ -1,0 +1,10 @@
+{% extends "account/email/base_message.txt" %}
+{% load i18n %}
+
+{% block content %}{% autoescape off %}{% blocktranslate %}You are receiving this email because you (or someone else) requested a password reset for {{ email }}.{% endblocktranslate %}
+
+{% blocktranslate %}We could not find an account for this email address in our database.{% endblocktranslate %}
+
+{% blocktranslate %}If you meant to reset your password, please try again using the exact email address you used when signing up.{% endblocktranslate %}
+
+{% blocktranslate %}If you did not request this, you can safely ignore this email.{% endblocktranslate %}{% endautoescape %}{% endblock content %}

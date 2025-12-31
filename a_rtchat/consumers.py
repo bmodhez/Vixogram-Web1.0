@@ -5,6 +5,32 @@ from django.contrib.auth import get_user_model
 from asgiref.sync import async_to_sync
 import json
 from .models import *
+from django.conf import settings
+from .rate_limit import (
+    check_rate_limit,
+    get_muted_seconds,
+    is_fast_long_message,
+    is_same_emoji_spam,
+    is_duplicate_message,
+    make_key,
+    record_abuse_violation,
+)
+
+from .moderation import moderate_message
+from .channels_utils import chatroom_channel_group_name
+
+
+def _is_chat_blocked(user) -> bool:
+    """Chat-blocked users can read chats but cannot send messages.
+
+    Mirrors the intent of the HTTP views' checks; staff users are never considered blocked.
+    """
+    try:
+        if getattr(user, 'is_staff', False):
+            return False
+        return bool(user.profile.chat_blocked)
+    except Exception:
+        return False
 
 
 def _resolve_authenticated_user(scope_user):
@@ -22,6 +48,7 @@ class ChatroomConsumer(WebsocketConsumer):
         self.user = _resolve_authenticated_user(self.scope.get('user'))
         self.chatroom_name = self.scope['url_route']['kwargs']['chatroom_name'] 
         self.chatroom = get_object_or_404(ChatGroup, group_name=self.chatroom_name)
+        self.room_group_name = chatroom_channel_group_name(self.chatroom)
 
         # Prevent non-members from connecting to private rooms.
         if getattr(self.chatroom, 'is_private', False):
@@ -33,7 +60,7 @@ class ChatroomConsumer(WebsocketConsumer):
                 return
         
         async_to_sync(self.channel_layer.group_add)(
-            self.chatroom_name, self.channel_name
+            self.room_group_name, self.channel_name
         )
         
         self.accept()
@@ -48,7 +75,7 @@ class ChatroomConsumer(WebsocketConsumer):
         
     def disconnect(self, close_code):
         async_to_sync(self.channel_layer.group_discard)(
-            self.chatroom_name, self.channel_name
+            self.room_group_name, self.channel_name
         )
         # remove and update online users
         if getattr(self.user, 'is_authenticated', False):
@@ -61,7 +88,45 @@ class ChatroomConsumer(WebsocketConsumer):
         if not getattr(self.user, 'is_authenticated', False):
             return
 
+        # Allow blocked users to connect/read, but never allow them to send any events.
+        if _is_chat_blocked(self.user):
+            return
+
+        muted = get_muted_seconds(getattr(self.user, 'id', 0))
+        if muted > 0:
+            return
+
         event_type = (text_data_json.get('type') or '').strip().lower()
+
+        # Rate limit websocket event spam.
+        if event_type == 'typing':
+            limit = int(getattr(settings, 'WS_TYPING_RATE_LIMIT', 12))
+            period = int(getattr(settings, 'WS_TYPING_RATE_PERIOD', 10))
+            rl = check_rate_limit(make_key('ws_typing', self.chatroom_name, self.user.id), limit=limit, period_seconds=period)
+            if not rl.allowed:
+                record_abuse_violation(
+                    scope='ws_typing',
+                    user_id=self.user.id,
+                    room=self.chatroom_name,
+                    window_seconds=int(getattr(settings, 'CHAT_ABUSE_WINDOW', 600)),
+                    threshold=int(getattr(settings, 'CHAT_ABUSE_STRIKE_THRESHOLD', 5)),
+                    mute_seconds=int(getattr(settings, 'CHAT_ABUSE_MUTE_SECONDS', 60)),
+                )
+                return
+        else:
+            limit = int(getattr(settings, 'WS_MSG_RATE_LIMIT', 8))
+            period = int(getattr(settings, 'WS_MSG_RATE_PERIOD', 10))
+            rl = check_rate_limit(make_key('ws_event', self.chatroom_name, self.user.id), limit=limit, period_seconds=period)
+            if not rl.allowed:
+                record_abuse_violation(
+                    scope='ws_event',
+                    user_id=self.user.id,
+                    room=self.chatroom_name,
+                    window_seconds=int(getattr(settings, 'CHAT_ABUSE_WINDOW', 600)),
+                    threshold=int(getattr(settings, 'CHAT_ABUSE_STRIKE_THRESHOLD', 5)),
+                    mute_seconds=int(getattr(settings, 'CHAT_ABUSE_MUTE_SECONDS', 60)),
+                )
+                return
         if event_type == 'typing':
             is_typing = bool(text_data_json.get('is_typing'))
             try:
@@ -70,7 +135,7 @@ class ChatroomConsumer(WebsocketConsumer):
                 display_name = getattr(self.user, 'username', '') or ''
 
             async_to_sync(self.channel_layer.group_send)(
-                self.chatroom_name,
+                self.room_group_name,
                 {
                     'type': 'typing_handler',
                     'author_id': getattr(self.user, 'id', None),
@@ -82,6 +147,166 @@ class ChatroomConsumer(WebsocketConsumer):
 
         body = (text_data_json.get('body') or '').strip()
         if not body:
+            return
+
+        # AI moderation (Gemini) for WS-created messages.
+        pending_moderation = None
+        if (
+            body
+            and int(getattr(settings, 'AI_MODERATION_ENABLED', 1))
+            and not getattr(self.user, 'is_staff', False)
+        ):
+            try:
+                last_user_msgs = list(
+                    self.chatroom.chat_messages.filter(author=self.user)
+                    .exclude(body__isnull=True)
+                    .exclude(body='')
+                    .order_by('-created')
+                    .values_list('body', flat=True)[:5]
+                )
+            except Exception:
+                last_user_msgs = []
+
+            ctx = {
+                'room': getattr(self.chatroom, 'group_name', self.chatroom_name),
+                'room_id': getattr(self.chatroom, 'id', None),
+                'user_id': getattr(self.user, 'id', None),
+                'last_user_messages': list(reversed(list(last_user_msgs))),
+            }
+
+            decision = moderate_message(text=body, context=ctx)
+            action = decision.action
+
+            block_min = int(getattr(settings, 'AI_BLOCK_MIN_SEVERITY', 2))
+            flag_min = int(getattr(settings, 'AI_FLAG_MIN_SEVERITY', 1))
+            min_conf = float(getattr(settings, 'AI_MIN_CONFIDENCE', 0.55))
+
+            if decision.confidence < min_conf:
+                action = 'allow'
+            elif decision.severity >= block_min:
+                action = 'block'
+            elif decision.severity >= flag_min:
+                action = 'flag'
+
+            log_all = bool(int(getattr(settings, 'AI_LOG_ALL', 0)))
+            if log_all or action == 'flag':
+                pending_moderation = (decision, action)
+
+            if action == 'block':
+                ModerationEvent.objects.create(
+                    user=self.user,
+                    room=self.chatroom,
+                    message=None,
+                    text=body[:2000],
+                    action='block',
+                    categories=decision.categories,
+                    severity=decision.severity,
+                    confidence=decision.confidence,
+                    reason=decision.reason,
+                    source='gemini',
+                    meta={
+                        'model_action': decision.action,
+                        'suggested_mute_seconds': decision.suggested_mute_seconds,
+                        'via': 'ws',
+                    },
+                )
+
+                weight = 1 + int(decision.severity >= 2)
+                _, auto_muted = record_abuse_violation(
+                    scope='ai_block',
+                    user_id=self.user.id,
+                    room=self.chatroom_name,
+                    window_seconds=int(getattr(settings, 'CHAT_ABUSE_WINDOW', 600)),
+                    threshold=int(getattr(settings, 'CHAT_ABUSE_STRIKE_THRESHOLD', 5)),
+                    mute_seconds=int(getattr(settings, 'CHAT_ABUSE_MUTE_SECONDS', 60)),
+                    weight=weight,
+                )
+                if auto_muted:
+                    pass
+                return
+
+            if action == 'flag':
+                record_abuse_violation(
+                    scope='ai_flag',
+                    user_id=self.user.id,
+                    room=self.chatroom_name,
+                    window_seconds=int(getattr(settings, 'CHAT_ABUSE_WINDOW', 600)),
+                    threshold=int(getattr(settings, 'CHAT_ABUSE_STRIKE_THRESHOLD', 5)),
+                    mute_seconds=int(getattr(settings, 'CHAT_ABUSE_MUTE_SECONDS', 60)),
+                    weight=1,
+                )
+
+        # Same emoji spam.
+        is_emoji_spam, _emoji_retry = is_same_emoji_spam(
+            body,
+            min_repeats=int(getattr(settings, 'EMOJI_SPAM_MIN_REPEATS', 4)),
+            ttl_seconds=int(getattr(settings, 'EMOJI_SPAM_TTL', 15)),
+        )
+        if is_emoji_spam:
+            record_abuse_violation(
+                scope='emoji_spam',
+                user_id=self.user.id,
+                room=self.chatroom_name,
+                window_seconds=int(getattr(settings, 'CHAT_ABUSE_WINDOW', 600)),
+                threshold=int(getattr(settings, 'CHAT_ABUSE_STRIKE_THRESHOLD', 5)),
+                mute_seconds=int(getattr(settings, 'CHAT_ABUSE_MUTE_SECONDS', 60)),
+                weight=2,
+            )
+            return
+
+        # Room-wide flood protection (WS direct send).
+        room_rl = check_rate_limit(
+            make_key('room_msg', self.chatroom_name),
+            limit=int(getattr(settings, 'ROOM_MSG_RATE_LIMIT', 30)),
+            period_seconds=int(getattr(settings, 'ROOM_MSG_RATE_PERIOD', 10)),
+        )
+        if not room_rl.allowed:
+            record_abuse_violation(
+                scope='room_flood',
+                user_id=self.user.id,
+                room=self.chatroom_name,
+                window_seconds=int(getattr(settings, 'CHAT_ABUSE_WINDOW', 600)),
+                threshold=int(getattr(settings, 'CHAT_ABUSE_STRIKE_THRESHOLD', 5)),
+                mute_seconds=int(getattr(settings, 'CHAT_ABUSE_MUTE_SECONDS', 60)),
+            )
+            return
+
+        # Duplicate message detection.
+        is_dup, _dup_retry = is_duplicate_message(
+            self.chatroom_name,
+            self.user.id,
+            body,
+            ttl_seconds=int(getattr(settings, 'DUPLICATE_MSG_TTL', 15)),
+        )
+        if is_dup:
+            record_abuse_violation(
+                scope='dup_msg',
+                user_id=self.user.id,
+                room=self.chatroom_name,
+                window_seconds=int(getattr(settings, 'CHAT_ABUSE_WINDOW', 600)),
+                threshold=int(getattr(settings, 'CHAT_ABUSE_STRIKE_THRESHOLD', 5)),
+                mute_seconds=int(getattr(settings, 'CHAT_ABUSE_MUTE_SECONDS', 60)),
+                weight=2,
+            )
+            return
+
+        # Fast long message heuristic (WS path).
+        is_fast, _fast_retry = is_fast_long_message(
+            self.chatroom_name,
+            self.user.id,
+            message_length=len(body),
+            long_length_threshold=int(getattr(settings, 'FAST_LONG_MSG_LEN', 80)),
+            min_interval_seconds=int(getattr(settings, 'FAST_LONG_MSG_MIN_INTERVAL', 1)),
+        )
+        if is_fast:
+            record_abuse_violation(
+                scope='fast_long_msg',
+                user_id=self.user.id,
+                room=self.chatroom_name,
+                window_seconds=int(getattr(settings, 'CHAT_ABUSE_WINDOW', 600)),
+                threshold=int(getattr(settings, 'CHAT_ABUSE_STRIKE_THRESHOLD', 5)),
+                mute_seconds=int(getattr(settings, 'CHAT_ABUSE_MUTE_SECONDS', 60)),
+            )
             return
 
         reply_to = None
@@ -100,12 +325,33 @@ class ChatroomConsumer(WebsocketConsumer):
             group = self.chatroom,
             reply_to=reply_to,
         )
+
+        if pending_moderation:
+            decision, action = pending_moderation
+            ModerationEvent.objects.create(
+                user=self.user,
+                room=self.chatroom,
+                message=message,
+                text=body[:2000],
+                action=action,
+                categories=decision.categories,
+                severity=decision.severity,
+                confidence=decision.confidence,
+                reason=decision.reason,
+                source='gemini',
+                meta={
+                    'model_action': decision.action,
+                    'suggested_mute_seconds': decision.suggested_mute_seconds,
+                    'linked': True,
+                    'via': 'ws',
+                },
+            )
         event = {
             'type': 'message_handler',
             'message_id': message.id,
         }
         async_to_sync(self.channel_layer.group_send)(
-            self.chatroom_name, event
+            self.room_group_name, event
         )
 
     def typing_handler(self, event):
@@ -168,18 +414,13 @@ class ChatroomConsumer(WebsocketConsumer):
         
     def update_online_count(self):
         online_count = self.chatroom.users_online.count()
-        if getattr(self.user, 'is_authenticated', False):
-            try:
-                if self.chatroom.users_online.filter(pk=self.user.pk).exists():
-                    online_count -= 1
-            except Exception:
-                pass
         
         event = {
             'type': 'online_count_handler',
             'online_count': online_count
         }
-        async_to_sync(self.channel_layer.group_send)(self.chatroom_name, event)
+        async_to_sync(self.channel_layer.group_send)(self.room_group_name, event)
+        
         
     def online_count_handler(self, event):
         online_count = event['online_count']

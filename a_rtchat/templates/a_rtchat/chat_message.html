@@ -27,16 +27,19 @@
                 Reply
             </button>
 
-            {% if message.author == user %}
+            {% if message.author == user or user.is_staff %}
                 <div class="ml-auto relative">
                     <button type="button"
-                        class="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-gray-300 hover:text-white px-2 py-1 rounded-lg hover:bg-gray-800/60"
-                        aria-label="Message actions">
+                        class="opacity-70 hover:opacity-100 transition-opacity text-[10px] text-gray-300 hover:text-white px-2 py-1 rounded-lg hover:bg-gray-800/60"
+                        aria-label="Message actions"
+                        aria-haspopup="menu"
+                        aria-expanded="false"
+                        data-message-menu-toggle>
                         ⋮
                     </button>
 
-                    <div class="pointer-events-none opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity absolute right-0 bottom-full mb-2 min-w-28 rounded-xl border border-gray-800 bg-gray-900/95 shadow-lg shadow-black/20 overflow-hidden">
-                        {% if message.body and message.body|slice:":6" != "[CALL]" and not message.file %}
+                    <div class="hidden absolute right-0 top-full mt-2 min-w-28 rounded-xl border border-gray-800 bg-gray-900/95 shadow-lg shadow-black/20 overflow-hidden z-50" data-message-menu role="menu">
+                        {% if message.author == user and message.body and message.body|slice:":6" != "[CALL]" and not message.file %}
                             <button type="button"
                                 data-edit-message
                                 data-message-id="{{ message.id }}"
@@ -51,6 +54,17 @@
                             class="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-800/60">
                             Delete
                         </button>
+
+                        {% if user.is_staff and message.author != user and not message.author.is_superuser %}
+                            <form method="post" action="{% url 'admin-user-toggle-block' message.author.id %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{% url 'chatroom' chat_group.group_name %}" />
+                                <button type="submit"
+                                    class="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-800/60">
+                                    {% if message.author.profile.chat_blocked %}Unblock user{% else %}Block user{% endif %}
+                                </button>
+                            </form>
+                        {% endif %}
                     </div>
                 </div>
             {% endif %}
@@ -82,7 +96,12 @@
             <div class="text-sm leading-relaxed">{% include 'a_rtchat/partials/message_content.html' %}</div>
         </div>
         
-        <time class="text-[9px] text-gray-400 mt-1 px-1" data-dt="{{ message.created|date:'c' }}"></time>
+        <div class="mt-1 px-1 flex items-center gap-1">
+            <time class="text-[9px] text-gray-400" data-dt="{{ message.created|date:'c' }}"></time>
+            {% if message.edited_at %}
+                <span class="text-[9px] text-gray-500">• edited</span>
+            {% endif %}
+        </div>
     </div>
 </div>
 {% endif %}

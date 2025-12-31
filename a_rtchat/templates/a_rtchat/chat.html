@@ -7,6 +7,22 @@
         <aside class="w-72 shrink-0 h-[45rem] bg-gray-900/60 border border-gray-800 rounded-2xl shadow-2xl p-4 overflow-y-auto">
             <div class="text-sm font-semibold text-gray-200 mb-3">Chats</div>
 
+            {% if user.is_staff %}
+                <div class="mb-4">
+                    <div class="text-xs font-semibold text-gray-400 mb-2">Admin tools</div>
+                    <div class="space-y-1">
+                        <a href="{% url 'new-groupchat' %}"
+                           class="block px-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 text-gray-300">
+                            Create group chat
+                        </a>
+                        <a href="{% url 'admin-users' %}"
+                           class="block px-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 text-gray-300">
+                            Manage users
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+
             <div class="mb-4">
                 <a href="{% url 'chatroom' 'public-chat' %}"
                    class="block px-3 py-2 rounded-lg text-sm hover:bg-gray-800/60
@@ -31,23 +47,29 @@
             {% endif %}
 
             <div class="text-xs font-semibold text-gray-400 mb-2">Private rooms</div>
-            <div class="space-y-2 mb-4">
-                <form method="post" action="{% url 'private-room-create' %}" class="space-y-2">
-                    {% csrf_token %}
-                    {{ private_room_create_form.name }}
-                    <button type="submit" class="w-full bg-gray-800 hover:bg-gray-700 text-white rounded-lg px-3 py-2 text-sm transition-colors">
-                        Create private room
-                    </button>
-                </form>
+            {% if chat_blocked %}
+                <div class="bg-gray-900/40 border border-gray-800 rounded-xl p-3 text-xs text-gray-300 mb-4">
+                    Private chats are disabled for your account.
+                </div>
+            {% else %}
+                <div class="space-y-2 mb-4">
+                    <form method="post" action="{% url 'private-room-create' %}" class="space-y-2">
+                        {% csrf_token %}
+                        {{ private_room_create_form.name }}
+                        <button type="submit" class="w-full bg-gray-800 hover:bg-gray-700 text-white rounded-lg px-3 py-2 text-sm transition-colors">
+                            Create private room
+                        </button>
+                    </form>
 
-                <form method="post" action="{% url 'private-room-join' %}" class="space-y-2">
-                    {% csrf_token %}
-                    {{ room_code_join_form.code }}
-                    <button type="submit" class="w-full bg-gray-800 hover:bg-gray-700 text-white rounded-lg px-3 py-2 text-sm transition-colors">
-                        Enter room code
-                    </button>
-                </form>
-            </div>
+                    <form method="post" action="{% url 'private-room-join' %}" class="space-y-2">
+                        {% csrf_token %}
+                        {{ room_code_join_form.code }}
+                        <button type="submit" class="w-full bg-gray-800 hover:bg-gray-700 text-white rounded-lg px-3 py-2 text-sm transition-colors">
+                            Enter room code
+                        </button>
+                    </form>
+                </div>
+            {% endif %}
 
             {% if sidebar_code_rooms %}
                 <div class="text-xs font-semibold text-gray-400 mb-2">Your private rooms</div>
@@ -94,7 +116,7 @@
                 {% endif %}
             </div>
 
-            {% if chat_group.is_private %}
+            {% if chat_group.is_private and not chat_blocked %}
                 <div class="flex items-center gap-2">
                     <a data-call-btn data-call-type="voice" href="#" class="text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg transition-colors">
                         Voice call
@@ -105,7 +127,7 @@
                 </div>
             {% endif %}
 
-            {% if chat_group.admin and user == chat_group.admin %}
+            {% if chat_group.admin and user == chat_group.admin or user.is_staff %}
                 <form method="post" action="{% url 'chatroom-close' chatroom_name %}"
                       data-confirm="Close this room? This will delete the room and all messages/uploads."
                       data-confirm-title="Close room">
@@ -118,11 +140,34 @@
         </div>
 
         <div id='chat_container' class="overflow-y-auto grow p-4">
-            <ul id='chat_messages' class="flex flex-col justify-end gap-2">
-                {% for message in chat_messages %}
-                    {% include 'a_rtchat/chat_message.html' %}
-                {% endfor %}
-            </ul>
+            {% if chat_messages %}
+                <ul id='chat_messages' class="flex flex-col justify-end gap-2">
+                    {% for message in chat_messages %}
+                        {% include 'a_rtchat/chat_message.html' %}
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <ul id='chat_messages' class="hidden"></ul>
+                <div id="empty_state" class="min-h-[28rem] flex items-center justify-center">
+                    <div class="text-center max-w-md">
+                        <div class="text-2xl font-extrabold text-gray-100">
+                            {% if chat_group.groupchat_name %}
+                                {{ chat_group.groupchat_name }}
+                            {% elif chat_group.is_private and other_user %}
+                                {{ other_user.profile.name|default:other_user.username }}
+                            {% elif chat_group.is_code_room and chat_group.code_room_name %}
+                                {{ chat_group.code_room_name }}
+                            {% elif chat_group.group_name == 'public-chat' %}
+                                Public chat
+                            {% else %}
+                                {{ chat_group.group_name }}
+                            {% endif %}
+                        </div>
+                        <div class="mt-3 text-sm text-gray-300">Talk about anything. Chill vibes only.</div>
+                        <div class="mt-2 text-sm text-gray-400">Say hi to start the conversation</div>
+                    </div>
+                </div>
+            {% endif %}
         </div>
 
         <div class="sticky bottom-0 z-10 p-4 bg-gray-900/60 border-t border-gray-800 rounded-b-2xl">
@@ -150,19 +195,30 @@
                 <span id="typing_indicator_text"></span>
             </div>
 
-            <form id="chat_message_form" class="flex items-center gap-2"
-                hx-post="{{ request.path }}"
-                hx-target="#chat_messages"
-                hx-swap="none"
-                hx-on:htmx:after-request="document.getElementById('id_body').value = ''; document.getElementById('reply_to_id').value=''; document.getElementById('reply_bar').classList.add('hidden'); scrollToBottom();">
-                {% csrf_token %}
+            {% if chat_blocked %}
+                <div class="bg-gray-900/40 border border-gray-800 rounded-xl px-4 py-3 text-sm text-gray-200">
+                    You can view messages, but you are blocked from sending messages.
+                </div>
+            {% elif chat_muted_seconds and chat_muted_seconds > 0 %}
+                <div class="bg-gray-900/40 border border-gray-800 rounded-xl px-4 py-3 text-sm text-gray-200">
+                    You are on cooldown for <span class="font-semibold text-emerald-400">{{ chat_muted_seconds }}s</span>. Please wait.
+                </div>
+            {% else %}
+                <form id="chat_message_form" class="flex items-center gap-2"
+                    hx-post="{{ request.path }}"
+                    hx-target="#chat_messages"
+                    hx-swap="none"
+                    hx-on:htmx:after-request="if(event.detail.successful){document.getElementById('id_body').value = ''; document.getElementById('reply_to_id').value=''; document.getElementById('reply_bar').classList.add('hidden'); scrollToBottom();}">
+                    {% csrf_token %}
 
-                <input type="hidden" name="reply_to_id" id="reply_to_id" value="" />
+                    <input type="hidden" name="reply_to_id" id="reply_to_id" value="" />
+                    <input type="hidden" name="typed_ms" id="typed_ms" value="" />
 
-                {{ form.body }} <button type="submit" class="bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg px-4 py-2 transition-colors">
-                    Send
-                </button>
-            </form>
+                    {{ form.body }} <button id="chat_send_btn" type="submit" class="bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg px-4 py-2 transition-colors">
+                        Send
+                    </button>
+                </form>
+            {% endif %}
 
             {% if chat_group.is_private and chat_group.is_code_room %}
                 <div class="mt-3">
@@ -230,6 +286,57 @@
         const inviteUrl = "{% url 'chat-call-invite' chatroom_name %}";
         const tokenUrl = "{% url 'agora-token' chatroom_name %}";
         const presenceUrl = "{% url 'chat-call-presence' chatroom_name %}";
+
+        // If server rate-limits message sends (429), show a countdown on the Send button.
+        let sendCooldownTimer = null;
+        function startSendCooldown(seconds) {
+            const btn = document.getElementById('chat_send_btn');
+            const input = document.getElementById('id_body');
+            if (!btn || !input) return;
+
+            if (!btn.dataset.originalText) {
+                btn.dataset.originalText = (btn.textContent || 'Send').trim();
+            }
+
+            let remaining = Math.max(1, Number(seconds || 1));
+            btn.disabled = true;
+            input.disabled = true;
+
+            const tick = () => {
+                btn.textContent = `Wait ${remaining}s`;
+                remaining -= 1;
+                if (remaining < 0) {
+                    window.clearInterval(sendCooldownTimer);
+                    sendCooldownTimer = null;
+                    btn.disabled = false;
+                    input.disabled = false;
+                    btn.textContent = btn.dataset.originalText || 'Send';
+                    try { input.focus(); } catch (e) {}
+                }
+            };
+
+            if (sendCooldownTimer) window.clearInterval(sendCooldownTimer);
+            tick();
+            sendCooldownTimer = window.setInterval(tick, 1000);
+        }
+
+        document.body.addEventListener('htmx:afterRequest', (event) => {
+            const form = document.getElementById('chat_message_form');
+            if (!form) return;
+            if (event.target !== form) return;
+
+            const xhr = event.detail.xhr;
+            if (!xhr) return;
+            if (xhr.status !== 429) return;
+
+            const retryAfter = Number(xhr.getResponseHeader('Retry-After') || '10');
+            startSendCooldown(Number.isFinite(retryAfter) ? retryAfter : 10);
+        });
+
+        const initialMuted = Number("{{ chat_muted_seconds|default:0 }}" || '0');
+        if (Number.isFinite(initialMuted) && initialMuted > 0) {
+            startSendCooldown(initialMuted);
+        }
         const otherUsername = "{% if other_user %}{{ other_user.username|escapejs }}{% else %}{% endif %}";
         const callEventUrl = "{% url 'chat-call-event' chatroom_name %}";
         const messageEditUrlTemplate = "{% url 'message-edit' 0 %}";
@@ -312,6 +419,7 @@
 
         const form = document.getElementById('chat_message_form');
         const input = document.getElementById('id_body');
+        const typedMsInput = document.getElementById('typed_ms');
         const messagesEl = document.getElementById('chat_messages');
         const onlineCountEl = document.getElementById('online-count');
 
@@ -406,7 +514,11 @@
         }
 
         if (input) {
+            let typingStartedAt = null;
             input.addEventListener('input', () => {
+                if (typingStartedAt === null && (input.value || '').trim().length > 0) {
+                    typingStartedAt = Date.now();
+                }
                 const now = Date.now();
                 if (now - lastTypingPingAt > 1200) {
                     sendTyping(true);
@@ -423,6 +535,24 @@
                 if (typingStopTimer) clearTimeout(typingStopTimer);
                 typingStopTimer = null;
                 sendTyping(false);
+            });
+
+            document.body.addEventListener('htmx:beforeRequest', (event) => {
+                if (!form || event.target !== form) return;
+                if (!typedMsInput) return;
+                if (typingStartedAt === null) {
+                    typedMsInput.value = '';
+                    return;
+                }
+                const ms = Math.max(0, Date.now() - typingStartedAt);
+                typedMsInput.value = String(ms);
+            });
+
+            document.body.addEventListener('htmx:afterRequest', (event) => {
+                if (!form || event.target !== form) return;
+                if (!event.detail.successful) return;
+                typingStartedAt = null;
+                if (typedMsInput) typedMsInput.value = '';
             });
         }
 
@@ -524,6 +654,11 @@
                 }
 
                 if (payload.type === 'chat_message' && payload.html) {
+                    const emptyEl = document.getElementById('empty_state');
+                    if (emptyEl) emptyEl.remove();
+                    if (messagesEl && messagesEl.classList.contains('hidden')) {
+                        messagesEl.classList.remove('hidden');
+                    }
                     messagesEl.insertAdjacentHTML('beforeend', payload.html);
                     hydrateLocalTimes(messagesEl);
                     updateLastIdFromDom();
@@ -586,7 +721,54 @@
             safeScrollToBottom();
         });
 
-        // -------- Message Edit/Delete (hover actions) --------
+        function closeAllMessageMenus(exceptMenu) {
+            const menus = document.querySelectorAll('[data-message-menu]');
+            menus.forEach((menu) => {
+                if (exceptMenu && menu === exceptMenu) return;
+                menu.classList.add('hidden');
+                const toggle = menu.parentElement ? menu.parentElement.querySelector('[data-message-menu-toggle]') : null;
+                if (toggle) toggle.setAttribute('aria-expanded', 'false');
+            });
+        }
+
+        // Toggle actions menu on 3-dots click (not hover)
+        document.addEventListener('click', function (e) {
+            const toggle = e.target && e.target.closest ? e.target.closest('[data-message-menu-toggle]') : null;
+            const insideMenu = e.target && e.target.closest ? e.target.closest('[data-message-menu]') : null;
+
+            if (toggle) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const wrapper = toggle.parentElement;
+                const menu = wrapper ? wrapper.querySelector('[data-message-menu]') : null;
+                if (!menu) return;
+
+                const willOpen = menu.classList.contains('hidden');
+                closeAllMessageMenus(willOpen ? menu : null);
+
+                if (willOpen) {
+                    menu.classList.remove('hidden');
+                    toggle.setAttribute('aria-expanded', 'true');
+                } else {
+                    menu.classList.add('hidden');
+                    toggle.setAttribute('aria-expanded', 'false');
+                }
+                return;
+            }
+
+            // Clicks inside menu should not close it
+            if (insideMenu) return;
+
+            // Click anywhere else closes menus
+            closeAllMessageMenus();
+        }, true);
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') closeAllMessageMenus();
+        }, true);
+
+        // -------- Message Edit/Delete (actions menu) --------
         document.addEventListener('click', async function (e) {
             const editBtn = e.target.closest('[data-edit-message]');
             const delBtn = e.target.closest('[data-delete-message]');
@@ -597,6 +779,9 @@
 
             const messageId = (editBtn || delBtn).dataset.messageId;
             if (!messageId) return;
+
+            // Close any open message menu after choosing an action
+            closeAllMessageMenus();
 
             if (editBtn) {
                 const body = editBtn.dataset.messageBody || '';
@@ -950,6 +1135,11 @@
                     if (onlineCountEl) onlineCountEl.textContent = data.online_count;
                 }
                 if (data && data.messages_html) {
+                    const emptyEl = document.getElementById('empty_state');
+                    if (emptyEl) emptyEl.remove();
+                    if (messagesEl && messagesEl.classList.contains('hidden')) {
+                        messagesEl.classList.remove('hidden');
+                    }
                     messagesEl.insertAdjacentHTML('beforeend', data.messages_html);
                     hydrateLocalTimes(messagesEl);
                     updateLastIdFromDom();

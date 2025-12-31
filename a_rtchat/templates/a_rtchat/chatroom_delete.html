@@ -1,15 +1,19 @@
 {% extends 'layouts/box.html' %}
 
-{% block content %} 
+{% block box_title %}Delete chatroom?{% endblock %}
 
-<h1>Delete this chatroom?</h1>
+{% block box_subtitle %}
+    <p class="text-sm text-gray-400 mt-1">This will permanently delete the room and all messages/files.</p>
+{% endblock %}
 
-<h2>"{{ chat_group.groupchat_name }}"</h2>
+{% block box_body %}
+    <div class="rounded-2xl border border-gray-800 bg-gray-900/40 px-4 py-3 text-sm text-gray-200">
+        "{{ chat_group.groupchat_name|default:chat_group.group_name }}"
+    </div>
 
-<form method='POST'>
-    {% csrf_token %}
-    <button type="submit" class="button-red mt-4">Yes, delete</button>
-    <a class="button button-gray ml-1" href="{{ request.META.HTTP_REFERER }}">Cancel</a>
-</form>
-
+    <form method="post" class="mt-5 flex items-center justify-end gap-2">
+        {% csrf_token %}
+        <a href="{% url 'chatroom' chat_group.group_name %}" class="text-sm bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors">Cancel</a>
+        <button type="submit" class="text-sm bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors">Yes, delete</button>
+    </form>
 {% endblock %}

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ChatGroup, GroupMessage, PrivateChatGroup
+from .models import ChatGroup, GroupMessage, PrivateChatGroup, ModerationEvent
 
 
 @admin.register(ChatGroup)
@@ -26,3 +26,10 @@ class GroupMessageAdmin(admin.ModelAdmin):
 	list_display = ('id', 'group', 'author', 'created', 'body', 'file')
 	list_filter = ('created',)
 	search_fields = ('body', 'author__username', 'group__group_name', 'group__room_code')
+
+
+@admin.register(ModerationEvent)
+class ModerationEventAdmin(admin.ModelAdmin):
+	list_display = ('id', 'created', 'action', 'severity', 'confidence', 'user', 'room', 'message')
+	list_filter = ('action', 'severity', 'created')
+	search_fields = ('text', 'reason', 'user__username', 'room__group_name')

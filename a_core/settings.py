@@ -164,7 +164,9 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'a_users.middleware.ActiveUserRequiredMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    'a_core.middleware.RateLimitMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
     'django_htmx.middleware.HtmxMiddleware',
@@ -237,6 +239,91 @@ else:
 # Use leading slashes so URLs resolve correctly from nested routes (e.g. /chat/room/...)
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [ BASE_DIR / 'static' ]
+
+# --- Abuse prevention / rate limiting defaults (override via env or settings) ---
+# Auth (accounts/* POST)
+AUTH_RATE_LIMIT = int(os.environ.get('AUTH_RATE_LIMIT', '25'))
+AUTH_RATE_LIMIT_PERIOD = int(os.environ.get('AUTH_RATE_LIMIT_PERIOD', '300'))
+
+# Chat HTTP sends (HTMX)
+CHAT_MSG_RATE_LIMIT = int(os.environ.get('CHAT_MSG_RATE_LIMIT', '8'))
+CHAT_MSG_RATE_PERIOD = int(os.environ.get('CHAT_MSG_RATE_PERIOD', '10'))
+
+# Room-wide flood protection
+ROOM_MSG_RATE_LIMIT = int(os.environ.get('ROOM_MSG_RATE_LIMIT', '30'))
+ROOM_MSG_RATE_PERIOD = int(os.environ.get('ROOM_MSG_RATE_PERIOD', '10'))
+
+# Duplicate message detection
+DUPLICATE_MSG_TTL = int(os.environ.get('DUPLICATE_MSG_TTL', '15'))
+
+# Emoji spam detection (e.g., 🤡🤡🤡🤡)
+EMOJI_SPAM_MIN_REPEATS = int(os.environ.get('EMOJI_SPAM_MIN_REPEATS', '4'))
+EMOJI_SPAM_TTL = int(os.environ.get('EMOJI_SPAM_TTL', '15'))
+
+# Copy/paste + bot-like typing speed heuristics
+PASTE_LONG_MSG_LEN = int(os.environ.get('PASTE_LONG_MSG_LEN', '60'))
+PASTE_TYPED_MS_MAX = int(os.environ.get('PASTE_TYPED_MS_MAX', '400'))
+TYPING_CPS_THRESHOLD = int(os.environ.get('TYPING_CPS_THRESHOLD', '25'))
+SPEED_SPAM_TTL = int(os.environ.get('SPEED_SPAM_TTL', '10'))
+
+# Fast long message heuristic (server-side)
+FAST_LONG_MSG_LEN = int(os.environ.get('FAST_LONG_MSG_LEN', '80'))
+FAST_LONG_MSG_MIN_INTERVAL = int(os.environ.get('FAST_LONG_MSG_MIN_INTERVAL', '1'))
+
+# WebSocket events
+WS_TYPING_RATE_LIMIT = int(os.environ.get('WS_TYPING_RATE_LIMIT', '12'))
+WS_TYPING_RATE_PERIOD = int(os.environ.get('WS_TYPING_RATE_PERIOD', '10'))
+WS_MSG_RATE_LIMIT = int(os.environ.get('WS_MSG_RATE_LIMIT', '8'))
+WS_MSG_RATE_PERIOD = int(os.environ.get('WS_MSG_RATE_PERIOD', '10'))
+
+# Uploads / poll
+CHAT_UPLOAD_RATE_LIMIT = int(os.environ.get('CHAT_UPLOAD_RATE_LIMIT', '3'))
+CHAT_UPLOAD_RATE_PERIOD = int(os.environ.get('CHAT_UPLOAD_RATE_PERIOD', '60'))
+CHAT_POLL_RATE_LIMIT = int(os.environ.get('CHAT_POLL_RATE_LIMIT', '240'))
+CHAT_POLL_RATE_PERIOD = int(os.environ.get('CHAT_POLL_RATE_PERIOD', '60'))
+
+# Abuse strikes -> auto mute
+CHAT_ABUSE_WINDOW = int(os.environ.get('CHAT_ABUSE_WINDOW', '600'))
+CHAT_ABUSE_STRIKE_THRESHOLD = int(os.environ.get('CHAT_ABUSE_STRIKE_THRESHOLD', '5'))
+CHAT_ABUSE_MUTE_SECONDS = int(os.environ.get('CHAT_ABUSE_MUTE_SECONDS', '60'))
+
+# AI moderation (Gemini)
+# IMPORTANT: Keep API key in environment (never hardcode it).
+AI_MODERATION_ENABLED = int(os.environ.get('AI_MODERATION_ENABLED', '0'))
+AI_LOG_ALL = int(os.environ.get('AI_LOG_ALL', '0'))
+AI_MIN_CONFIDENCE = float(os.environ.get('AI_MIN_CONFIDENCE', '0.55'))
+AI_FLAG_MIN_SEVERITY = int(os.environ.get('AI_FLAG_MIN_SEVERITY', '1'))
+AI_BLOCK_MIN_SEVERITY = int(os.environ.get('AI_BLOCK_MIN_SEVERITY', '2'))
+
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-1.5-flash')
+GEMINI_TIMEOUT_SECONDS = float(os.environ.get('GEMINI_TIMEOUT_SECONDS', '4.0'))
+
+# Other endpoints
+PRIVATE_ROOM_CREATE_RATE_LIMIT = int(os.environ.get('PRIVATE_ROOM_CREATE_RATE_LIMIT', '5'))
+PRIVATE_ROOM_CREATE_RATE_PERIOD = int(os.environ.get('PRIVATE_ROOM_CREATE_RATE_PERIOD', '300'))
+PRIVATE_ROOM_JOIN_RATE_LIMIT = int(os.environ.get('PRIVATE_ROOM_JOIN_RATE_LIMIT', '10'))
+PRIVATE_ROOM_JOIN_RATE_PERIOD = int(os.environ.get('PRIVATE_ROOM_JOIN_RATE_PERIOD', '300'))
+GROUPCHAT_CREATE_RATE_LIMIT = int(os.environ.get('GROUPCHAT_CREATE_RATE_LIMIT', '10'))
+GROUPCHAT_CREATE_RATE_PERIOD = int(os.environ.get('GROUPCHAT_CREATE_RATE_PERIOD', '600'))
+
+CHAT_EDIT_RATE_LIMIT = int(os.environ.get('CHAT_EDIT_RATE_LIMIT', '30'))
+CHAT_EDIT_RATE_PERIOD = int(os.environ.get('CHAT_EDIT_RATE_PERIOD', '60'))
+CHAT_DELETE_RATE_LIMIT = int(os.environ.get('CHAT_DELETE_RATE_LIMIT', '20'))
+CHAT_DELETE_RATE_PERIOD = int(os.environ.get('CHAT_DELETE_RATE_PERIOD', '60'))
+
+CALL_INVITE_RATE_LIMIT = int(os.environ.get('CALL_INVITE_RATE_LIMIT', '6'))
+CALL_INVITE_RATE_PERIOD = int(os.environ.get('CALL_INVITE_RATE_PERIOD', '60'))
+CALL_PRESENCE_RATE_LIMIT = int(os.environ.get('CALL_PRESENCE_RATE_LIMIT', '60'))
+CALL_PRESENCE_RATE_PERIOD = int(os.environ.get('CALL_PRESENCE_RATE_PERIOD', '60'))
+CALL_EVENT_RATE_LIMIT = int(os.environ.get('CALL_EVENT_RATE_LIMIT', '30'))
+CALL_EVENT_RATE_PERIOD = int(os.environ.get('CALL_EVENT_RATE_PERIOD', '60'))
+
+AGORA_TOKEN_RATE_LIMIT = int(os.environ.get('AGORA_TOKEN_RATE_LIMIT', '30'))
+AGORA_TOKEN_RATE_PERIOD = int(os.environ.get('AGORA_TOKEN_RATE_PERIOD', '300'))
+
+ADMIN_BLOCK_TOGGLE_RATE_LIMIT = int(os.environ.get('ADMIN_BLOCK_TOGGLE_RATE_LIMIT', '60'))
+ADMIN_BLOCK_TOGGLE_RATE_PERIOD = int(os.environ.get('ADMIN_BLOCK_TOGGLE_RATE_PERIOD', '60'))
 STATIC_ROOT = BASE_DIR / 'staticfiles' 
 
 MEDIA_URL = '/media/'
@@ -261,23 +348,54 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_REDIRECT_URL = '/'
 
 # Email settings
-# - If EMAIL_HOST_USER + EMAIL_HOST_PASSWORD are set, send real emails via Gmail SMTP.
+# - If EMAIL_HOST_USER + EMAIL_HOST_PASSWORD are set, send real emails via SMTP.
 # - Otherwise, fall back to console backend (emails printed in runserver terminal).
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+# You can override everything via environment variables.
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', '').strip() or None
 
-if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
-    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-    EMAIL_HOST = 'smtp.gmail.com'
-    EMAIL_PORT = 587
-    EMAIL_USE_TLS = True
-    DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
-else:
-    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_HOST_USER = (os.getenv('EMAIL_HOST_USER', '') or '').strip()
+EMAIL_HOST_PASSWORD = (os.getenv('EMAIL_HOST_PASSWORD', '') or '').strip()
+EMAIL_HOST = (os.getenv('EMAIL_HOST', 'smtp.gmail.com') or 'smtp.gmail.com').strip()
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587') or '587')
+EMAIL_USE_TLS = _env_bool('EMAIL_USE_TLS', default=True)
+EMAIL_USE_SSL = _env_bool('EMAIL_USE_SSL', default=False)
+EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '20') or '20')
 
-# Ye purani settings ab aise likhi jati hain
+# Avoid empty From: headers.
+DEFAULT_FROM_EMAIL = (os.getenv('DEFAULT_FROM_EMAIL', '') or '').strip() or (EMAIL_HOST_USER or 'no-reply@localhost')
+
+if not EMAIL_BACKEND:
+    if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+        EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    else:
+        EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# django-allauth (v65+) settings
+# Allow login using either email or username.
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
 ACCOUNT_LOGIN_METHODS = {'email', 'username'}
+
+# Remember-me behavior:
+# - None: show checkbox on login form
+# - When checked: persistent session (uses SESSION_COOKIE_AGE)
+# - When unchecked: session expires on browser close
+ACCOUNT_SESSION_REMEMBER = None
+
+# Make sure browser-close expiry doesn't override remember-me.
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+
+# Allauth email verification (anti-spam)
+# - New users must verify email before they can use the account.
+ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+
+# Password reset UX/security:
+# - Prevent account enumeration (default True), and do not send "unknown account" emails.
+#   This avoids confusing users with a signup link when they enter a wrong/unregistered email.
+ACCOUNT_EMAIL_UNKNOWN_ACCOUNTS = False
+
+# Ensure confirmation links use the correct protocol.
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https' if ENVIRONMENT == 'production' else 'http'
 
 # Allauth: use custom styled forms (Tailwind classes)
 ACCOUNT_FORMS = {

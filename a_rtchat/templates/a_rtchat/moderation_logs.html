@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="min-h-[calc(100vh-7rem)] py-6">
+  <div class="w-full max-w-6xl mx-auto bg-gray-900/60 border border-gray-800 rounded-2xl shadow-2xl p-6">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-bold text-emerald-400">Moderation logs</h1>
+        <p class="text-sm text-gray-300 mt-1">Latest AI moderation decisions (flag/block/allow).</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="{% url 'admin-users' %}" class="text-sm bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors">Manage users</a>
+        <a href="{% url 'home' %}" class="text-sm bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors">Back to chat</a>
+      </div>
+    </div>
+
+    <div class="mt-6 flex flex-wrap items-center gap-2">
+      <a href="{% url 'moderation-logs' %}" class="text-xs px-3 py-2 rounded-lg border border-gray-800 {% if not action %}bg-emerald-500 text-white{% else %}bg-gray-900/40 text-gray-200 hover:bg-gray-800/60{% endif %}">All</a>
+      <a href="{% url 'moderation-logs' %}?action=block" class="text-xs px-3 py-2 rounded-lg border border-gray-800 {% if action == 'block' %}bg-red-600 text-white{% else %}bg-gray-900/40 text-gray-200 hover:bg-gray-800/60{% endif %}">Blocked</a>
+      <a href="{% url 'moderation-logs' %}?action=flag" class="text-xs px-3 py-2 rounded-lg border border-gray-800 {% if action == 'flag' %}bg-amber-500 text-white{% else %}bg-gray-900/40 text-gray-200 hover:bg-gray-800/60{% endif %}">Flagged</a>
+      <a href="{% url 'moderation-logs' %}?action=allow" class="text-xs px-3 py-2 rounded-lg border border-gray-800 {% if action == 'allow' %}bg-emerald-500 text-white{% else %}bg-gray-900/40 text-gray-200 hover:bg-gray-800/60{% endif %}">Allowed</a>
+    </div>
+
+    <div class="mt-6 overflow-x-auto rounded-xl border border-gray-800">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-900/80">
+          <tr class="text-left text-gray-300">
+            <th class="px-4 py-3">When</th>
+            <th class="px-4 py-3">User</th>
+            <th class="px-4 py-3">Room</th>
+            <th class="px-4 py-3">Action</th>
+            <th class="px-4 py-3">Severity</th>
+            <th class="px-4 py-3">Confidence</th>
+            <th class="px-4 py-3">Categories</th>
+            <th class="px-4 py-3">Reason</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-800">
+          {% for e in events %}
+            <tr class="bg-gray-900/40 text-gray-200 align-top">
+              <td class="px-4 py-3 whitespace-nowrap text-gray-300">
+                {{ e.created_at|date:"Y-m-d H:i:s" }}
+              </td>
+              <td class="px-4 py-3 font-semibold">
+                {{ e.user.username|default:"—" }}
+              </td>
+              <td class="px-4 py-3 text-gray-300">
+                {{ e.room.group_name|default:"—" }}
+              </td>
+              <td class="px-4 py-3">
+                {% if e.action == 'block' %}
+                  <span class="text-red-400 font-semibold">block</span>
+                {% elif e.action == 'flag' %}
+                  <span class="text-amber-400 font-semibold">flag</span>
+                {% else %}
+                  <span class="text-emerald-400 font-semibold">allow</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3 text-gray-300">{{ e.severity }}</td>
+              <td class="px-4 py-3 text-gray-300">{{ e.confidence|floatformat:2 }}</td>
+              <td class="px-4 py-3 text-gray-300">
+                {% if e.categories %}
+                  {{ e.categories|join:", " }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td class="px-4 py-3 text-gray-300 max-w-[28rem]">
+                {{ e.reason|default:"" }}
+              </td>
+            </tr>
+          {% empty %}
+            <tr class="bg-gray-900/40 text-gray-300">
+              <td class="px-4 py-6" colspan="8">No moderation events yet.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

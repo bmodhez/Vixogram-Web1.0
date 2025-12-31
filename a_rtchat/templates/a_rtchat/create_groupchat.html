@@ -1,13 +1,28 @@
 {% extends 'layouts/box.html' %}
 
-{% block content %} 
+{% block box_title %}Create group chat{% endblock %}
 
-<h1>New Group Chat</h1>
+{% block box_subtitle %}
+    <p class="text-sm text-gray-400 mt-1">Create a room that appears in the Group chats list.</p>
+{% endblock %}
 
-<form method="post">
-    {% csrf_token %}
-    {{ form }}
-    <button class="mt-2" type="submit">Create Group Chat</button>
-</form>
+{% block box_body %}
+    <form method="post" class="space-y-4">
+        {% csrf_token %}
 
+        <div>
+            <label for="id_groupchat_name" class="block text-sm font-semibold text-gray-200 mb-2">Group name</label>
+            {{ form.groupchat_name }}
+            {% if form.groupchat_name.errors %}
+                <div class="mt-2 text-xs text-red-400">{{ form.groupchat_name.errors|striptags }}</div>
+            {% endif %}
+        </div>
+
+        <div class="flex items-center justify-end gap-2">
+            <a href="{% url 'home' %}" class="text-sm bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors">Cancel</a>
+            <button type="submit" class="text-sm bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition-colors">
+                Create
+            </button>
+        </div>
+    </form>
 {% endblock %}

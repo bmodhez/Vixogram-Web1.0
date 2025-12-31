@@ -21,4 +21,9 @@ urlpatterns = [
     path('chat/call/event/<chatroom_name>', call_event_view, name='chat-call-event'),
     path('chat/message/<int:message_id>/edit/', message_edit_view, name='message-edit'),
     path('chat/message/<int:message_id>/delete/', message_delete_view, name='message-delete'),
+
+    # Staff tools
+    path('chat/admin/users/', admin_users_view, name='admin-users'),
+    path('chat/admin/users/<int:user_id>/toggle-block/', admin_toggle_user_block_view, name='admin-user-toggle-block'),
+    path('chat/admin/moderation/', moderation_logs_view, name='moderation-logs'),
 ]

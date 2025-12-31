@@ -51,6 +51,7 @@ class GroupMessage(models.Model):
     body = models.CharField(max_length=300, blank=True, null=True)
     file = models.FileField(upload_to='files/', blank=True, null=True)
     created = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(null=True, blank=True)
     
     @property
     def filename(self):
@@ -77,4 +78,31 @@ class GroupMessage(models.Model):
             return True 
         except:
             return False
+
+
+class ModerationEvent(models.Model):
+    ACTION_CHOICES = (
+        ('allow', 'Allow'),
+        ('flag', 'Flag'),
+        ('block', 'Block'),
+    )
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='moderation_events')
+    room = models.ForeignKey(ChatGroup, on_delete=models.SET_NULL, null=True, blank=True, related_name='moderation_events')
+    message = models.ForeignKey(GroupMessage, on_delete=models.SET_NULL, null=True, blank=True, related_name='moderation_events')
+    text = models.TextField(blank=True, default='')
+    action = models.CharField(max_length=16, choices=ACTION_CHOICES)
+    categories = models.JSONField(default=list, blank=True)
+    severity = models.PositiveSmallIntegerField(default=0)
+    confidence = models.FloatField(default=0.0)
+    reason = models.CharField(max_length=255, blank=True, default='')
+    source = models.CharField(max_length=32, blank=True, default='gemini')
+    meta = models.JSONField(default=dict, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created']
+
+    def __str__(self):
+        return f"{self.action} u={self.user_id} room={getattr(self.room, 'group_name', '')}"
 
