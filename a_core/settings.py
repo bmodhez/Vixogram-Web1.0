@@ -466,6 +466,24 @@ ACCOUNT_FORMS = {
     'reset_password_from_key': 'a_users.allauth_forms.CustomResetPasswordKeyForm',
 }
 
+# Allauth rate limits
+# NOTE: allauth's built-in rate limiting keys off the client IP. Behind proxies
+# (e.g. Render), REMOTE_ADDR can be the proxy IP for all users, causing global
+# lockouts like "Too many failed login attempts". We already enforce auth
+# throttling via our own RateLimitMiddleware (which honors X-Forwarded-For), so
+# disable allauth rate limiting by default in production.
+_allauth_rate_limits_enabled_default = False if ENVIRONMENT == 'production' else True
+ALLAUTH_RATE_LIMITS_ENABLED = _env_bool('ALLAUTH_RATE_LIMITS_ENABLED', default=_allauth_rate_limits_enabled_default)
+if not ALLAUTH_RATE_LIMITS_ENABLED:
+    ACCOUNT_RATE_LIMITS = False
+else:
+    # Optional targeted override, e.g. "10/m/ip,5/300s/key".
+    _login_failed_rl = (os.getenv('ACCOUNT_RATE_LIMIT_LOGIN_FAILED', '') or '').strip()
+    if _login_failed_rl:
+        ACCOUNT_RATE_LIMITS = {
+            'login_failed': _login_failed_rl,
+        }
+
 # Sentry (Error + Performance Monitoring)
 # Enabled only if SENTRY_DSN is set.
 SENTRY_DSN = (os.getenv('SENTRY_DSN', '') or '').strip()

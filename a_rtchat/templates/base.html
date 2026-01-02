@@ -300,6 +300,35 @@
         }, true);
     })();
 
+    (function initPasswordToggles() {
+        function toggle(btn) {
+            const root = btn.closest('.relative') || btn.parentElement;
+            if (!root) return;
+
+            const input = root.querySelector('input');
+            if (!input) return;
+            const isPassword = (input.getAttribute('type') || '').toLowerCase() === 'password';
+
+            input.setAttribute('type', isPassword ? 'text' : 'password');
+
+            const eyeOn = btn.querySelector('[data-eye-on]');
+            const eyeOff = btn.querySelector('[data-eye-off]');
+            if (eyeOn && eyeOff) {
+                eyeOn.classList.toggle('hidden', !isPassword);
+                eyeOff.classList.toggle('hidden', isPassword);
+            }
+
+            btn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+        }
+
+        document.addEventListener('click', (e) => {
+            const btn = e.target && e.target.closest ? e.target.closest('[data-password-toggle]') : null;
+            if (!btn) return;
+            e.preventDefault();
+            toggle(btn);
+        });
+    })();
+
     {% if user.is_authenticated %}
     (function initGlobalCallInvites() {
         // Lets chat pages know a global handler exists (avoid duplicate toasts)

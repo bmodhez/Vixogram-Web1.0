@@ -28,7 +28,7 @@ class CustomLoginForm(LoginForm):
         if "password" in self.fields:
             self.fields["password"].widget.attrs.update(
                 {
-                    "class": _BASE_INPUT_CLASS,
+                    "class": _BASE_INPUT_CLASS + " pr-12",
                     "placeholder": "Password",
                     "autocomplete": "current-password",
                 }
@@ -46,7 +46,7 @@ class CustomSignupForm(SignupForm):
             if name in {"password1", "password2"}:
                 field.widget.attrs.update(
                     {
-                        "class": _BASE_INPUT_CLASS,
+                        "class": _BASE_INPUT_CLASS + " pr-12",
                         "placeholder": "Password" if name == "password1" else "Confirm password",
                         "autocomplete": "new-password",
                     }
@@ -97,7 +97,7 @@ class CustomResetPasswordKeyForm(ResetPasswordKeyForm):
         if "password1" in self.fields:
             self.fields["password1"].widget.attrs.update(
                 {
-                    "class": _BASE_INPUT_CLASS,
+                    "class": _BASE_INPUT_CLASS + " pr-12",
                     "placeholder": "New password",
                     "autocomplete": "new-password",
                 }
@@ -106,7 +106,7 @@ class CustomResetPasswordKeyForm(ResetPasswordKeyForm):
         if "password2" in self.fields:
             self.fields["password2"].widget.attrs.update(
                 {
-                    "class": _BASE_INPUT_CLASS,
+                    "class": _BASE_INPUT_CLASS + " pr-12",
                     "placeholder": "Confirm password",
                     "autocomplete": "new-password",
                 }

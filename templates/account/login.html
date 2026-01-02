@@ -37,7 +37,31 @@
           <label class="text-sm text-gray-200" for="{{ form.password.id_for_label }}">{% trans "Password" %}</label>
           <a class="text-xs text-emerald-400 hover:text-emerald-300" href="{% url 'account_reset_password' %}">{% trans "Forgot password?" %}</a>
         </div>
-        {{ form.password }}
+        <div class="relative">
+          {{ form.password }}
+          <button
+            type="button"
+            class="absolute inset-y-0 right-0 px-3 flex items-center text-gray-300 hover:text-white"
+            data-password-toggle
+            aria-label="Show password"
+          >
+            <span data-eye-on aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </span>
+            <span data-eye-off aria-hidden="true" class="hidden">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10.477 10.485A3 3 0 0012 15a3 3 0 002.121-.879" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M7.362 7.374C5.286 8.77 3.75 10.93 2.458 12c1.274 4.057 5.065 7 9.542 7 1.83 0 3.55-.493 5.024-1.357" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M14.12 14.132A3 3 0 009.868 9.88" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.61 16.624C18.674 15.23 20.206 13.075 21.542 12c-1.274-4.057-5.065-7-9.542-7-1.71 0-3.33.43-4.747 1.188" />
+              </svg>
+            </span>
+          </button>
+        </div>
         {% if form.password.errors %}
           <div class="text-xs text-red-400">{{ form.password.errors|first }}</div>
         {% endif %}
