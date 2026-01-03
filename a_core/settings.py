@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 from urllib.parse import urlparse
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -293,10 +294,16 @@ else:
         },
     }
 
-# Agar Render par ho toh DATABASE_URL use karo, warna local SQLite
+# Agar production ho toh DATABASE_URL required hai, warna local SQLite
 if ENVIRONMENT == 'production':
+    _database_url = (os.environ.get('DATABASE_URL') or '').strip()
+    if not _database_url:
+        raise ImproperlyConfigured(
+            'DATABASE_URL is required when ENVIRONMENT=production (e.g. on Render). '
+            'Set it in Render Dashboard (PostgreSQL Internal Database URL).'
+        )
     DATABASES = {
-        'default': dj_database_url.parse(os.environ.get('DATABASE_URL'))
+        'default': dj_database_url.parse(_database_url)
     }
 else:
     DATABASES = {

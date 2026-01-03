@@ -3,8 +3,8 @@ services:
     name: vixogram
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt && python manage.py migrate --noinput && python manage.py collectstatic --noinput
-    startCommand: daphne -b 0.0.0.0 -p $PORT a_core.asgi:application
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: python manage.py migrate --noinput && daphne -b 0.0.0.0 -p $PORT a_core.asgi:application
     envVars:
       - key: ENVIRONMENT
         value: production
