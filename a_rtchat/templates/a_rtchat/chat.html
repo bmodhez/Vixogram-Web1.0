@@ -1,12 +1,15 @@
 {% extends 'base.html' %}
 {% load static %}
 
+{% block html_class %}vixo-chat-page{% endblock %}
+{% block body_class %}vixo-chat-page{% endblock %}
+
 {% block content %}
 <wrapper class="block w-full">
     <div class="flex flex-col lg:flex-row lg:items-stretch gap-4 lg:gap-6">
 
         <aside id="chat_sidebar" class="hidden lg:block w-full lg:w-72 shrink-0">
-            <div id="chat_sidebar_panel" class="vixo-chat-surface w-full max-w-md lg:max-w-none lg:w-72 h-[calc(100dvh-6rem)] sm:h-[calc(100dvh-6.5rem)] min-h-0 bg-gray-800/70 border border-gray-800 rounded-2xl shadow-2xl p-4 overflow-y-auto">
+            <div id="chat_sidebar_panel" data-chat-list class="vixo-chat-surface w-full max-w-md lg:max-w-none lg:w-72 h-[calc(100dvh-6rem)] sm:h-[calc(100dvh-6.5rem)] min-h-0 bg-gray-800/70 border border-gray-800 rounded-2xl shadow-2xl p-4 overflow-y-auto">
                 <div class="flex items-center justify-between gap-2 mb-3">
                     <div class="text-sm font-semibold text-gray-200">Chats</div>
                     <button type="button" id="chat_sidebar_close" class="lg:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-200 hover:bg-gray-800/60" aria-label="Close chats">×</button>
@@ -51,7 +54,7 @@
             {% endif %}
 
             <div class="mb-4">
-                <a href="{% url 'chatroom' 'public-chat' %}"
+                <a data-chat-list-item href="{% url 'chatroom' 'public-chat' %}"
                          class="block pr-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 transition-colors
                          {% if chat_group.group_name == 'public-chat' %}pl-2 border-l-4 border-indigo-500 bg-indigo-500/10 text-emerald-400 font-semibold{% else %}px-3 text-gray-300{% endif %}">
                     Public chat
@@ -63,29 +66,44 @@
                 <div class="mb-4">
                     {% if sidebar_groupchat_sections %}
                         {% for section in sidebar_groupchat_sections %}
-                            <div class="mt-3 mb-1 text-[11px] font-semibold text-gray-400">{{ section.title }}</div>
-                            {% if section.rooms %}
-                                <ul class="space-y-1">
-                                    {% for room in section.rooms %}
-                                        <li>
-                                            <a href="{% url 'chatroom' room.group_name %}"
+                            <div class="mt-3 mb-1">
+                                <button
+                                    type="button"
+                                    class="w-full flex items-center justify-between gap-2 text-[11px] font-semibold text-gray-400 hover:text-gray-200 transition-colors"
+                                    data-vixo-collapse-toggle
+                                    data-vixo-collapse-key="group-section-{{ forloop.counter }}"
+                                    aria-expanded="true"
+                                >
+                                    <span class="truncate">{{ section.title }}</span>
+                                    <svg class="w-3.5 h-3.5 shrink-0 transition-transform duration-200" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-vixo-collapse-chevron>
+                                        <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.24 4.38a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div data-vixo-collapse-body data-vixo-collapse-key="group-section-{{ forloop.counter }}">
+                                {% if section.rooms %}
+                                    <ul class="space-y-1">
+                                        {% for room in section.rooms %}
+                                            <li>
+                                                <a data-chat-list-item href="{% url 'chatroom' room.group_name %}"
                                                               class="block pr-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 transition-colors
                                                               {% if chat_group.group_name == room.group_name %}pl-2 border-l-4 border-indigo-500 bg-indigo-500/10 text-emerald-400 font-semibold{% else %}px-3 text-gray-300{% endif %}">
-                                                {{ room.groupchat_name|default:room.group_name|slice:":30" }}
-                                            </a>
-                                        </li>
-                                    {% endfor %}
-                                </ul>
-                            {% else %}
-                                <div class="px-3 py-2 text-xs text-gray-500">No rooms yet</div>
-                            {% endif %}
+                                                    {{ room.groupchat_name|default:room.group_name|slice:":30" }}
+                                                </a>
+                                            </li>
+                                        {% endfor %}
+                                    </ul>
+                                {% else %}
+                                    <div class="px-3 py-2 text-xs text-gray-500">No rooms yet</div>
+                                {% endif %}
+                            </div>
                         {% endfor %}
 
                         {% if sidebar_groupchats_remaining %}
                             <ul class="space-y-1 mt-3">
                                 {% for room in sidebar_groupchats_remaining %}
                                     <li>
-                                        <a href="{% url 'chatroom' room.group_name %}"
+                                        <a data-chat-list-item href="{% url 'chatroom' room.group_name %}"
                                              class="block pr-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 transition-colors
                                              {% if chat_group.group_name == room.group_name %}pl-2 border-l-4 border-indigo-500 bg-indigo-500/10 text-emerald-400 font-semibold{% else %}px-3 text-gray-300{% endif %}">
                                             {{ room.groupchat_name|default:room.group_name|slice:":30" }}
@@ -98,7 +116,7 @@
                         <ul class="space-y-1">
                             {% for room in sidebar_groupchats %}
                                 <li>
-                                    <a href="{% url 'chatroom' room.group_name %}"
+                                    <a data-chat-list-item href="{% url 'chatroom' room.group_name %}"
                                                     class="block pr-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 transition-colors
                                                     {% if chat_group.group_name == room.group_name %}pl-2 border-l-4 border-indigo-500 bg-indigo-500/10 text-emerald-400 font-semibold{% else %}px-3 text-gray-300{% endif %}">
                                         {{ room.groupchat_name|default:room.group_name|slice:":30" }}
@@ -140,7 +158,7 @@
                 <ul class="space-y-1 mb-4">
                     {% for room in sidebar_code_rooms %}
                         <li>
-                            <a href="{% url 'chatroom' room.group_name %}"
+                            <a data-chat-list-item href="{% url 'chatroom' room.group_name %}"
                                          class="block pr-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 transition-colors
                                          {% if chat_group.group_name == room.group_name %}pl-2 border-l-4 border-indigo-500 bg-indigo-500/10 text-emerald-400 font-semibold{% else %}px-3 text-gray-300{% endif %}">
                                 {{ room.code_room_name|default:room.room_code|slice:":30" }}
@@ -155,7 +173,7 @@
                 <ul class="space-y-1">
                     {% for room in sidebar_privatechats %}
                         <li>
-                            <a href="{% url 'chatroom' room.group_name %}"
+                            <a data-chat-list-item href="{% url 'chatroom' room.group_name %}"
                                class="block pr-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 transition-colors
                                {% if chat_group.group_name == room.group_name %}pl-2 border-l-4 border-indigo-500 bg-indigo-500/10 text-emerald-400 font-semibold{% else %}px-3 text-gray-300{% endif %}">
                                 {% for member in room.members.all %}
@@ -173,8 +191,8 @@
 
         <div id="chat_window" class="vixo-chat-surface h-[calc(100dvh-6rem)] sm:h-[calc(100dvh-6.5rem)] min-h-0 flex flex-col bg-gray-900/60 border border-gray-800 rounded-2xl shadow-2xl relative p-1 grow">
         
-        <div class="vixo-chat-surface flex items-center justify-between text-emerald-400 bg-gray-900/60 p-2 sticky top-0 z-10 border-b border-gray-800 rounded-t-2xl">
-            <div class="flex items-center">
+        <div class="vixo-chat-surface flex items-center justify-between gap-2 text-emerald-400 bg-gray-900/60 p-2 sticky top-0 z-10 border-b border-gray-800 rounded-t-2xl">
+            <div class="flex items-center min-w-0 flex-1">
                 <button type="button" id="chat_sidebar_open" class="lg:hidden mr-2 inline-flex h-9 w-9 items-center justify-center rounded-lg bg-gray-800/60 hover:bg-gray-800 text-gray-100" aria-label="Open chats">
                     <span class="block w-5">
                         <span class="block h-0.5 w-5 bg-gray-100 rounded"></span>
@@ -183,12 +201,19 @@
                     </span>
                 </button>
                 <span id="online-count" class="pr-1 font-bold">{{ chat_group.users_online.count }}</span> online
+                {% if chat_group.is_private %}
+                    <span class="ml-2 inline-flex items-center gap-1 rounded-full border border-gray-800 bg-gray-900/60 px-2 py-1 text-[10px] sm:text-[11px] text-gray-200 shrink-0">
+                        <span aria-hidden="true">🔒</span>
+                        <span class="hidden sm:inline">End-to-End encrypted</span>
+                        <span class="sm:hidden">Encrypted</span>
+                    </span>
+                {% endif %}
                 {% if chat_group.is_code_room and chat_group.room_code %}
-                    <span class="ml-3 text-xs text-gray-300" data-room-code-wrap>
-                        Room code:
+                    <span class="ml-3 text-xs text-gray-300 min-w-0 truncate" data-room-code-wrap>
+                        <span class="hidden sm:inline">Room code:</span>
                         <button
                             type="button"
-                            class="font-semibold text-emerald-400 hover:text-emerald-300 underline-offset-2 hover:underline cursor-pointer"
+                            class="font-semibold text-emerald-400 hover:text-emerald-300 underline-offset-2 hover:underline cursor-pointer truncate max-w-[7.5rem] align-bottom"
                             data-room-code-copy="{{ chat_group.room_code }}"
                             title="Click to copy"
                             aria-label="Copy room code"
@@ -198,27 +223,37 @@
                 {% endif %}
             </div>
 
-            {% if chat_group.is_private and not chat_blocked %}
-                <div class="flex items-center gap-2 flex-wrap justify-end">
-                    <a data-call-btn data-call-type="voice" href="#" class="text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg transition-colors">
-                        Voice call
-                    </a>
-                    <a data-call-btn data-call-type="video" href="#" class="text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg transition-colors">
-                        Video call
-                    </a>
-                </div>
-            {% endif %}
-
-            {% if chat_group.admin and user == chat_group.admin or user.is_staff %}
-                <form method="post" action="{% url 'chatroom-close' chatroom_name %}"
-                      data-confirm="Close this room? This will delete the room and all messages/uploads."
-                      data-confirm-title="Close room">
-                    {% csrf_token %}
-                    <button type="submit" class="text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg transition-colors">
-                        Close room
+            <div class="flex items-center gap-2 justify-end shrink-0 flex-nowrap whitespace-nowrap">
+                {% if chat_group.is_private and not chat_blocked %}
+                    <button type="button" id="challenge_drawer_open" class="h-8 text-[11px] sm:text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 sm:px-3 rounded-lg transition-colors whitespace-nowrap">
+                        🎮 <span class="hidden sm:inline">Challenge</span>
                     </button>
-                </form>
-            {% endif %}
+                    <button type="button" id="challenge_cancel_btn" class="h-8 text-[11px] sm:text-xs bg-gray-800 hover:bg-gray-700 text-white px-2.5 sm:px-3 rounded-lg transition-colors hidden whitespace-nowrap">
+                        <span class="sm:hidden">End</span><span class="hidden sm:inline">End</span>
+                    </button>
+                    <span id="challenge_countdown" class="hidden text-[10px] sm:text-[11px] font-semibold text-emerald-200 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-full transition duration-200 ease-out opacity-0 scale-95 whitespace-nowrap"></span>
+
+                    <div class="flex items-center gap-2 flex-nowrap whitespace-nowrap">
+                        <a data-call-btn data-call-type="voice" href="#" class="text-[11px] sm:text-xs bg-gray-800 hover:bg-gray-700 text-white px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+                            <span class="sm:hidden">Voice</span><span class="hidden sm:inline">Voice call</span>
+                        </a>
+                        <a data-call-btn data-call-type="video" href="#" class="text-[11px] sm:text-xs bg-gray-800 hover:bg-gray-700 text-white px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+                            <span class="sm:hidden">Video</span><span class="hidden sm:inline">Video call</span>
+                        </a>
+                    </div>
+                {% endif %}
+
+                {% if chat_group.admin and user == chat_group.admin or user.is_staff %}
+                    <form method="post" action="{% url 'chatroom-close' chatroom_name %}"
+                          data-confirm="Close this room? This will delete the room and all messages/uploads."
+                          data-confirm-title="Close room">
+                        {% csrf_token %}
+                        <button type="submit" class="text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+                            Close room
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
         </div>
 
         {% if chat_group.is_code_room and chat_group.room_code and request.GET.created == '1' %}
@@ -248,9 +283,21 @@
             </div>
         {% endif %}
 
-        <div id='chat_container' class="vixo-chat-bg overflow-y-auto grow p-3 sm:p-4 vixo-chat-init-hidden">
+        <div id='chat_container' class="vixo-chat-bg overflow-y-auto overflow-x-hidden overscroll-x-none grow p-3 sm:p-4 vixo-chat-init-hidden">
+            <div id="challenge_banner" class="hidden sticky top-0 z-10 mb-3 transition duration-200 ease-out opacity-0 -translate-y-1">
+                <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-50">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="font-semibold text-emerald-200" id="challenge_banner_title">Challenge</div>
+                            <div class="mt-0.5 text-emerald-50/90 whitespace-pre-wrap" id="challenge_banner_desc"></div>
+                            <div class="mt-1 text-[11px] font-semibold" id="challenge_banner_self"></div>
+                        </div>
+                        <div class="shrink-0 text-[11px] font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-full" id="challenge_banner_time"></div>
+                    </div>
+                </div>
+            </div>
             {% if chat_messages %}
-                <ul id='chat_messages' class="flex flex-col justify-end gap-3">
+                <ul id='chat_messages' data-chat-feed class="flex flex-col justify-end gap-3">
                     {% for message in chat_messages %}
                         {% with prev=chat_messages|slice:forloop.counter0|last %}
                             {% include 'a_rtchat/chat_message.html' with prev_message=prev %}
@@ -258,7 +305,7 @@
                     {% endfor %}
                 </ul>
             {% else %}
-                <ul id='chat_messages' class="hidden"></ul>
+                <ul id='chat_messages' data-chat-feed class="hidden"></ul>
                 <div id="empty_state" class="min-h-[16rem] sm:min-h-[28rem] flex items-center justify-center">
                     <div class="text-center max-w-md">
                         <div class="text-2xl font-extrabold text-gray-100">
@@ -281,7 +328,25 @@
             {% endif %}
         </div>
 
-        <div class="vixo-chat-surface sticky bottom-0 z-10 p-4 bg-gray-900/60 border-t border-gray-800 rounded-b-2xl">
+        {% if chat_group.is_private %}
+            <button
+                type="button"
+                id="vixo_private_newmsg_jump"
+                class="hidden vixo-private-newmsg-indicator absolute left-1/2 -translate-x-1/2 bottom-24 sm:bottom-28 z-20"
+                aria-label="Jump to latest message"
+            >
+                <span class="vixo-private-newmsg-bubble" aria-hidden="true">
+                    <img src="{% static 'favicon.png' %}" alt="" class="vixo-private-newmsg-logo" loading="lazy" decoding="async" />
+                </span>
+                <span class="vixo-private-newmsg-arrow" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 9l6 6 6-6" />
+                    </svg>
+                </span>
+            </button>
+        {% endif %}
+
+        <div id="chat_composer_bar" class="vixo-chat-surface vixo-chat-composer sticky bottom-0 z-10 p-4 bg-gray-900/60 border-t border-gray-800 rounded-b-2xl">
             <div id="reply_bar" class="hidden mb-2 rounded-xl border border-gray-800 bg-gray-900/80 px-3 py-2">
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
@@ -330,8 +395,9 @@
 
                     <input type="hidden" name="reply_to_id" id="reply_to_id" value="" />
                     <input type="hidden" name="typed_ms" id="typed_ms" value="" />
+                    <input type="hidden" id="chat_file_caption" name="caption" value="" />
 
-                    <div class="flex flex-wrap sm:flex-nowrap items-center gap-2">
+                    <div class="flex items-center gap-2 flex-nowrap">
                         <div id="chat_body_wrap" class="flex-1 min-w-0">
                             <div class="relative flex items-center gap-2">
                                 {{ form.body }}
@@ -346,13 +412,23 @@
                                 </div>
                             </div>
                         </div>
-                        <div id="chat_file_caption_wrap" class="hidden w-full sm:flex-1 sm:min-w-0">
-                            <input id="chat_file_caption" name="caption" type="text" maxlength="300"
-                                   placeholder="Add a caption (optional)…"
-                                   class="w-full bg-gray-800/70 text-white border border-gray-700 rounded-lg px-4 py-3 outline-none focus:border-emerald-500 placeholder:text-gray-400" />
-                        </div>
-
                         <div class="flex items-center gap-2 justify-end shrink-0">
+                            {% if uploads_allowed %}
+                                <button
+                                    type="button"
+                                    id="chat_upload_btn"
+                                    class="h-11 w-11 inline-flex items-center justify-center rounded-full bg-gray-800/50 text-white transition duration-150 ease-out hover:bg-gray-800/70 hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                    aria-label="Upload"
+                                    title="Upload"
+                                    {% if uploads_remaining == 0 %}disabled{% endif %}
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                        <polyline points="17 8 12 3 7 8" />
+                                        <line x1="12" x2="12" y1="3" y2="15" />
+                                    </svg>
+                                </button>
+                            {% endif %}
                             <div class="relative shrink-0">
                                 <button
                                     type="button"
@@ -367,7 +443,7 @@
 
                                 <div
                                     id="emoji_panel"
-                                    class="hidden opacity-0 scale-95 pointer-events-none transition duration-150 ease-out absolute bottom-full right-0 mb-2 w-[min(20rem,calc(100vw-3rem))] rounded-xl border border-gray-800 bg-gray-900/95 shadow-lg shadow-black/30 p-3 z-30"
+                                    class="hidden opacity-0 scale-95 pointer-events-none transition duration-150 ease-out fixed sm:absolute bottom-24 sm:bottom-full right-3 sm:right-0 sm:mb-2 w-[min(20rem,calc(100vw-1.5rem))] sm:w-[min(20rem,calc(100vw-3rem))] max-h-[70vh] overflow-y-auto overscroll-contain rounded-xl border border-gray-800 bg-gray-900/95 shadow-lg shadow-black/30 p-3 z-30"
                                     role="dialog"
                                     aria-label="Emoji picker"
                                 >
@@ -397,17 +473,13 @@
 
                     {% if uploads_allowed %}
                         <div class="mt-1">
-                            <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-                                <input id="chat_file_input" name="file" type="file" accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime"
-                                       class="block w-full text-sm text-gray-300 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-gray-800 file:text-white hover:file:bg-gray-700"
-                                       {% if uploads_remaining == 0 %}disabled{% endif %} />
+                            <input id="chat_file_input" name="file" type="file" accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime" class="sr-only" {% if uploads_remaining == 0 %}disabled{% endif %} />
 
-                                {% if upload_limit %}
-                                    <div id="upload_counter" class="shrink-0 text-xs text-gray-400" data-used="{{ uploads_used }}" data-limit="{{ upload_limit }}">
-                                        Upload ({{ uploads_used }}/{{ upload_limit }} used)
-                                    </div>
-                                {% endif %}
-                            </div>
+                            {% if upload_limit %}
+                                <div id="upload_counter" class="text-xs text-gray-400" data-used="{{ uploads_used }}" data-limit="{{ upload_limit }}">
+                                    Upload ({{ uploads_used }}/{{ upload_limit }} used)
+                                </div>
+                            {% endif %}
 
                             <div id="upload_feedback" class="mt-2"></div>
                             <div id="upload_limit_reached_msg" class="text-xs text-gray-400 mt-1{% if uploads_remaining != 0 %} hidden{% endif %}">Upload limit reached for this room.</div>
@@ -421,6 +493,61 @@
     </div>
 </wrapper>
 
+{% if chat_group.is_private and not chat_blocked %}
+    <!-- Challenge drawer overlay (kept near end of DOM to avoid stacking-context clashes) -->
+    <div id="challenge_drawer" class="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-3 sm:p-6 transition-opacity duration-200 ease-out opacity-0 pointer-events-none">
+        <div id="challenge_drawer_backdrop" class="absolute inset-0 bg-black/40 transition-opacity duration-200 ease-out opacity-0"></div>
+        <div id="challenge_drawer_panel" class="relative w-full sm:max-w-md rounded-2xl border border-gray-800 bg-gray-900/95 backdrop-blur-sm shadow-2xl overflow-hidden
+                max-h-[78vh] sm:max-h-[85vh] flex flex-col
+                transform transition duration-200 ease-out
+                translate-y-8 sm:translate-y-2 sm:scale-95 opacity-0">
+
+            <div class="flex-shrink-0 flex items-center justify-between gap-3 p-4 border-b border-gray-800/50">
+                <div>
+                    <div class="text-base font-semibold text-emerald-200">Start a Challenge</div>
+                    <div class="mt-0.5 text-[11px] text-gray-400">30 seconds, realtime judging</div>
+                </div>
+                <button type="button" id="challenge_drawer_close"
+                        class="h-8 w-8 rounded-lg bg-gray-800/60 hover:bg-gray-800 text-gray-300 hover:text-gray-100 flex items-center justify-center transition-colors flex-shrink-0"
+                        aria-label="Close">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto px-4 py-3">
+                <div class="grid grid-cols-1 gap-2.5">
+                    <button type="button" data-challenge-kind="truth_or_dare" class="text-left rounded-lg border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/15 active:scale-95 transition p-3 group">
+                        <div class="text-sm font-semibold text-gray-100 group-hover:text-emerald-200">🎭 Truth or Dare</div>
+                        <div class="mt-1 text-xs text-gray-400 group-hover:text-gray-300">Answer meaningfully or follow the dare.</div>
+                    </button>
+                    <button type="button" data-challenge-kind="finish_meme" class="text-left rounded-lg border border-purple-500/20 bg-purple-500/5 hover:bg-purple-500/15 active:scale-95 transition p-3 group">
+                        <div class="text-sm font-semibold text-gray-100 group-hover:text-purple-200">😂 Finish the Meme</div>
+                        <div class="mt-1 text-xs text-gray-400 group-hover:text-gray-300">First meaningful reply wins.</div>
+                    </button>
+                    <button type="button" data-challenge-kind="emoji_only" class="text-left rounded-lg border border-yellow-500/20 bg-yellow-500/5 hover:bg-yellow-500/15 active:scale-95 transition p-3 group">
+                        <div class="text-sm font-semibold text-gray-100 group-hover:text-yellow-200">😊 Emoji-only</div>
+                        <div class="mt-1 text-xs text-gray-400 group-hover:text-gray-300">Only emojis allowed. Any letter = fail.</div>
+                    </button>
+                    <button type="button" data-challenge-kind="no_vowels" class="text-left rounded-lg border border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/15 active:scale-95 transition p-3 group">
+                        <div class="text-sm font-semibold text-gray-100 group-hover:text-blue-200">🚫 No Vowels</div>
+                        <div class="mt-1 text-xs text-gray-400 group-hover:text-gray-300">A/E/I/O/U banned. First vowel = fail.</div>
+                    </button>
+                    <button type="button" data-challenge-kind="time_attack" class="text-left rounded-lg border border-orange-500/20 bg-orange-500/5 hover:bg-orange-500/15 active:scale-95 transition p-3 group">
+                        <div class="text-sm font-semibold text-gray-100 group-hover:text-orange-200">⚡ Time Attack</div>
+                        <div class="mt-1 text-xs text-gray-400 group-hover:text-gray-300">Send 3 messages in 30 seconds.</div>
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-shrink-0 border-t border-gray-800/50 p-3 text-[11px] text-gray-400 bg-gray-900/40">
+                Only one challenge active per chat. Higher stakes, higher rewards.
+            </div>
+        </div>
+    </div>
+{% endif %}
+
 <!-- Draggable call popup (WhatsApp-like) -->
 <div id="call_popup" class="hidden fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 w-[min(20rem,calc(100vw-2rem))] h-[min(20rem,calc(100vw-2rem))] sm:w-80 sm:h-80 rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl overflow-hidden">
     <div id="call_popup_header" class="px-3 py-2 bg-gray-900/90 border-b border-gray-800 flex items-center justify-between cursor-move select-none">
@@ -428,15 +555,20 @@
             <div id="call_popup_title" class="text-xs font-semibold text-gray-100 truncate">Call</div>
             <div id="call_popup_subtitle" class="text-[10px] text-gray-400 truncate">Connecting…</div>
         </div>
-        <button id="call_popup_end" type="button" class="text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg transition-colors">End</button>
+        <div class="flex items-center gap-1">
+            <button id="call_popup_mic" type="button" class="text-[11px] bg-gray-800 hover:bg-gray-700 text-white px-2.5 py-1.5 rounded-lg transition-colors">Mute</button>
+            <button id="call_popup_cam" type="button" class="text-[11px] bg-gray-800 hover:bg-gray-700 text-white px-2.5 py-1.5 rounded-lg transition-colors">Cam Off</button>
+            <button id="call_popup_switch" type="button" class="text-[11px] bg-gray-800 hover:bg-gray-700 text-white px-2.5 py-1.5 rounded-lg transition-colors">Switch</button>
+            <button id="call_popup_end" type="button" class="text-[11px] bg-red-600/90 hover:bg-red-600 text-white px-2.5 py-1.5 rounded-lg transition-colors">End</button>
+        </div>
     </div>
     <div class="p-3 h-[calc(100%-44px)]">
         <div id="call_popup_status" class="text-[11px] text-gray-400"></div>
         <div id="call_popup_video" class="hidden mt-3 grid-cols-2 gap-2 h-[calc(100%-26px)]">
-            <div class="rounded-xl border border-gray-800 bg-black/30 overflow-hidden">
+            <div class="rounded-xl border border-gray-800 bg-black/30 overflow-hidden h-full">
                 <div id="call_local_player" class="w-full h-full"></div>
             </div>
-            <div class="rounded-xl border border-gray-800 bg-black/30 overflow-hidden">
+            <div class="rounded-xl border border-gray-800 bg-black/30 overflow-hidden h-full">
                 <div id="call_remote_player" class="w-full h-full"></div>
             </div>
         </div>
@@ -444,6 +576,51 @@
 </div>
 
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N.js"></script>
+
+{% if uploads_allowed %}
+    <link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css">
+    <script src="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.js"></script>
+
+    <!-- Upload preview + crop modal -->
+    <div id="upload_modal" class="hidden fixed inset-0 z-[90]">
+        <div id="upload_modal_backdrop" class="absolute inset-0 bg-black/60"></div>
+        <div class="absolute inset-0 flex items-end sm:items-center justify-center p-3 sm:p-6">
+            <div class="w-full sm:max-w-lg rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl overflow-hidden">
+                <div class="flex items-center justify-between gap-3 p-4 border-b border-gray-800/60">
+                    <div class="text-sm font-semibold text-gray-100">Preview</div>
+                    <button type="button" id="upload_modal_close" class="h-8 w-8 rounded-lg bg-gray-800/60 hover:bg-gray-800 text-gray-300 hover:text-gray-100 flex items-center justify-center" aria-label="Close">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="p-4">
+                    <div id="upload_modal_media_wrap" class="rounded-xl border border-gray-800 bg-black/30 overflow-hidden">
+                        <img id="upload_modal_img" alt="" class="hidden w-full max-h-[55vh] object-contain" />
+                        <video id="upload_modal_video" class="hidden w-full max-h-[55vh]" playsinline controls></video>
+                    </div>
+
+                    <div class="mt-3">
+                        <input
+                            id="upload_modal_caption"
+                            type="text"
+                            maxlength="300"
+                            placeholder="Add a caption (optional)…"
+                            class="w-full bg-gray-800/70 text-white border border-gray-700 rounded-lg px-4 py-3 outline-none focus:border-emerald-500 placeholder:text-gray-400"
+                        />
+                        <div id="upload_modal_hint" class="mt-2 text-[11px] text-gray-400"></div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between gap-2 p-3 border-t border-gray-800/60 bg-gray-900/40">
+                    <button type="button" id="upload_modal_cancel" class="h-10 px-4 rounded-lg bg-gray-800 hover:bg-gray-700 text-white text-sm">Cancel</button>
+                    <button type="button" id="upload_modal_send" class="h-10 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endif %}
 {% comment %}
 LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
     (function () {

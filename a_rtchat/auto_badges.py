@@ -4,6 +4,7 @@ from datetime import timedelta
 from typing import Dict, Iterable, List, Optional
 
 from django.db.models import Count, DurationField, ExpressionWrapper, F, Max, Min
+from django.core.cache import cache
 from django.utils import timezone
 
 from .models import ChatGroup, GroupMessage, MessageReaction
@@ -35,19 +36,29 @@ def compute_auto_badges(
             return
         out[uid].append({'key': key, 'icon': icon, 'label': label})
 
-    # 🔥 Active 10 min (user has posted in this room in the last 10 minutes)
+    # 🔥 Active 10 min
+    # Show only when the user has been continuously online in this room for >=10 minutes.
+    # If they leave before 10 and come back, the timer resets.
     try:
-        ten_min_ago = now - timedelta(minutes=10)
-        rows = (
-            GroupMessage.objects.filter(group=chat_group, author_id__in=ids)
-            .values('author_id')
-            .annotate(last=Max('created'))
-        )
-        for r in rows:
-            uid = int(r['author_id'])
-            last = r.get('last')
-            if last and last >= ten_min_ago:
-                add(uid, 'active_10m', '🔥', 'Active 10 min')
+        room_id = int(getattr(chat_group, 'pk', 0) or 0)
+        if room_id:
+            online_ids = set(
+                int(x)
+                for x in chat_group.users_online.filter(id__in=ids).values_list('id', flat=True)
+                if int(x) > 0
+            )
+
+            for uid in online_ids:
+                try:
+                    k = f"rtchat:room:{room_id}:user:{uid}:online_since"
+                    ts = cache.get(k)
+                    if ts is None:
+                        continue
+                    since = float(ts)
+                    if (now.timestamp() - since) >= (10 * 60):
+                        add(uid, 'active_10m', '🔥', 'Active 10 min')
+                except Exception:
+                    continue
     except Exception:
         pass
 

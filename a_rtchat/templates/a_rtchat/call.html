@@ -47,14 +47,43 @@
             {% endif %}
 
             <div id="call-status" class="mt-4 text-xs text-gray-400"></div>
+
+            <div class="mt-5 flex items-center justify-center gap-2">
+                <button id="btn-mic" type="button" class="text-sm px-4 py-2 rounded-lg border border-gray-800 bg-gray-950/40 text-gray-100 hover:bg-gray-800/60 transition-colors">
+                    Mute
+                </button>
+                {% if call_type == 'video' %}
+                    <button id="btn-cam" type="button" class="text-sm px-4 py-2 rounded-lg border border-gray-800 bg-gray-950/40 text-gray-100 hover:bg-gray-800/60 transition-colors">
+                        Camera Off
+                    </button>
+                    <button id="btn-switch-cam" type="button" class="text-sm px-4 py-2 rounded-lg border border-gray-800 bg-gray-950/40 text-gray-100 hover:bg-gray-800/60 transition-colors">
+                        Switch Camera
+                    </button>
+                {% endif %}
+                <button id="btn-end" type="button" class="text-sm px-4 py-2 rounded-lg border border-red-900/60 bg-red-600/90 text-white hover:bg-red-600 transition-colors">
+                    End Call
+                </button>
+            </div>
         </div>
     </div>
 </div>
 
+<div id="call-toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 hidden items-center gap-2 rounded-xl border border-gray-800 bg-gray-950/90 text-gray-100 px-4 py-2 z-50 shadow-2xl">
+    <div id="call-toast-text" class="text-sm">Notice</div>
+</div>
+
 <div id="free-limit-popup" class="fixed inset-0 hidden items-center justify-center bg-black/60 z-50">
     <div class="w-full max-w-sm mx-4 rounded-2xl border border-gray-800 bg-gray-900 p-5">
-        <div class="text-sm text-gray-100 font-semibold">Free limit reached</div>
-        <div class="text-xs text-gray-400 mt-1">Your call will end now.</div>
+        <div id="call-modal-title" class="text-sm text-gray-100 font-semibold">Free limit reached</div>
+        <div id="call-modal-body" class="text-xs text-gray-400 mt-1">Your call has ended. Upgrade to continue calling.</div>
+        <div class="mt-4 flex gap-2">
+            <a id="call-modal-upgrade" href="{% url 'pricing' %}" class="flex-1 text-center text-sm px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 transition-colors">
+                Upgrade
+            </a>
+            <a id="call-modal-back" href="{% url 'chatroom' chatroom_name %}" class="flex-1 text-center text-sm px-4 py-2 rounded-lg border border-gray-800 bg-gray-950/40 text-gray-100 hover:bg-gray-800/60 transition-colors">
+                Back
+            </a>
+        </div>
     </div>
 </div>
 
@@ -69,7 +98,7 @@
     "presenceUrl": "{% url 'chat-call-presence' chatroom_name %}",
     "callEventUrl": "{% url 'chat-call-event' chatroom_name %}",
     "backUrl": "{% url 'chatroom' chatroom_name %}",
-    "memberUsernames": {{ member_usernames|safe }}
+    "memberUsernames": {{ member_usernames_json|safe }}
 }
 </script>
 

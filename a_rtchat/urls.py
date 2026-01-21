@@ -37,6 +37,7 @@ urlpatterns = [
     path('chat/admin/reports/<int:report_id>/status/', admin_report_update_status_view, name='admin-report-status'),
     path('chat/admin/enquiries/', admin_support_enquiries_view, name='admin-support-enquiries'),
     path('chat/admin/enquiries/<int:enquiry_id>/status/', admin_support_enquiry_update_status_view, name='admin-support-enquiry-status'),
+    path('chat/admin/enquiries/<int:enquiry_id>/reply/', admin_support_enquiry_reply_view, name='admin-support-enquiry-reply'),
 
     path('chat/admin/analytics/', admin_analytics_view, name='admin-analytics'),
     path('chat/admin/analytics/live/', admin_analytics_live_view, name='admin-analytics-live'),

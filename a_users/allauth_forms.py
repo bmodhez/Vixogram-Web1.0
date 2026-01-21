@@ -91,6 +91,16 @@ class CustomSignupForm(SignupForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        # Persist invite/referral token across the signup POST.
+        try:
+            req = getattr(self, 'request', None)
+            if req is not None:
+                ref = (req.GET.get('ref') or '').strip()
+                if ref:
+                    req.session['invite_ref'] = ref
+        except Exception:
+            pass
+
         for name, field in self.fields.items():
             if name in {"password1", "password2"}:
                 field.widget.attrs.update(

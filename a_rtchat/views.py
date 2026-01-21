@@ -2,7 +2,8 @@ import json
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.shortcuts import render, get_object_or_404, redirect 
+from django.shortcuts import render, redirect, get_object_or_404
+from django.template.loader import render_to_string
 from django.contrib.auth.decorators import login_required
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -11,6 +12,7 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.contrib import messages
 from django.core.cache import cache
+from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.urls import reverse
@@ -32,6 +34,14 @@ from .channels_utils import chatroom_channel_group_name
 from .mentions import extract_mention_usernames, resolve_mentioned_users
 from a_rtchat.link_policy import contains_link
 from .room_policy import room_allows_links, room_allows_uploads
+from .challenges import (
+    get_active_challenge,
+    check_message as check_challenge_message,
+    end_if_expired as challenge_end_if_expired,
+    end_challenge as challenge_end,
+    challenge_public_state,
+    get_win_loss_totals,
+)
 from .auto_badges import attach_auto_badges
 from .natasha_bot import trigger_natasha_reply_after_commit, NATASHA_USERNAME
 
@@ -657,6 +667,166 @@ def chat_view(request, chatroom_name='public-chat'):
 
         # Duplicate message detection (same message spam).
         raw_body = (request.POST.get('body') or '').strip()
+
+        # Commands: scoreboard (sender-only)
+        # !sc -> your wins total
+        # !sc @username -> other user's wins total
+        try:
+            parts = raw_body.split()
+            if parts and parts[0].lower() == '!sc':
+                target_user = request.user
+                if len(parts) >= 2:
+                    raw = (parts[1] or '').strip()
+                    if raw.startswith('@'):
+                        raw = raw[1:]
+                    raw = raw.strip()
+                    if raw:
+                        user_model = get_user_model()
+                        target_user = user_model.objects.filter(username__iexact=raw).only('id', 'username').first()
+                        if not target_user:
+                            html = render_to_string('a_rtchat/partials/challenge_event.html', {
+                                'title': 'Score',
+                                'body': f"User '@{raw}' not found.",
+                            })
+                            return HttpResponse(html, status=200)
+                    else:
+                        html = render_to_string('a_rtchat/partials/challenge_event.html', {
+                            'title': 'Score',
+                            'body': 'Usage: !sc  OR  !sc @username',
+                        })
+                        return HttpResponse(html, status=200)
+
+                totals = get_win_loss_totals(getattr(target_user, 'id', 0), private_only=True)
+                wins = int(totals.get('wins') or 0)
+                losses = int(totals.get('losses') or 0)
+                completed = int(totals.get('completed') or 0)
+                name = getattr(target_user, 'username', 'User')
+                html = render_to_string('a_rtchat/partials/challenge_event.html', {
+                    'title': 'Score',
+                    'body': f"@{name} • Wins: {wins} • Losses: {losses} • Completed: {completed}",
+                })
+                return HttpResponse(html, status=200)
+        except Exception:
+            pass
+
+        # Challenges: enforce rules in HTMX/HTTP send path too (private chats only).
+        # This prevents bypassing rules when websockets are unavailable.
+        try:
+            if getattr(chat_group, 'is_private', False) and raw_body:
+                active = get_active_challenge(chat_group)
+                if active:
+                    # Lazily end expired challenges.
+                    if challenge_end_if_expired(active):
+                        try:
+                            active.refresh_from_db()
+                        except Exception:
+                            pass
+
+                        if getattr(active, 'status', '') != ChatChallenge.STATUS_ACTIVE:
+                            meta = dict(getattr(active, 'meta', None) or {})
+                            if not meta.get('ended_notified'):
+                                meta['ended_notified'] = True
+                                active.meta = meta
+                                active.save(update_fields=['meta'])
+
+                                winners = meta.get('winners') or []
+                                losers = meta.get('losers') or []
+                                html = render_to_string('a_rtchat/partials/challenge_event.html', {
+                                    'title': 'Challenge ended',
+                                    'body': f"Winners: {len(winners)} • Losers: {len(losers)}",
+                                })
+                                channel_layer = get_channel_layer()
+                                async_to_sync(channel_layer.group_send)(
+                                    chatroom_channel_group_name(chat_group),
+                                    {
+                                        'type': 'challenge_event_handler',
+                                        'html': html,
+                                        'state': challenge_public_state(active),
+                                    },
+                                )
+                    else:
+                        res = check_challenge_message(active, getattr(request.user, 'id', 0), raw_body)
+                        if not res.allowed:
+                            try:
+                                display_name = request.user.profile.name
+                            except Exception:
+                                display_name = getattr(request.user, 'username', '') or 'User'
+
+                            html = render_to_string('a_rtchat/partials/challenge_event.html', {
+                                'title': 'Rule broken ❌',
+                                'body': f"{display_name} lost: {res.reason}",
+                            })
+                            channel_layer = get_channel_layer()
+                            async_to_sync(channel_layer.group_send)(
+                                chatroom_channel_group_name(chat_group),
+                                {
+                                    'type': 'challenge_event_handler',
+                                    'html': html,
+                                    'state': challenge_public_state(active),
+                                },
+                            )
+
+                            # If everyone lost, end early.
+                            try:
+                                member_ids = list(chat_group.members.values_list('id', flat=True))
+                                losers = set((active.meta or {}).get('losers') or [])
+                                if member_ids and losers.issuperset(set(member_ids)):
+                                    ended = challenge_end(active)
+                                    meta = dict(getattr(ended, 'meta', None) or {})
+                                    if not meta.get('ended_notified'):
+                                        meta['ended_notified'] = True
+                                        ended.meta = meta
+                                        ended.save(update_fields=['meta'])
+
+                                        winners2 = meta.get('winners') or []
+                                        losers2 = meta.get('losers') or []
+                                        end_html = render_to_string('a_rtchat/partials/challenge_event.html', {
+                                            'title': 'Challenge ended',
+                                            'body': f"Winners: {len(winners2)} • Losers: {len(losers2)}",
+                                        })
+                                        async_to_sync(channel_layer.group_send)(
+                                            chatroom_channel_group_name(chat_group),
+                                            {
+                                                'type': 'challenge_event_handler',
+                                                'html': end_html,
+                                                'state': challenge_public_state(ended),
+                                            },
+                                        )
+                            except Exception:
+                                pass
+
+                            return HttpResponse('', status=400)
+
+                        if res.ended:
+                            try:
+                                active.refresh_from_db()
+                            except Exception:
+                                pass
+
+                            if getattr(active, 'status', '') != ChatChallenge.STATUS_ACTIVE:
+                                meta = dict(getattr(active, 'meta', None) or {})
+                                if not meta.get('ended_notified'):
+                                    meta['ended_notified'] = True
+                                    active.meta = meta
+                                    active.save(update_fields=['meta'])
+
+                                    winners3 = meta.get('winners') or []
+                                    losers3 = meta.get('losers') or []
+                                    end_html = render_to_string('a_rtchat/partials/challenge_event.html', {
+                                        'title': 'Challenge ended',
+                                        'body': f"Winners: {len(winners3)} • Losers: {len(losers3)}",
+                                    })
+                                    channel_layer = get_channel_layer()
+                                    async_to_sync(channel_layer.group_send)(
+                                        chatroom_channel_group_name(chat_group),
+                                        {
+                                            'type': 'challenge_event_handler',
+                                            'html': end_html,
+                                            'state': challenge_public_state(active),
+                                        },
+                                    )
+        except Exception:
+            pass
 
         # Links are only allowed in private chats.
         if raw_body and contains_link(raw_body) and not links_allowed:
@@ -2011,9 +2181,13 @@ def admin_users_view(request):
             | Q(last_name__icontains=q)
         )
 
+    # Keep a hard cap to avoid an accidentally expensive staff page.
     users = users[:200]
 
-    user_ids = [u.id for u in users]
+    paginator = Paginator(users, 11)
+    page_obj = paginator.get_page(request.GET.get('page') or 1)
+
+    user_ids = [u.id for u in page_obj.object_list]
     existing = set(Profile.objects.filter(user_id__in=user_ids).values_list('user_id', flat=True))
     missing = [Profile(user_id=uid) for uid in user_ids if uid not in existing]
     if missing:
@@ -2021,7 +2195,9 @@ def admin_users_view(request):
 
     return render(request, 'a_rtchat/admin_users.html', {
         'q': q,
-        'users': users,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': page_obj.has_other_pages(),
     })
 
 
@@ -2191,6 +2367,67 @@ def admin_support_enquiry_update_status_view(request, enquiry_id: int):
     enquiry.save(update_fields=['status', 'admin_note'])
 
     messages.success(request, f'Updated enquiry #{enquiry.id}')
+    status = (request.POST.get('next_status') or '').strip().lower()
+    if status in {SupportEnquiry.STATUS_OPEN, SupportEnquiry.STATUS_RESOLVED}:
+        return redirect(f"{reverse('admin-support-enquiries')}?status={status}")
+    return redirect('admin-support-enquiries')
+
+
+@login_required
+def admin_support_enquiry_reply_view(request, enquiry_id: int):
+    if request.method != 'POST':
+        raise Http404()
+    if not request.user.is_staff:
+        raise Http404()
+
+    enquiry = get_object_or_404(SupportEnquiry, pk=enquiry_id)
+    reply = (request.POST.get('reply') or '').strip()
+    if not reply:
+        messages.error(request, 'Reply cannot be empty')
+        return redirect('admin-support-enquiries')
+
+    try:
+        enquiry.admin_reply = reply
+        enquiry.replied_at = timezone.now()
+        enquiry.status = SupportEnquiry.STATUS_RESOLVED
+        enquiry.save(update_fields=['admin_reply', 'replied_at', 'status'])
+    except Exception:
+        enquiry.admin_reply = reply
+        enquiry.status = SupportEnquiry.STATUS_RESOLVED
+        enquiry.save()
+
+    # Persist notification (dropdown)
+    try:
+        from a_rtchat.models import Notification
+
+        Notification.objects.create(
+            user=enquiry.user,
+            from_user=None,
+            type='support',
+            preview=f"From Vixogram Team: {reply}"[:180],
+            url='/profile/support/',
+        )
+    except Exception:
+        pass
+
+    # Realtime toast/badge via per-user notify WS
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"notify_user_{enquiry.user_id}",
+            {
+                'type': 'support_notify_handler',
+                'preview': f"From Vixogram Team: {reply}"[:180],
+                'url': '/profile/support/',
+            },
+        )
+    except Exception:
+        pass
+
+    messages.success(request, f"Replied to enquiry #{enquiry.id}")
     status = (request.POST.get('next_status') or '').strip().lower()
     if status in {SupportEnquiry.STATUS_OPEN, SupportEnquiry.STATUS_RESOLVED}:
         return redirect(f"{reverse('admin-support-enquiries')}?status={status}")
@@ -2504,6 +2741,7 @@ def call_view(request, chatroom_name):
         'chatroom_name': chatroom_name,
         'call_type': call_type,
         'member_usernames': member_usernames,
+        'member_usernames_json': json.dumps(member_usernames),
         'call_role': role,
         'agora_app_id': getattr(settings, 'AGORA_APP_ID', ''),
     })

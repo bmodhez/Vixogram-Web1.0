@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="w-full max-w-2xl mx-auto">
+    <div class="rounded-2xl border border-gray-800 bg-gray-900/50 backdrop-blur p-5 sm:p-6">
+        <div class="flex items-start justify-between gap-4">
+            <div>
+                <h1 class="text-xl sm:text-2xl font-bold text-white">Invite your friends</h1>
+                <p class="mt-1 text-sm text-gray-400">Share this link — your friends can join Vixogram in one tap.</p>
+            </div>
+            <a href="{% url 'home' %}" class="text-sm text-gray-300 hover:text-white px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors">Back</a>
+        </div>
+
+        <div class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="rounded-2xl border border-gray-800 bg-gray-950/40 p-4">
+                <div class="text-xs uppercase tracking-wider text-gray-400">Your points</div>
+                <div class="mt-1 text-2xl font-extrabold text-emerald-300">{{ points|default:0 }}</div>
+                <div class="mt-1 text-xs text-gray-500">Points count only after your friend verifies email.</div>
+            </div>
+            <div class="rounded-2xl border border-gray-800 bg-gray-950/40 p-4">
+                <div class="text-xs uppercase tracking-wider text-gray-400">Rewards</div>
+                <div class="mt-1 text-sm font-semibold text-white">Coming soon</div>
+                <div class="mt-1 text-xs text-gray-500">Till then, collect as much points as you can.</div>
+            </div>
+        </div>
+
+        <div class="mt-5 rounded-2xl border border-gray-800 bg-gray-950/40 p-4">
+            <div class="text-sm font-semibold text-gray-200">Your invite link</div>
+            <div class="mt-2 flex flex-col sm:flex-row gap-2">
+                <input
+                    id="invite_link"
+                    type="text"
+                    readonly
+                    value="{{ invite_url }}"
+                    class="w-full flex-1 bg-gray-900/60 border border-gray-800 rounded-xl px-3 py-2.5 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                    aria-label="Invite link"
+                />
+                <button
+                    type="button"
+                    id="copy_invite"
+                    class="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl px-5 py-2.5 transition-colors"
+                >
+                    Copy
+                </button>
+            </div>
+
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+                <a
+                    id="wa_share"
+                    href="#"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="px-4 py-2 rounded-xl border border-gray-800 bg-gray-900/60 hover:bg-gray-800/60 text-sm text-gray-200 transition"
+                >
+                    WhatsApp
+                </a>
+                <a
+                    id="tg_share"
+                    href="#"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="px-4 py-2 rounded-xl border border-gray-800 bg-gray-900/60 hover:bg-gray-800/60 text-sm text-gray-200 transition"
+                >
+                    Telegram
+                </a>
+                <button
+                    type="button"
+                    id="native_share"
+                    class="px-4 py-2 rounded-xl border border-gray-800 bg-gray-900/60 hover:bg-gray-800/60 text-sm text-gray-200 transition"
+                >
+                    Share
+                </button>
+            </div>
+
+            <p class="mt-3 text-xs text-gray-500">Tip: If Share doesn’t work on desktop, use Copy.</p>
+        </div>
+
+        <div id="invite_toast" class="hidden mt-4 rounded-xl border border-emerald-600/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            Copied!
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const linkInput = document.getElementById('invite_link');
+    const copyBtn = document.getElementById('copy_invite');
+    const toast = document.getElementById('invite_toast');
+    const inviteUrl = linkInput ? linkInput.value : '';
+
+    function showToast() {
+        if (!toast) return;
+        toast.classList.remove('hidden');
+        window.clearTimeout(showToast._t);
+        showToast._t = window.setTimeout(() => toast.classList.add('hidden'), 1800);
+    }
+
+    async function copyText(text) {
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+                return true;
+            }
+        } catch (e) {}
+        try {
+            const tmp = document.createElement('textarea');
+            tmp.value = text;
+            tmp.setAttribute('readonly', '');
+            tmp.style.position = 'fixed';
+            tmp.style.left = '-9999px';
+            document.body.appendChild(tmp);
+            tmp.select();
+            const ok = document.execCommand('copy');
+            document.body.removeChild(tmp);
+            return ok;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    if (copyBtn) {
+        copyBtn.addEventListener('click', async () => {
+            const ok = await copyText(inviteUrl);
+            if (ok) showToast();
+            if (linkInput) linkInput.focus();
+        });
+    }
+
+    const wa = document.getElementById('wa_share');
+    if (wa) {
+        const msg = encodeURIComponent('Join me on Vixogram: ' + inviteUrl);
+        wa.href = 'https://wa.me/?text=' + msg;
+    }
+
+    const tg = document.getElementById('tg_share');
+    if (tg) {
+        const msg = encodeURIComponent('Join me on Vixogram!');
+        tg.href = 'https://t.me/share/url?url=' + encodeURIComponent(inviteUrl) + '&text=' + msg;
+    }
+
+    const nativeBtn = document.getElementById('native_share');
+    if (nativeBtn) {
+        nativeBtn.addEventListener('click', async () => {
+            if (!navigator.share) {
+                const ok = await copyText(inviteUrl);
+                if (ok) showToast();
+                return;
+            }
+            try {
+                await navigator.share({
+                    title: 'Vixogram',
+                    text: 'Join me on Vixogram',
+                    url: inviteUrl,
+                });
+            } catch (e) {}
+        });
+    }
+})();
+</script>
+{% endblock %}

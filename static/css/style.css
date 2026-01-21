@@ -3,8 +3,15 @@
 /* Smooth scrolling site-wide (anchors/programmatic scroll). */
 html { scroll-behavior: smooth; }
 
-/* Chat container should snap instantly (JS provides any desired animation). */
-#chat_container { scroll-behavior: auto; }
+/* Chat container should snap instantly (JS provides any desired animation).
+   Also prevent horizontal overflow (mobile swipe gestures can cause a side-scroll glow/line). */
+#chat_container {
+  scroll-behavior: auto;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+
+#chat_messages { overflow-x: hidden; }
 
 /* Hide chat pane until initial snap-to-bottom completes. */
 .vixo-chat-init-hidden { visibility: hidden; }
@@ -26,6 +33,101 @@ html { scroll-behavior: smooth; }
 
 body {
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Auth pages (login/signup): full background image + glass card */
+.vixo-auth-bg {
+  background-image:
+    linear-gradient(rgba(2, 6, 23, 0.78), rgba(2, 6, 23, 0.78)),
+    var(--vixo-auth-bg);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  /* Page transition (enter/leave) */
+  opacity: 1;
+  transform: translateY(0);
+  filter: none;
+  transition: opacity 180ms ease, transform 180ms ease, filter 180ms ease;
+}
+
+/* Enter starts hidden, then JS removes the class to reveal. */
+body.vixo-auth-page.vixo-page-enter .vixo-auth-bg {
+  opacity: 0;
+  transform: translateY(8px);
+  filter: blur(2px);
+}
+
+/* Leave fades out before navigation. */
+body.vixo-auth-page.vixo-page-leave .vixo-auth-bg {
+  opacity: 0;
+  transform: translateY(-6px);
+  filter: blur(2px);
+}
+
+/* When side ads are hidden, force a single-column grid even on very wide screens. */
+body.vixo-auth-page .vixo-site-grid {
+  grid-template-columns: minmax(0, 100%) !important;
+}
+
+/* Private chat: "new messages" jump indicator (logo bubble + arrow) */
+.vixo-private-newmsg-indicator {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  pointer-events: auto;
+}
+
+.vixo-private-newmsg-bubble {
+  width: 46px;
+  height: 46px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, rgba(142, 45, 226, 0.92), rgba(74, 0, 224, 0.92));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 160ms ease, filter 160ms ease;
+}
+
+.vixo-private-newmsg-indicator:hover .vixo-private-newmsg-bubble {
+  transform: translateY(-1px) scale(1.03);
+  filter: brightness(1.08);
+}
+
+.vixo-private-newmsg-indicator:active .vixo-private-newmsg-bubble {
+  transform: translateY(0px) scale(0.98);
+}
+
+.vixo-private-newmsg-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.35));
+}
+
+.vixo-private-newmsg-arrow {
+  width: 24px;
+  height: 18px;
+  color: rgba(255, 255, 255, 0.92);
+  opacity: 0.95;
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.35));
+}
+
+.vixo-private-newmsg-indicator.vixo-private-newmsg-pulse .vixo-private-newmsg-bubble {
+  animation: vixoPrivateNewMsgPulse 1.35s ease-in-out infinite;
+}
+
+@keyframes vixoPrivateNewMsgPulse {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-1px) scale(1.05); }
+}
+
+.vixo-reaction-picker {
+  display: flex;
+  flex-wrap: wrap;
 }
 
 /* Inputs with a leading icon (used on auth forms). */
@@ -163,8 +265,90 @@ body {
 /* Firefox fallback (no gradient support). */
 html { scrollbar-width: thin; scrollbar-color: rgb(16 185 129) transparent; }
 
-/* Keep chat container width consistent. */
-#chat_container::-webkit-scrollbar { width: 10px; }
+/* Chat: hide scrollbar entirely to prevent the brief green thumb flash on programmatic scroll.
+   Still scrollable via mouse wheel/touch/trackpad. */
+#chat_container,
+#chat_sidebar_panel {
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* IE/Edge */
+}
+
+/* Chat page: prevent a page-level scrollbar (the green bar at far right).
+   Keep scrolling inside #chat_container / #chat_sidebar_panel only. */
+body.vixo-chat-page {
+  height: 100dvh;
+  overflow: hidden !important;
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: auto;
+}
+
+/* Chat composer: keep it visible on mobile browser UI/safe areas.
+   This moves the sticky bar slightly up and adds safe-area padding so it doesn't sit under the home indicator. */
+#chat_composer_bar {
+  bottom: env(safe-area-inset-bottom);
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+}
+
+@media (max-width: 639px) {
+  #chat_composer_bar {
+    bottom: calc(env(safe-area-inset-bottom) + 8px);
+  }
+}
+
+html.vixo-chat-page {
+  height: 100dvh;
+  overflow: hidden !important;
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/old Edge */
+}
+
+html.vixo-chat-page::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Chat page: some browsers show an overlay scrollbar thumb briefly on programmatic scroll.
+   Our global scrollbar theme is green, so force ALL scrollbars to be invisible on chat page. */
+html.vixo-chat-page {
+  scrollbar-color: transparent transparent; /* Firefox */
+}
+
+html.vixo-chat-page * {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/old Edge */
+}
+
+html.vixo-chat-page *::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+html.vixo-chat-page *::-webkit-scrollbar-thumb,
+html.vixo-chat-page *::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+#chat_container::-webkit-scrollbar,
+#chat_sidebar_panel::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Extra guard: if the browser still paints an overlay thumb, make it invisible. */
+#chat_container::-webkit-scrollbar-thumb,
+#chat_sidebar_panel::-webkit-scrollbar-thumb {
+  background: transparent !important;
+}
+
+#chat_container::-webkit-scrollbar-track,
+#chat_sidebar_panel::-webkit-scrollbar-track {
+  background: transparent !important;
+}
 
 /* Global button micro-interactions (site-wide).
    Keep it color-agnostic: only transform/filter/opacity. */

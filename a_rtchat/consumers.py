@@ -5,6 +5,7 @@ from django.template.loader import render_to_string
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.core.cache import cache
+from django.utils import timezone
 import os
 from django.db.models import Count
 from asgiref.sync import async_to_sync
@@ -65,6 +66,16 @@ from .models import Notification
 from .link_policy import contains_link
 from .link_preview import extract_first_http_url, fetch_link_preview
 from .room_policy import room_allows_links
+from .challenges import (
+    get_active_challenge,
+    start_challenge,
+    check_message as check_challenge_message,
+    end_if_expired as challenge_end_if_expired,
+    end_challenge as challenge_end,
+    cancel_challenge as challenge_cancel,
+    challenge_public_state,
+    get_win_loss_totals,
+)
 
 
 def _is_chat_blocked(user) -> bool:
@@ -104,6 +115,98 @@ def _resolve_authenticated_user(scope_user):
         return scope_user
 
 class ChatroomConsumer(WebsocketConsumer):
+    def _send_challenge_event(self, title: str, body: str, state=None):
+        try:
+            html = render_to_string('a_rtchat/partials/challenge_event.html', {
+                'title': title,
+                'body': body,
+            })
+        except Exception:
+            html = ''
+
+        try:
+            payload = {
+                'type': 'challenge_event',
+                'html': html,
+                'state': state,
+            }
+            self.send(text_data=json.dumps(payload))
+        except Exception:
+            return
+
+    def _broadcast_challenge_event(self, title: str, body: str, state=None):
+        try:
+            html = render_to_string('a_rtchat/partials/challenge_event.html', {
+                'title': title,
+                'body': body,
+            })
+        except Exception:
+            html = ''
+
+        payload = {
+            'type': 'challenge_event_handler',
+            'html': html,
+        }
+        if state is not None:
+            payload['state'] = state
+
+        try:
+            async_to_sync(self.channel_layer.group_send)(
+                self.room_group_name,
+                payload,
+            )
+        except Exception:
+            return
+
+    def _send_challenge_state(self, ch):
+        try:
+            state = challenge_public_state(ch)
+            self.send(text_data=json.dumps({
+                'type': 'challenge_state',
+                'state': state,
+            }))
+        except Exception:
+            return
+
+    def _broadcast_challenge_end_once(self, ch, title: str = 'Challenge ended'):
+        if not ch:
+            return
+        try:
+            meta = dict(getattr(ch, 'meta', None) or {})
+            if meta.get('ended_notified'):
+                return
+            meta['ended_notified'] = True
+            ch.meta = meta
+            ch.save(update_fields=['meta'])
+
+            winners = meta.get('winners') or []
+            losers = meta.get('losers') or []
+            msg = f"Winners: {len(winners)} • Losers: {len(losers)}"
+            self._broadcast_challenge_event(title, msg, state=challenge_public_state(ch))
+        except Exception:
+            return
+
+    def _maybe_announce_challenge_end(self, ch):
+        if not ch:
+            return
+        try:
+            meta = dict(getattr(ch, 'meta', None) or {})
+            if meta.get('ended_notified'):
+                return
+            meta['ended_notified'] = True
+            ch.meta = meta
+            ch.save(update_fields=['meta'])
+
+            winners = meta.get('winners') or []
+            losers = meta.get('losers') or []
+            if winners:
+                msg = f"Winners: {len(winners)} • Losers: {len(losers)}"
+            else:
+                msg = "No winners this time."
+            self._broadcast_challenge_event('Challenge ended', msg, state=challenge_public_state(ch))
+        except Exception:
+            return
+
     def _room_conn_key(self) -> str:
         room_id = getattr(self, 'chatroom', None)
         room_pk = getattr(room_id, 'pk', None)
@@ -178,6 +281,18 @@ class ChatroomConsumer(WebsocketConsumer):
                 room.users_online.remove(*stale_ids)
             except Exception:
                 pass
+
+            # Also clear any cached "online since" markers for these users.
+            try:
+                room_id = getattr(room, 'pk', None)
+                if room_id:
+                    for uid in stale_ids:
+                        try:
+                            cache.delete(f"rtchat:room:{room_id}:user:{int(uid)}:online_since")
+                        except Exception:
+                            continue
+            except Exception:
+                pass
     def connect(self):
         self.user = _resolve_authenticated_user(self.scope.get('user'))
         self.chatroom_name = self.scope['url_route']['kwargs']['chatroom_name']
@@ -245,6 +360,17 @@ class ChatroomConsumer(WebsocketConsumer):
                         self.chatroom.users_online.add(self.user.pk)
                 except Exception:
                     pass
+
+                # Continuous online tracking (used for badges like "Active 10 min")
+                try:
+                    room_id = getattr(self.chatroom, 'pk', None)
+                    uid = int(getattr(self.user, 'id', 0) or 0)
+                    if room_id and uid:
+                        k = f"rtchat:room:{room_id}:user:{uid}:online_since"
+                        if cache.get(k) is None:
+                            cache.set(k, timezone.now().timestamp(), timeout=60 * 60 * 6)  # 6h safety TTL
+                except Exception:
+                    pass
             self.update_online_count()
         
         
@@ -265,6 +391,15 @@ class ChatroomConsumer(WebsocketConsumer):
                 try:
                     if self.user in self.chatroom.users_online.all():
                         self.chatroom.users_online.remove(self.user.pk)
+                except Exception:
+                    pass
+
+                # Clear continuous-online marker on last disconnect
+                try:
+                    room_id = getattr(self.chatroom, 'pk', None)
+                    uid = int(getattr(self.user, 'id', 0) or 0)
+                    if room_id and uid:
+                        cache.delete(f"rtchat:room:{room_id}:user:{uid}:online_since")
                 except Exception:
                     pass
             self.update_online_count()
@@ -292,6 +427,65 @@ class ChatroomConsumer(WebsocketConsumer):
 
         # Client heartbeat (keeps online presence accurate).
         if event_type == 'ping':
+            # Also used to expire challenges on server time, even if nobody is sending messages.
+            try:
+                if getattr(self.chatroom, 'is_private', False):
+                    active = get_active_challenge(self.chatroom)
+                    if active and challenge_end_if_expired(active):
+                        try:
+                            active.refresh_from_db()
+                        except Exception:
+                            pass
+                        self._broadcast_challenge_end_once(active, title='Challenge ended')
+            except Exception:
+                pass
+            return
+
+        # Challenges: request current state (used on connect).
+        if event_type == 'challenge_state':
+            try:
+                if getattr(self.chatroom, 'is_private', False):
+                    active = get_active_challenge(self.chatroom)
+                    self._send_challenge_state(active)
+            except Exception:
+                pass
+            return
+
+        # Challenges: start a new challenge (private chats only).
+        if event_type == 'challenge_start':
+            if not getattr(self.chatroom, 'is_private', False):
+                return
+            kind = (text_data_json.get('kind') or '').strip().lower()
+            try:
+                ch = start_challenge(self.chatroom, created_by=self.user, kind=kind)
+            except Exception as e:
+                try:
+                    self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'code': 'challenge_start_failed',
+                        'message': str(e) or 'Could not start challenge.',
+                    }))
+                except Exception:
+                    pass
+                return
+
+            self._broadcast_challenge_event('Challenge started', getattr(ch, 'prompt', '') or '', state=challenge_public_state(ch))
+            return
+
+        # Challenges: cancel/end the active challenge.
+        if event_type == 'challenge_cancel':
+            if not getattr(self.chatroom, 'is_private', False):
+                return
+            try:
+                ch = get_active_challenge(self.chatroom)
+                if not ch:
+                    return
+                if not (getattr(self.user, 'is_staff', False) or getattr(ch, 'created_by_id', None) == getattr(self.user, 'id', None)):
+                    return
+                cancelled = challenge_cancel(ch)
+                self._broadcast_challenge_end_once(cancelled, title='Challenge cancelled')
+            except Exception:
+                pass
             return
 
         # Read receipts: client can send {type:'read', last_read_id: <int>}.
@@ -396,6 +590,90 @@ class ChatroomConsumer(WebsocketConsumer):
         body = (text_data_json.get('body') or '').strip()
         if not body:
             return
+
+        # Commands: scoreboard
+        # !sc -> your wins total
+        # !sc @username -> other user's wins total
+        try:
+            parts = body.split()
+            if parts and parts[0].lower() == '!sc':
+                target_user = self.user
+                if len(parts) >= 2:
+                    raw = (parts[1] or '').strip()
+                    if raw.startswith('@'):
+                        raw = raw[1:]
+                    raw = raw.strip()
+                    if raw:
+                        user_model = get_user_model()
+                        target_user = user_model.objects.filter(username__iexact=raw).only('id', 'username').first()
+                        if not target_user:
+                            self._send_challenge_event('Score', f"User '@{raw}' not found.")
+                            return
+                    else:
+                        self._send_challenge_event('Score', 'Usage: !sc  OR  !sc @username')
+                        return
+
+                totals = get_win_loss_totals(getattr(target_user, 'id', 0), private_only=True)
+                wins = int(totals.get('wins') or 0)
+                losses = int(totals.get('losses') or 0)
+                completed = int(totals.get('completed') or 0)
+
+                name = getattr(target_user, 'username', 'User')
+                msg = f"@{name} • Wins: {wins} • Losses: {losses} • Completed: {completed}"
+                self._send_challenge_event('Score', msg)
+                return
+        except Exception:
+            # Never block chat on command issues.
+            pass
+
+        # Challenges: only enforced in private chats.
+        try:
+            if getattr(self.chatroom, 'is_private', False):
+                active = get_active_challenge(self.chatroom)
+                if active:
+                    # End expired challenges lazily.
+                    if challenge_end_if_expired(active):
+                        try:
+                            active.refresh_from_db()
+                        except Exception:
+                            pass
+                        self._broadcast_challenge_end_once(active, title='Challenge ended')
+                    else:
+                        res = check_challenge_message(active, getattr(self.user, 'id', 0), body)
+                        if not res.allowed:
+                            try:
+                                display_name = self.user.profile.name
+                            except Exception:
+                                display_name = getattr(self.user, 'username', '') or 'User'
+
+                            self._broadcast_challenge_event(
+                                'Rule broken ❌',
+                                f"{display_name} lost: {res.reason}",
+                                state=challenge_public_state(active),
+                            )
+
+                            # If everyone lost, end early.
+                            try:
+                                member_ids = list(self.chatroom.members.values_list('id', flat=True))
+                                losers = set((active.meta or {}).get('losers') or [])
+                                if member_ids and losers.issuperset(set(member_ids)):
+                                    ended = challenge_end(active)
+                                    self._broadcast_challenge_end_once(ended, title='Challenge ended')
+                            except Exception:
+                                pass
+                            return
+
+                        if res.ended:
+                            # For finish_meme, the challenge ends inside the checker.
+                            try:
+                                active.refresh_from_db()
+                            except Exception:
+                                pass
+                            if active and getattr(active, 'status', '') != ChatChallenge.STATUS_ACTIVE:
+                                self._broadcast_challenge_end_once(active, title='Challenge ended')
+        except Exception:
+            # Never block chat on challenge system issues.
+            pass
 
         # Links are only allowed in private chats.
         if contains_link(body) and not room_allows_links(self.chatroom):
@@ -569,6 +847,14 @@ class ChatroomConsumer(WebsocketConsumer):
             )
             return
 
+        client_nonce = None
+        try:
+            raw_nonce = text_data_json.get('client_nonce')
+            if raw_nonce is not None:
+                client_nonce = str(raw_nonce)[:64]
+        except Exception:
+            client_nonce = None
+
         reply_to = None
         reply_to_id = text_data_json.get('reply_to_id')
         if reply_to_id:
@@ -710,7 +996,10 @@ class ChatroomConsumer(WebsocketConsumer):
         event = {
             'type': 'message_handler',
             'message_id': message.id,
+            'author_id': getattr(self.user, 'id', None),
         }
+        if client_nonce:
+            event['client_nonce'] = client_nonce
         async_to_sync(self.channel_layer.group_send)(
             self.room_group_name, event
         )
@@ -794,10 +1083,25 @@ class ChatroomConsumer(WebsocketConsumer):
             'verified_user_ids': get_verified_user_ids([getattr(message, 'author_id', None)]),
         }
         html = render_to_string("a_rtchat/chat_message.html", context=context)
-        self.send(text_data=json.dumps({
+        payload = {
             'type': 'chat_message',
             'html': html,
-        }))
+        }
+        if event.get('client_nonce'):
+            payload['client_nonce'] = event.get('client_nonce')
+        if event.get('author_id'):
+            payload['author_id'] = event.get('author_id')
+        self.send(text_data=json.dumps(payload))
+
+    def challenge_event_handler(self, event):
+        try:
+            self.send(text_data=json.dumps({
+                'type': 'challenge_event',
+                'html': event.get('html') or '',
+                'state': event.get('state'),
+            }))
+        except Exception:
+            return
 
     def read_receipt_handler(self, event):
         try:
@@ -1190,6 +1494,20 @@ class NotificationsConsumer(WebsocketConsumer):
             'from_username': event.get('from_username') or '',
             'url': event.get('url') or '',
             'preview': event.get('preview') or '',
+        }))
+
+    def support_notify_handler(self, event):
+        try:
+            from a_users.models import Profile
+
+            if Profile.objects.filter(user_id=getattr(self.user, 'id', None), is_dnd=True).exists():
+                return
+        except Exception:
+            pass
+        self.send(text_data=json.dumps({
+            'type': 'support',
+            'preview': event.get('preview') or '',
+            'url': event.get('url') or '',
         }))
 
     def chat_block_status_notify_handler(self, event):

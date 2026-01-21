@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="{% block html_class %}{% endblock %}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,11 +16,12 @@
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
 
     <script src="{% static 'js/vixogram.js' %}"></script>
+    <script src="{% static 'js/mobile_ads.js' %}"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
 </head>
-<body class="min-h-screen flex flex-col text-white antialiased tracking-tight bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950">
+<body class="min-h-screen flex flex-col text-white antialiased tracking-tight bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 {% block body_class %}{% endblock %}{% if request.resolver_match and request.resolver_match.url_name|default:''|slice:':8' == 'account_' %} vixo-auth-page{% endif %}">
     <audio id="notif_sound" preload="auto" class="hidden" src="{% static 'notification.mp3' %}"></audio>
     <audio id="incoming_sound" preload="auto" class="hidden" src="{% static 'incoming.wav' %}"></audio>
     <nav class="vixo-topbar sticky top-0 z-50 bg-gray-900/80 backdrop-blur border-b border-gray-800">
@@ -31,18 +32,6 @@
 
             {% if user.is_authenticated %}
                 <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-                    <button
-                        type="button"
-                        id="theme_toggle"
-                        class="text-xs sm:text-sm text-gray-300 hover:text-white transition-all duration-200 ease-out px-2.5 sm:px-3 py-2 rounded-lg hover:bg-gray-800"
-                        aria-label="Toggle theme"
-                    >
-                        <span class="inline-flex items-center gap-2">
-                            <span aria-hidden="true">🌙</span>
-                            <span class="hidden sm:inline">Dark</span>
-                        </span>
-                    </button>
-
                     {% if CONTACT_EMAIL or CONTACT_INSTAGRAM_URL %}
                         <div class="relative">
                             <button
@@ -79,6 +68,28 @@
                             </div>
                         </div>
                     {% endif %}
+
+                    <a
+                        href="{% url 'invite-friends' %}"
+                        class="relative text-xs sm:text-sm text-gray-300 hover:text-white transition-all duration-200 ease-out px-2.5 sm:px-3 py-2 rounded-lg hover:bg-gray-800 hover:-translate-y-0.5 active:translate-y-0"
+                        aria-label="Invite your friends"
+                    >
+                        <span class="inline-flex items-center gap-2">
+                            <span class="text-base" aria-hidden="true">🎁</span>
+                            <span class="hidden sm:inline">Invite</span>
+                        </span>
+                    </a>
+
+                    <a
+                        href="{% url 'pricing' %}"
+                        class="relative text-xs sm:text-sm text-gray-300 hover:text-white transition-all duration-200 ease-out px-2.5 sm:px-3 py-2 rounded-lg hover:bg-gray-800 hover:-translate-y-0.5 active:translate-y-0"
+                        aria-label="Pricing"
+                    >
+                        <span class="inline-flex items-center gap-2">
+                            <span class="text-base" aria-hidden="true">💰</span>
+                            <span class="hidden sm:inline">Pricing</span>
+                        </span>
+                    </a>
 
                     <div class="relative">
                         <button
@@ -129,6 +140,13 @@
                             <a href="{% url 'contact-support' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
                                 Contact Support
                             </a>
+                            <button type="button" id="theme_toggle_menu" class="w-full text-left px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-between gap-3" aria-label="Toggle theme">
+                                <span class="inline-flex items-center gap-2">
+                                    <span aria-hidden="true" data-theme-icon>🌙</span>
+                                    <span>Theme</span>
+                                </span>
+                                <span class="text-[11px] font-semibold text-gray-400" data-theme-label>Dark</span>
+                            </button>
                             <div class="h-px bg-gray-800"></div>
                             <form method="post" action="{% url 'account_logout' %}" data-loading-text="Logging out…" class="m-0">
                                 {% csrf_token %}
@@ -141,18 +159,6 @@
                 </div>
             {% else %}
                 <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-                    <button
-                        type="button"
-                        id="theme_toggle"
-                        class="text-xs sm:text-sm text-gray-200 hover:text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-800 transition-all duration-200 ease-out"
-                        aria-label="Toggle theme"
-                    >
-                        <span class="inline-flex items-center gap-2">
-                            <span aria-hidden="true">🌙</span>
-                            <span class="hidden sm:inline">Dark</span>
-                        </span>
-                    </button>
-
                     {% if CONTACT_EMAIL or CONTACT_INSTAGRAM_URL %}
                         <div class="relative">
                             <button
@@ -188,6 +194,11 @@
                     <a href="{% url 'account_login' %}" class="text-xs sm:text-sm text-gray-200 hover:text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-800 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
                         Login
                     </a>
+
+                    <a href="{% url 'pricing' %}" class="text-xs sm:text-sm text-gray-200 hover:text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-800 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
+                        Pricing
+                    </a>
+
                     <a href="{% url 'account_signup' %}" class="text-xs sm:text-sm text-white px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-[#8E2DE2] to-[#4A00E0] hover:from-[#9b3cf0] hover:to-[#5a1cff] transition-transform duration-200 hover:scale-[1.02] shadow-lg shadow-[#4A00E0]/20 hover:shadow-[#8E2DE2]/30">
                         Sign up
                     </a>
@@ -224,39 +235,45 @@
         </div>
     {% endif %}
 
+    {% with urlname=request.resolver_match.url_name|default:'' %}
     <div class="w-full flex-1">
-        <div class="w-full px-4 sm:px-6 py-5 sm:py-6">
-            <div class="grid grid-cols-1 min-[1536px]:grid-cols-[max-content_minmax(0,80rem)_max-content] gap-3 items-start justify-center">
+        <div class="w-full {% if urlname|slice:':8' == 'account_' %}px-0 py-0{% else %}px-4 sm:px-6 py-5 sm:py-6{% endif %}">
+            <div class="vixo-site-grid grid grid-cols-1 min-[1536px]:grid-cols-[max-content_minmax(0,80rem)_max-content] gap-3 items-start justify-center">
                 <!-- Side ad slots (in-flow so they never overlap content) -->
-                <aside class="hidden min-[1536px]:block">
-                    <div class="sticky top-24">
-                        <div class="rounded-2xl border border-gray-800 bg-gray-900/50 p-3 text-center">
-                            <div class="text-[10px] uppercase tracking-widest text-gray-400">Advertisement</div>
-                            <div class="mt-3 min-h-[600px] min-w-[160px] rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
-                                Place Ad (160×600)
+                {% if urlname|slice:':8' != 'account_' %}
+                    <aside class="hidden min-[1536px]:block">
+                        <div class="sticky top-24">
+                            <div class="rounded-2xl border border-gray-800 bg-gray-900/50 p-3 text-center">
+                                <div class="text-[10px] uppercase tracking-widest text-gray-400">Advertisement</div>
+                                <div class="mt-3 min-h-[600px] min-w-[160px] rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
+                                    Place Ad (160×600)
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </aside>
+                    </aside>
+                {% endif %}
 
                 <main class="min-w-0">
                     {% block content %}
                     {% endblock %}
                 </main>
 
-                <aside class="hidden min-[1536px]:block">
-                    <div class="sticky top-24">
-                        <div class="rounded-2xl border border-gray-800 bg-gray-900/50 p-3 text-center">
-                            <div class="text-[10px] uppercase tracking-widest text-gray-400">Advertisement</div>
-                            <div class="mt-3 min-h-[600px] min-w-[160px] rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
-                                Place Ad (160×600)
+                {% if urlname|slice:':8' != 'account_' %}
+                    <aside class="hidden min-[1536px]:block">
+                        <div class="sticky top-24">
+                            <div class="rounded-2xl border border-gray-800 bg-gray-900/50 p-3 text-center">
+                                <div class="text-[10px] uppercase tracking-widest text-gray-400">Advertisement</div>
+                                <div class="mt-3 min-h-[600px] min-w-[160px] rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
+                                    Place Ad (160×600)
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </aside>
+                    </aside>
+                {% endif %}
             </div>
         </div>
     </div>
+    {% endwith %}
 
     <div id="confirm-modal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
         <div class="absolute inset-0 bg-black/60"></div>
@@ -344,7 +361,22 @@
         "navNotifUnread": {{ NAV_NOTIF_UNREAD|default:0 }},
         "firebaseEnabled": {% if user.is_authenticated and FIREBASE_ENABLED %}true{% else %}false{% endif %},
         "pushRegisterUrl": "{% url 'push-register' %}",
-        "pushConfigUrl": "{% url 'push-config' %}"
+        "pushConfigUrl": "{% url 'push-config' %}",
+        "mobileAdsEnabled": {% if MOBILE_ADS_ENABLED %}true{% else %}false{% endif %},
+        "mobileAds": {
+            "chatList": {
+                "title": "{{ MOBILE_AD_CHAT_LIST.title|default:''|escapejs }}",
+                "body": "{{ MOBILE_AD_CHAT_LIST.body|default:''|escapejs }}",
+                "ctaText": "{{ MOBILE_AD_CHAT_LIST.ctaText|default:''|escapejs }}",
+                "ctaUrl": "{{ MOBILE_AD_CHAT_LIST.ctaUrl|default:''|escapejs }}"
+            },
+            "chatFeed": {
+                "title": "{{ MOBILE_AD_CHAT_FEED.title|default:''|escapejs }}",
+                "body": "{{ MOBILE_AD_CHAT_FEED.body|default:''|escapejs }}",
+                "ctaText": "{{ MOBILE_AD_CHAT_FEED.ctaText|default:''|escapejs }}",
+                "ctaUrl": "{{ MOBILE_AD_CHAT_FEED.ctaUrl|default:''|escapejs }}"
+            }
+        }
     }</script>
 
 {% block extra_body %}{% endblock %}

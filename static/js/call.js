@@ -11,7 +11,9 @@
         }
     }
 
-    const cfg = readJsonScript('vixo-call-config') || {};
+    const cfg = (window.__vixo_call_config && typeof window.__vixo_call_config === 'object')
+        ? window.__vixo_call_config
+        : (readJsonScript('vixo-call-config') || {});
 
     const callType = String(cfg.callType || 'voice');
     const channel = String(cfg.channel || '');
@@ -76,8 +78,22 @@
         freeLimitTimerEl.textContent = formatMMSS(secondsLeft);
     }
 
-    function showFreeLimitPopup() {
+    function showFreeLimitPopup({ title = null, body = null, showUpgrade = null } = {}) {
         if (!freeLimitPopupEl) return;
+
+        try {
+            const titleEl = document.getElementById('call-modal-title');
+            const bodyEl = document.getElementById('call-modal-body');
+            const upgradeEl = document.getElementById('call-modal-upgrade');
+            if (titleEl && title) titleEl.textContent = String(title);
+            if (bodyEl && body) bodyEl.textContent = String(body);
+            if (upgradeEl && typeof showUpgrade === 'boolean') {
+                upgradeEl.style.display = showUpgrade ? '' : 'none';
+            }
+        } catch {
+            // ignore
+        }
+
         freeLimitPopupEl.classList.remove('hidden');
         freeLimitPopupEl.classList.add('flex');
     }
@@ -93,6 +109,8 @@
         if (freeLimitStarted) return;
         freeLimitStarted = true;
 
+        let warnedTenSeconds = false;
+
         freeLimitDeadlineMs = Date.now() + (FREE_LIMIT_SECONDS * 1000);
         setFreeLimitTimer(FREE_LIMIT_SECONDS);
 
@@ -100,11 +118,22 @@
             const remainingMs = Math.max(0, freeLimitDeadlineMs - Date.now());
             const remainingSeconds = Math.ceil(remainingMs / 1000);
             setFreeLimitTimer(remainingSeconds);
+
+            if (!warnedTenSeconds && remainingSeconds <= 10 && remainingSeconds > 0) {
+                warnedTenSeconds = true;
+                toast('10 seconds left');
+                beep();
+            }
+
             if (remainingSeconds <= 0) {
                 stopFreeLimitCountdown();
-                // End immediately; keep popup visible briefly before redirect.
-                showFreeLimitPopup();
-                hangupAndExit('Free limit reached', { redirectDelayMs: 1200, sendEndEvent: true });
+                // End call and show upsell modal (no redirect).
+                showFreeLimitPopup({
+                    title: 'Free limit reached',
+                    body: 'Your call has ended. Upgrade to continue calling.',
+                    showUpgrade: true,
+                });
+                hangupAndExit('Free limit reached', { redirect: false, sendEndEvent: true });
             }
         }, 250);
     }
@@ -139,7 +168,6 @@
 
     // uid -> username (UI only)
     const participants = new Map();
-    participants.set('me', 'You');
 
     // Remote video containers (uid -> { cardEl, playerEl, labelEl })
     const remoteCards = new Map();
@@ -202,6 +230,50 @@
             const names = Array.from(participants.values()).filter(Boolean);
             if (countEl) countEl.textContent = String(names.length);
             if (namesEl) namesEl.textContent = names.join(', ');
+        } catch {
+            // ignore
+        }
+    }
+
+    function toast(message, { timeoutMs = 2200 } = {}) {
+        try {
+            const toastEl = document.getElementById('call-toast');
+            const toastTextEl = document.getElementById('call-toast-text');
+            if (!toastEl || !toastTextEl) return;
+            toastTextEl.textContent = String(message || '');
+            toastEl.classList.remove('hidden');
+            toastEl.classList.add('flex');
+            window.clearTimeout(toast._t);
+            toast._t = window.setTimeout(() => {
+                try {
+                    toastEl.classList.add('hidden');
+                    toastEl.classList.remove('flex');
+                } catch {}
+            }, Math.max(250, Number(timeoutMs || 0)));
+        } catch {
+            // ignore
+        }
+    }
+
+    let userGestureSeen = false;
+    function beep() {
+        if (!userGestureSeen) return;
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = new AudioCtx();
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = 'sine';
+            o.frequency.value = 880;
+            g.gain.value = 0.06;
+            o.connect(g);
+            g.connect(ctx.destination);
+            o.start();
+            window.setTimeout(() => {
+                try { o.stop(); } catch {}
+                try { ctx.close(); } catch {}
+            }, 180);
         } catch {
             // ignore
         }
@@ -437,8 +509,13 @@
         if (!payload) return;
         if (payload.chatroom_name && String(payload.chatroom_name) !== String(channel)) return;
         if (payload.action === 'end' || payload.action === 'decline') {
-            showFreeLimitPopup();
-            hangupAndExit(payload.action === 'decline' ? 'Call declined' : 'Call ended', { redirectDelayMs: 500, sendEndEvent: false });
+            const isDecline = payload.action === 'decline';
+            showFreeLimitPopup({
+                title: isDecline ? 'Call declined' : 'Call ended',
+                body: isDecline ? 'The other user declined the call.' : 'The call has ended.',
+                showUpgrade: false,
+            });
+            hangupAndExit(isDecline ? 'Call declined' : 'Call ended', { redirect: false, sendEndEvent: false });
         }
     }
 
@@ -481,6 +558,7 @@
             if (!app_id) throw new Error('Agora is not configured (missing AGORA_APP_ID).');
 
             client.on('user-joined', (user) => {
+                if (String(user.uid) === String(uid)) return;
                 addParticipant(user.uid, null);
                 startFreeLimitCountdown();
             });
@@ -490,6 +568,11 @@
             });
 
             client.on('user-published', async (user, mediaType) => {
+                // Some browsers emit user-published before user-joined.
+                if (String(user.uid) !== String(uid)) {
+                    addParticipant(user.uid, null);
+                }
+
                 await client.subscribe(user, mediaType);
 
                 if (mediaType === 'video' && callType === 'video') {
@@ -506,6 +589,7 @@
                     } catch {
                         audioPlaybackBlocked = true;
                         setStatus('Tap anywhere to enable audio');
+                        toast('Tap anywhere to enable audio');
                     }
                 }
 
@@ -560,9 +644,102 @@
 
     // Retry audio on user gesture if blocked
     document.addEventListener('pointerdown', () => {
+        userGestureSeen = true;
         if (!audioPlaybackBlocked) return;
         tryPlayAllRemoteAudio();
     }, { passive: true });
+
+    // --- Controls ---
+    const btnMic = document.getElementById('btn-mic');
+    const btnCam = document.getElementById('btn-cam');
+    const btnSwitchCam = document.getElementById('btn-switch-cam');
+    const btnEnd = document.getElementById('btn-end');
+
+    let micEnabled = true;
+    let camEnabled = true;
+
+    function syncControlVisibility() {
+        if (btnCam) btnCam.style.display = (callType === 'video') ? '' : 'none';
+        if (btnSwitchCam) btnSwitchCam.style.display = (callType === 'video') ? '' : 'none';
+    }
+
+    function syncControlLabels() {
+        if (btnMic) btnMic.textContent = micEnabled ? 'Mute' : 'Unmute';
+        if (btnCam) btnCam.textContent = camEnabled ? 'Camera Off' : 'Camera On';
+    }
+
+    syncControlVisibility();
+    syncControlLabels();
+
+    if (btnMic) {
+        btnMic.addEventListener('click', async () => {
+            try {
+                if (!localTracks.audio) {
+                    toast('Mic not ready yet');
+                    return;
+                }
+                micEnabled = !micEnabled;
+                await localTracks.audio.setEnabled(micEnabled);
+                syncControlLabels();
+                toast(micEnabled ? 'Mic on' : 'Mic muted');
+            } catch {
+                toast('Failed to toggle mic');
+            }
+        });
+    }
+
+    if (btnCam) {
+        btnCam.addEventListener('click', async () => {
+            try {
+                if (callType !== 'video') return;
+                if (!localTracks.video) {
+                    toast('Camera not ready yet');
+                    return;
+                }
+                camEnabled = !camEnabled;
+                await localTracks.video.setEnabled(camEnabled);
+                syncControlLabels();
+                toast(camEnabled ? 'Camera on' : 'Camera off');
+            } catch {
+                toast('Failed to toggle camera');
+            }
+        });
+    }
+
+    if (btnSwitchCam) {
+        btnSwitchCam.addEventListener('click', async () => {
+            try {
+                if (callType !== 'video') return;
+                if (!localTracks.video) {
+                    toast('Camera not ready yet');
+                    return;
+                }
+                const cams = await AgoraRTC.getCameras();
+                if (!cams || cams.length < 2) {
+                    toast('No alternate camera found');
+                    return;
+                }
+                const currentLabel = (typeof localTracks.video.getTrackLabel === 'function') ? localTracks.video.getTrackLabel() : '';
+                let idx = cams.findIndex((c) => c && c.label && currentLabel && c.label === currentLabel);
+                if (idx < 0) idx = 0;
+                const next = cams[(idx + 1) % cams.length];
+                if (!next || !next.deviceId) {
+                    toast('No alternate camera found');
+                    return;
+                }
+                await localTracks.video.setDevice(next.deviceId);
+                toast('Switched camera');
+            } catch {
+                toast('Failed to switch camera');
+            }
+        });
+    }
+
+    if (btnEnd) {
+        btnEnd.addEventListener('click', () => {
+            hangupAndExit('Call ended', { redirectDelayMs: 0, sendEndEvent: true });
+        });
+    }
 
     // When user leaves the call page, ensure remote side ends too.
     window.addEventListener('pagehide', () => {

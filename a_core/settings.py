@@ -349,10 +349,27 @@ TEMPLATES = [
                 'a_core.context_processors.recaptcha_config',
                 'a_users.context_processors.notifications_badge',
                 'a_rtchat.context_processors.admin_reports_badge',
+                'a_rtchat.context_processors.mobile_ads_config',
             ],
         },
     },
 ]
+
+# --- Mobile Ads (future-safe, mobile-only UI logic lives in JS) ---
+# Default: ON in dev, OFF in production unless explicitly enabled.
+MOBILE_ADS_ENABLED = _env_bool('MOBILE_ADS_ENABLED', default=(ENVIRONMENT != 'production'))
+MOBILE_ADS_DISABLE_FOR_STAFF = _env_bool('MOBILE_ADS_DISABLE_FOR_STAFF', default=True)
+
+# Content is intentionally "house ad" style (replace with real provider later).
+MOBILE_AD_CHAT_LIST_TITLE = os.environ.get('MOBILE_AD_CHAT_LIST_TITLE', 'Try Vixogram Invite')
+MOBILE_AD_CHAT_LIST_BODY = os.environ.get('MOBILE_AD_CHAT_LIST_BODY', 'Invite friends and unlock more fun chats.')
+MOBILE_AD_CHAT_LIST_CTA_TEXT = os.environ.get('MOBILE_AD_CHAT_LIST_CTA_TEXT', 'Invite')
+MOBILE_AD_CHAT_LIST_CTA_URL = os.environ.get('MOBILE_AD_CHAT_LIST_CTA_URL', '/invite/')
+
+MOBILE_AD_CHAT_FEED_TITLE = os.environ.get('MOBILE_AD_CHAT_FEED_TITLE', 'Sponsored')
+MOBILE_AD_CHAT_FEED_BODY = os.environ.get('MOBILE_AD_CHAT_FEED_BODY', 'Discover communities and meet new people on Vixogram.')
+MOBILE_AD_CHAT_FEED_CTA_TEXT = os.environ.get('MOBILE_AD_CHAT_FEED_CTA_TEXT', 'Explore')
+MOBILE_AD_CHAT_FEED_CTA_URL = os.environ.get('MOBILE_AD_CHAT_FEED_CTA_URL', '/')
 
 ASGI_APPLICATION = 'a_core.asgi.application'
 

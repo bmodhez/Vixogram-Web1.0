@@ -2,7 +2,7 @@
 Reaction pills shown under the message bubble. This region is updated via websocket.
 {% endcomment %}
 
-<div id="reactions-{{ message.id }}" class="mt-1 px-1 flex flex-wrap gap-1">
+<div id="reactions-{{ message.id }}" class="mt-1 px-1 flex flex-wrap gap-1 max-w-full overflow-x-hidden">
     {% for r in message.reaction_pills %}
         <button
             type="button"

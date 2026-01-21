@@ -14,8 +14,8 @@
                     <div data-notif-dot class="mt-1 h-2 w-2 rounded-full {% if n.is_read %}bg-gray-600{% else %}bg-emerald-400{% endif %}"></div>
                     <div class="min-w-0 flex-1">
                         <div class="text-xs text-gray-200">
-                            {% if n.type == 'follow' %}Follow{% elif n.type == 'reply' %}Reply{% elif n.type == 'mention' %}Mention{% else %}Notification{% endif %}
-                            {% if n.from_user %}<span class="text-gray-400"> • @{{ n.from_user.username }}</span>{% endif %}
+                            {% if n.type == 'support' %}Support{% elif n.type == 'follow' %}Follow{% elif n.type == 'reply' %}Reply{% elif n.type == 'mention' %}Mention{% else %}Notification{% endif %}
+                            {% if n.type == 'support' %}<span class="text-gray-400"> • Vixogram Team</span>{% elif n.from_user %}<span class="text-gray-400"> • @{{ n.from_user.username }}</span>{% endif %}
                         </div>
                         {% if n.preview %}<div class="text-[11px] text-gray-300 truncate mt-1">{{ n.preview }}</div>{% endif %}
                         <div class="text-[10px] text-gray-500 mt-1">{{ n.created }}</div>

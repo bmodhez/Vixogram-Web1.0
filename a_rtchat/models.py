@@ -204,3 +204,52 @@ class BlockedMessageEvent(models.Model):
     def __str__(self):
         return f"Blocked({self.scope}) u={self.user_id} room={getattr(self.room, 'group_name', '')}"
 
+
+class ChatChallenge(models.Model):
+    STATUS_ACTIVE = 'active'
+    STATUS_COMPLETED = 'completed'
+    STATUS_CANCELLED = 'cancelled'
+
+    KIND_EMOJI_ONLY = 'emoji_only'
+    KIND_NO_VOWELS = 'no_vowels'
+    KIND_FINISH_MEME = 'finish_meme'
+    KIND_TRUTH_OR_DARE = 'truth_or_dare'
+    KIND_TIME_ATTACK = 'time_attack'
+
+    STATUS_CHOICES = (
+        (STATUS_ACTIVE, 'Active'),
+        (STATUS_COMPLETED, 'Completed'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    )
+
+    KIND_CHOICES = (
+        (KIND_EMOJI_ONLY, 'Emoji-only'),
+        (KIND_NO_VOWELS, 'No vowels'),
+        (KIND_FINISH_MEME, 'Finish the meme'),
+        (KIND_TRUTH_OR_DARE, 'Truth or dare'),
+        (KIND_TIME_ATTACK, 'Time attack'),
+    )
+    KIND_CHOICES_DICT = {k: v for (k, v) in KIND_CHOICES}
+
+    group = models.ForeignKey(ChatGroup, related_name='challenges', on_delete=models.CASCADE)
+    kind = models.CharField(max_length=32, choices=KIND_CHOICES, db_index=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_ACTIVE, db_index=True)
+    created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='created_chat_challenges')
+    prompt = models.TextField(blank=True, default='')
+    meta = models.JSONField(default=dict, blank=True)
+
+    started_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    ends_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    ended_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created']
+        indexes = [
+            models.Index(fields=['group', 'status', '-created'], name='cc_group_status_idx'),
+        ]
+
+    def __str__(self):
+        return f"Challenge({self.kind}) room={getattr(self.group, 'group_name', '')} status={self.status}"
+

@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="w-full max-w-5xl mx-auto">
+  <div class="rounded-3xl border border-gray-800 bg-gray-900/50 shadow-2xl shadow-black/20 overflow-hidden">
+    <div class="px-6 sm:px-10 py-10 sm:py-12 bg-gradient-to-br from-gray-950/40 via-gray-900/40 to-gray-950/40">
+      <div class="flex flex-col gap-4">
+        <div class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+          Choose how you want to use Vixogram
+        </div>
+        <div class="text-sm sm:text-base text-gray-300 max-w-2xl">
+          Chat freely. Upgrade when you want more control.
+        </div>
+      </div>
+
+      <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+        <!-- Free -->
+        <div class="rounded-2xl border border-gray-800 bg-gray-950/30 p-5 sm:p-6">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="text-lg font-bold text-gray-100">Free</div>
+              <div class="mt-1 inline-flex items-center rounded-full border border-gray-800 bg-gray-900/60 px-2.5 py-1 text-[11px] font-semibold text-gray-300">
+                Most users start here
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-semibold text-gray-300">₹0</div>
+              <div class="text-[11px] text-gray-400">forever</div>
+            </div>
+          </div>
+
+          <ul class="mt-4 space-y-2 text-sm text-gray-200">
+            <li>✅ Public &amp; group chats</li>
+            <li>✅ Voice &amp; media sharing</li>
+            <li>✅ Emojis &amp; reactions</li>
+            <li>✅ Limited ads (non-intrusive)</li>
+            <li class="text-gray-400">❌ No custom themes</li>
+            <li class="text-gray-400">❌ No ad removal</li>
+          </ul>
+
+          <div class="mt-5">
+            {% if user.is_authenticated %}
+              <a href="{% url 'home' %}" class="w-full inline-flex items-center justify-center rounded-xl bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold px-4 py-3 transition-colors">
+                Continue Free
+              </a>
+            {% else %}
+              <a href="{% url 'account_signup' %}" class="w-full inline-flex items-center justify-center rounded-xl bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold px-4 py-3 transition-colors">
+                Continue Free
+              </a>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Premium -->
+        <div class="rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/10 to-gray-950/30 p-5 sm:p-6 shadow-xl shadow-emerald-500/10">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="text-lg font-extrabold text-white">Premium</div>
+              <div class="mt-1 inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-200">
+                Best for power users
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-semibold text-gray-100">₹99 / month</div>
+              <div class="text-[11px] text-gray-300">₹999 / year <span class="text-emerald-200">(2 months free)</span></div>
+            </div>
+          </div>
+
+          <ul class="mt-4 space-y-2 text-sm text-gray-100">
+            <li>✅ No ads (full clean experience)</li>
+            <li>✅ Priority message delivery <span class="text-gray-400">(future)</span></li>
+            <li>✅ Advanced privacy controls</li>
+            <li>✅ Custom themes &amp; UI</li>
+            <li>✅ Early access to new features</li>
+            <li>✅ Premium badge on profile</li>
+          </ul>
+
+          <div class="mt-5 flex flex-col gap-2">
+            <button type="button" data-premium-upgrade class="w-full inline-flex items-center justify-center rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-3 transition-colors">
+              Upgrade to Premium
+            </button>
+            <div class="text-[11px] text-gray-300 text-center">
+              No pressure. Upgrade or cancel anytime.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ads transparency -->
+      <div class="mt-10 rounded-2xl border border-gray-800 bg-gray-950/30 p-5 sm:p-6">
+        <div class="flex items-center justify-between gap-3">
+          <div class="text-base font-bold text-white">How ads work on Free plan</div>
+          <div class="text-[11px] font-semibold text-gray-400">Transparency</div>
+        </div>
+        <ul class="mt-4 space-y-2 text-sm text-gray-200">
+          <li>Ads appear only in:</li>
+          <li class="ml-0">• Chat list (1 native ad)</li>
+          <li class="ml-0">• Inside chat feed (1 soft sponsored message)</li>
+          <li class="text-gray-400">❌ No popups</li>
+          <li class="text-gray-400">❌ No banners</li>
+          <li class="text-gray-400">❌ No interruption while typing</li>
+        </ul>
+        <div class="mt-4 text-sm text-gray-300">
+          Ads help keep Vixogram free ❤️
+        </div>
+      </div>
+
+      <!-- Comparison table -->
+      <div class="mt-10">
+        <div class="text-base font-bold text-white">Comparison</div>
+        <div class="mt-4 overflow-hidden rounded-2xl border border-gray-800">
+          <div class="grid grid-cols-3 bg-gray-900/60 text-[12px] font-semibold text-gray-300">
+            <div class="px-4 py-3">Feature</div>
+            <div class="px-4 py-3">Free</div>
+            <div class="px-4 py-3">Premium</div>
+          </div>
+          <div class="divide-y divide-gray-800 text-sm">
+            <div class="grid grid-cols-3">
+              <div class="px-4 py-3 text-gray-300">Messaging</div>
+              <div class="px-4 py-3 text-gray-100">✅</div>
+              <div class="px-4 py-3 text-gray-100">✅</div>
+            </div>
+            <div class="grid grid-cols-3">
+              <div class="px-4 py-3 text-gray-300">Group chats</div>
+              <div class="px-4 py-3 text-gray-100">✅</div>
+              <div class="px-4 py-3 text-gray-100">✅</div>
+            </div>
+            <div class="grid grid-cols-3">
+              <div class="px-4 py-3 text-gray-300">Ads</div>
+              <div class="px-4 py-3 text-gray-100">Limited</div>
+              <div class="px-4 py-3 text-gray-100">❌ None</div>
+            </div>
+            <div class="grid grid-cols-3">
+              <div class="px-4 py-3 text-gray-300">Custom themes</div>
+              <div class="px-4 py-3 text-gray-400">❌</div>
+              <div class="px-4 py-3 text-gray-100">✅</div>
+            </div>
+            <div class="grid grid-cols-3">
+              <div class="px-4 py-3 text-gray-300">Privacy controls</div>
+              <div class="px-4 py-3 text-gray-100">Basic</div>
+              <div class="px-4 py-3 text-gray-100">Advanced</div>
+            </div>
+            <div class="grid grid-cols-3">
+              <div class="px-4 py-3 text-gray-300">Support</div>
+              <div class="px-4 py-3 text-gray-100">Normal</div>
+              <div class="px-4 py-3 text-gray-100">Priority</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FAQ -->
+      <div class="mt-10">
+        <div class="text-base font-bold text-white">FAQ</div>
+        <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="rounded-2xl border border-gray-800 bg-gray-950/30 p-5">
+            <div class="text-sm font-semibold text-gray-100">Will ads read my messages?</div>
+            <div class="mt-2 text-sm text-gray-300">No. Ads are contextual &amp; privacy-safe.</div>
+          </div>
+          <div class="rounded-2xl border border-gray-800 bg-gray-950/30 p-5">
+            <div class="text-sm font-semibold text-gray-100">Can I switch plans anytime?</div>
+            <div class="mt-2 text-sm text-gray-300">Yes, upgrade or cancel anytime.</div>
+          </div>
+          <div class="rounded-2xl border border-gray-800 bg-gray-950/30 p-5">
+            <div class="text-sm font-semibold text-gray-100">Is Premium worth it?</div>
+            <div class="mt-2 text-sm text-gray-300">If you want zero ads + extra control, yes.</div>
+          </div>
+          <div class="rounded-2xl border border-gray-800 bg-gray-950/30 p-5">
+            <div class="text-sm font-semibold text-gray-100">Is Free really free?</div>
+            <div class="mt-2 text-sm text-gray-300">Yes. No hidden charges.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trust & safety -->
+      <div class="mt-10 rounded-2xl border border-gray-800 bg-gray-950/30 p-5 sm:p-6">
+        <div class="text-base font-bold text-white">Trust &amp; Safety</div>
+        <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-200">
+          <div class="flex items-start gap-2"><span class="mt-0.5">🔒</span><span>End-to-end privacy mindset</span></div>
+          <div class="flex items-start gap-2"><span class="mt-0.5">🚫</span><span>No selling of personal data</span></div>
+          <div class="flex items-start gap-2"><span class="mt-0.5">🛡️</span><span>Secure payments</span></div>
+        </div>
+      </div>
+
+      <!-- Final CTA -->
+      <div class="mt-10 flex flex-col sm:flex-row gap-3">
+        {% if user.is_authenticated %}
+          <a href="{% url 'home' %}" class="flex-1 inline-flex items-center justify-center rounded-xl bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold px-4 py-3 transition-colors">
+            Start Free
+          </a>
+        {% else %}
+          <a href="{% url 'account_signup' %}" class="flex-1 inline-flex items-center justify-center rounded-xl bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold px-4 py-3 transition-colors">
+            Start Free
+          </a>
+        {% endif %}
+        <button type="button" data-premium-upgrade class="flex-1 inline-flex items-center justify-center rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-3 transition-colors">
+          Go Premium
+        </button>
+      </div>
+
+      <div class="mt-4 text-[11px] text-gray-400">
+        No dark patterns. No forced upgrade popups.
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

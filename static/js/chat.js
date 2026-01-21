@@ -1,4 +1,12 @@
 (function () {
+    function __escapeHtml(s) {
+        return String(s ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
     // --- Room code click-to-copy ---
     function copyToClipboard(text) {
         const value = String(text || '').trim();
@@ -142,14 +150,19 @@
     });
 
     // Mobile: swipe left to reply, long-press to reveal options
+    // Important: prevent horizontal page/container scrolling during the gesture.
     let touchStartX = 0, touchStartY = 0, touchStartTime = 0, touchTimer = null;
+    let touchActiveMsg = null;
     document.addEventListener('touchstart', function(e) {
         const msg = e.target.closest('.vixo-msg');
         if (!msg) return;
         if (e.touches.length !== 1) return;
+
+        touchActiveMsg = msg;
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
         touchStartTime = Date.now();
+
         touchTimer = setTimeout(() => {
             // Long press: reveal reply/+ / ⋮ (tap ⋮ to open the menu)
             if (!__isMobileChatViewport()) return;
@@ -158,11 +171,27 @@
             openMessageActionBar(msg);
         }, 520); // ~0.5s hold
     }, { passive: true });
+
+    document.addEventListener('touchmove', function(e) {
+        if (touchTimer) clearTimeout(touchTimer);
+        if (!touchActiveMsg) return;
+        if (e.touches.length !== 1) return;
+
+        // If this is primarily a horizontal swipe (reply gesture), block horizontal scroll.
+        const dx = e.touches[0].clientX - touchStartX;
+        const dy = e.touches[0].clientY - touchStartY;
+        if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) + 6) {
+            try { e.preventDefault(); } catch {}
+        }
+    }, { passive: false });
+
     document.addEventListener('touchend', function(e) {
         if (touchTimer) clearTimeout(touchTimer);
-        const msg = e.target.closest('.vixo-msg');
+        const msg = touchActiveMsg;
+        touchActiveMsg = null;
         if (!msg) return;
         if (e.changedTouches.length !== 1) return;
+
         const dx = e.changedTouches[0].clientX - touchStartX;
         const dy = e.changedTouches[0].clientY - touchStartY;
         const dt = Date.now() - touchStartTime;
@@ -174,8 +203,10 @@
             if (replyBtn) replyBtn.click();
         }
     }, { passive: true });
-    document.addEventListener('touchmove', function(e) {
+
+    document.addEventListener('touchcancel', function() {
         if (touchTimer) clearTimeout(touchTimer);
+        touchActiveMsg = null;
     }, { passive: true });
 
     // Mobile: tap outside closes the revealed action icons.
@@ -218,6 +249,73 @@
         // ignore
     }
 
+    function initSidebarSectionCollapse() {
+        const toggles = document.querySelectorAll('[data-vixo-collapse-toggle][data-vixo-collapse-key]');
+        if (!toggles || !toggles.length) return;
+
+        function storageKey(k) {
+            return `vixo_sidebar_section_collapsed:${String(k || '')}`;
+        }
+
+        function setCollapsed(key, collapsed) {
+            const body = document.querySelector(`[data-vixo-collapse-body][data-vixo-collapse-key="${CSS.escape(String(key))}"]`);
+            const toggle = document.querySelector(`[data-vixo-collapse-toggle][data-vixo-collapse-key="${CSS.escape(String(key))}"]`);
+            if (!body || !toggle) return;
+
+            const chevron = toggle.querySelector('[data-vixo-collapse-chevron]');
+            if (collapsed) {
+                body.classList.add('hidden');
+                toggle.setAttribute('aria-expanded', 'false');
+                if (chevron) chevron.style.transform = 'rotate(-90deg)';
+            } else {
+                body.classList.remove('hidden');
+                toggle.setAttribute('aria-expanded', 'true');
+                if (chevron) chevron.style.transform = '';
+            }
+        }
+
+        function loadInitialState(key) {
+            try {
+                const v = window.localStorage.getItem(storageKey(key));
+                return v === '1';
+            } catch {
+                return false;
+            }
+        }
+
+        toggles.forEach((btn) => {
+            const key = btn.getAttribute('data-vixo-collapse-key') || '';
+            if (!key) return;
+
+            // Initial
+            const collapsed = loadInitialState(key);
+            setCollapsed(key, collapsed);
+
+            btn.addEventListener('click', () => {
+                const body = document.querySelector(`[data-vixo-collapse-body][data-vixo-collapse-key="${CSS.escape(String(key))}"]`);
+                if (!body) return;
+                const isCollapsed = body.classList.contains('hidden');
+                const nextCollapsed = !isCollapsed;
+                setCollapsed(key, nextCollapsed);
+                try {
+                    window.localStorage.setItem(storageKey(key), nextCollapsed ? '1' : '0');
+                } catch {
+                    // ignore
+                }
+            });
+        });
+    }
+
+    try {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initSidebarSectionCollapse, { once: true });
+        } else {
+            initSidebarSectionCollapse();
+        }
+    } catch {
+        // ignore
+    }
+
     const chatroomName = String(cfg.chatroomName || '');
     const currentUserId = parseInt(cfg.currentUserId || 0, 10) || 0;
     const currentUsername = String(cfg.currentUsername || '');
@@ -243,6 +341,38 @@
     // - If user is near bottom, follow new messages.
     // - If user scrolls up to read, stop auto-scrolling until they return near bottom.
     let __chatAutoScrollEnabled = true;
+    const __privateNewMsgJumpBtn = document.getElementById('vixo_private_newmsg_jump');
+    let __privateNewMsgArmed = false;
+
+    function __hidePrivateNewMsgJump() {
+        if (!__privateNewMsgJumpBtn) return;
+        __privateNewMsgArmed = false;
+        __privateNewMsgJumpBtn.classList.add('hidden');
+        __privateNewMsgJumpBtn.classList.remove('vixo-private-newmsg-pulse');
+    }
+
+    function __showPrivateNewMsgJump() {
+        if (!__privateNewMsgJumpBtn) return;
+        if (__privateNewMsgArmed) return;
+        __privateNewMsgArmed = true;
+        __privateNewMsgJumpBtn.classList.remove('hidden');
+        __privateNewMsgJumpBtn.classList.add('vixo-private-newmsg-pulse');
+    }
+
+    (function initPrivateNewMsgJump() {
+        if (!__privateNewMsgJumpBtn) return;
+        __privateNewMsgJumpBtn.addEventListener('click', () => {
+            try {
+                window.__forceNextChatScroll = true;
+                __chatAutoScrollEnabled = true;
+                forceScrollToBottomNow();
+            } catch {
+                // ignore
+            }
+            __hidePrivateNewMsgJump();
+        });
+    })();
+
     (function initAutoscrollToggle() {
         const chatContainer = document.getElementById('chat_container');
         if (!chatContainer) return;
@@ -251,6 +381,15 @@
                 __chatAutoScrollEnabled = !!window.__isChatNearBottom();
             } catch {
                 __chatAutoScrollEnabled = true;
+            }
+
+            // Private chats: if user returns near bottom, hide the "new messages" jump.
+            try {
+                if (__privateNewMsgJumpBtn && typeof window.__isChatNearBottom === 'function' && window.__isChatNearBottom()) {
+                    __hidePrivateNewMsgJump();
+                }
+            } catch {
+                // ignore
             }
         };
         recompute();
@@ -465,6 +604,35 @@
             mount.appendChild(fallback);
         }
 
+        function ensureInViewport() {
+            try {
+                const rect = panel.getBoundingClientRect();
+                const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+                const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+                const pad = 8;
+
+                // Only adjust if it's actually out of bounds.
+                if (rect.top < pad) {
+                    panel.style.top = pad + 'px';
+                    panel.style.bottom = 'auto';
+                }
+                if (rect.bottom > (vh - pad)) {
+                    panel.style.bottom = pad + 'px';
+                    panel.style.top = 'auto';
+                }
+                if (rect.left < pad) {
+                    panel.style.left = pad + 'px';
+                    panel.style.right = 'auto';
+                }
+                if (rect.right > (vw - pad)) {
+                    panel.style.right = pad + 'px';
+                    panel.style.left = 'auto';
+                }
+            } catch {
+                // ignore
+            }
+        }
+
         const open = () => {
             ensurePicker();
             panel.classList.remove('hidden');
@@ -472,6 +640,7 @@
             requestAnimationFrame(() => {
                 panel.classList.remove('opacity-0', 'scale-95', 'pointer-events-none');
                 panel.classList.add('opacity-100', 'scale-100');
+                ensureInViewport();
             });
             btn.setAttribute('aria-expanded', 'true');
         };
@@ -617,6 +786,8 @@
         const fileInput = document.getElementById('chat_file_input');
         if (fileInput && !Number.isNaN(remaining)) {
             fileInput.disabled = remaining <= 0;
+            const uploadBtn = document.getElementById('chat_upload_btn');
+            if (uploadBtn) uploadBtn.disabled = remaining <= 0;
             if (typeof window.__syncUploadMode === 'function') {
                 window.__syncUploadMode();
             }
@@ -898,20 +1069,150 @@
         const msgForm = document.getElementById('chat_message_form');
         const fileInput = document.getElementById('chat_file_input');
         const uploadBtn = document.getElementById('chat_upload_btn');
-        const captionWrap = document.getElementById('chat_file_caption_wrap');
         const captionInput = document.getElementById('chat_file_caption');
-        const bodyWrap = document.getElementById('chat_body_wrap');
         const msgInput = (msgForm && msgForm.querySelector('[name="body"]')) || document.getElementById('id_body');
+
+        const modal = document.getElementById('upload_modal');
+        const modalBackdrop = document.getElementById('upload_modal_backdrop');
+        const modalClose = document.getElementById('upload_modal_close');
+        const modalCancel = document.getElementById('upload_modal_cancel');
+        const modalSend = document.getElementById('upload_modal_send');
+        const modalImg = document.getElementById('upload_modal_img');
+        const modalVideo = document.getElementById('upload_modal_video');
+        const modalCaption = document.getElementById('upload_modal_caption');
+        const modalHint = document.getElementById('upload_modal_hint');
 
         if (!msgForm || !fileInput) return;
 
+        let cropper = null;
+        let previewUrl = null;
+        let modalOpen = false;
+
+        function cleanupCropper() {
+            if (cropper) {
+                try { cropper.destroy(); } catch {}
+                cropper = null;
+            }
+        }
+
+        function cleanupPreviewUrl() {
+            if (previewUrl) {
+                try { URL.revokeObjectURL(previewUrl); } catch {}
+                previewUrl = null;
+            }
+        }
+
+        function clearSelectedFile() {
+            try { fileInput.value = ''; } catch {}
+        }
+
+        function closeModal(opts) {
+            const options = opts || {};
+            modalOpen = false;
+            cleanupCropper();
+            cleanupPreviewUrl();
+            if (modalImg) {
+                modalImg.classList.add('hidden');
+                try { modalImg.removeAttribute('src'); } catch {}
+            }
+            if (modalVideo) {
+                modalVideo.classList.add('hidden');
+                try { modalVideo.pause(); } catch {}
+                try { modalVideo.removeAttribute('src'); } catch {}
+                try { modalVideo.load(); } catch {}
+            }
+            if (modalHint) modalHint.textContent = '';
+            if (modal) modal.classList.add('hidden');
+
+            if (options.clearFile) {
+                if (captionInput) captionInput.value = '';
+                clearSelectedFile();
+            }
+        }
+
+        function openModalWithFile(file) {
+            if (!modal || !modalImg || !modalVideo || !modalCaption || !modalSend) return;
+            if (!file) return;
+            if (fileInput.disabled) return;
+
+            modalOpen = true;
+            cleanupCropper();
+            cleanupPreviewUrl();
+            if (modalHint) modalHint.textContent = '';
+
+            // Prefill caption from existing caption or from message body (matches previous behavior).
+            const existingCap = (captionInput && captionInput.value ? String(captionInput.value) : '').trim();
+            const bodyText = (msgInput && msgInput.value ? String(msgInput.value) : '').trim();
+            if (modalCaption) {
+                if (existingCap) modalCaption.value = existingCap.slice(0, 300);
+                else if (bodyText) modalCaption.value = bodyText.slice(0, 300);
+                else modalCaption.value = '';
+            }
+
+            previewUrl = URL.createObjectURL(file);
+
+            const isImage = /^image\//i.test(file.type || '');
+            const isVideo = /^video\//i.test(file.type || '');
+
+            if (isImage) {
+                modalVideo.classList.add('hidden');
+                try { modalVideo.removeAttribute('src'); } catch {}
+                modalImg.classList.remove('hidden');
+                modalImg.src = previewUrl;
+
+                const enableCrop = !!window.Cropper;
+                if (enableCrop) {
+                    modalImg.onload = () => {
+                        try {
+                            cleanupCropper();
+                            cropper = new window.Cropper(modalImg, {
+                                viewMode: 1,
+                                dragMode: 'move',
+                                autoCropArea: 1,
+                                responsive: true,
+                                background: false,
+                            });
+                            if (modalHint) modalHint.textContent = 'Drag to crop, pinch/scroll to zoom.';
+                        } catch {
+                            cropper = null;
+                        }
+                    };
+                } else {
+                    if (modalHint) modalHint.textContent = 'Cropping unavailable (failed to load). Sending original image.';
+                }
+            } else if (isVideo) {
+                cleanupCropper();
+                modalImg.classList.add('hidden');
+                try { modalImg.removeAttribute('src'); } catch {}
+                modalVideo.classList.remove('hidden');
+                modalVideo.src = previewUrl;
+                if (modalHint) modalHint.textContent = 'Video preview.';
+            } else {
+                // Unknown type; just allow send (server will validate).
+                cleanupCropper();
+                modalImg.classList.add('hidden');
+                modalVideo.classList.add('hidden');
+                if (modalHint) modalHint.textContent = 'Preview unavailable for this file type.';
+            }
+
+            modal.classList.remove('hidden');
+        }
+
         function syncUploadMode() {
             const hasFile = !!(fileInput.files && fileInput.files.length);
-            if (captionWrap) captionWrap.classList.toggle('hidden', !hasFile);
-            if (bodyWrap) bodyWrap.classList.toggle('hidden', hasFile);
             if (!hasFile) {
                 if (captionInput) captionInput.value = '';
                 return;
+            }
+
+            // Open preview modal on selection (once).
+            if (!modalOpen) {
+                try {
+                    const f = fileInput.files[0];
+                    openModalWithFile(f);
+                } catch {
+                    // ignore
+                }
             }
         }
 
@@ -928,17 +1229,83 @@
         fileInput.addEventListener('change', syncUploadMode);
         syncUploadMode();
 
-        // If switching to upload mode and message box has text, move it into caption.
-        fileInput.addEventListener('change', () => {
-            const hasFile = !!(fileInput.files && fileInput.files.length);
-            if (!hasFile) return;
-            if (!captionInput) return;
-            const cap = (captionInput.value || '').trim();
-            const body = (msgInput && (msgInput.value || '').trim()) || '';
-            if (!cap && body) {
-                captionInput.value = body.slice(0, 300);
+        // Modal controls (optional, only when uploads_allowed)
+        function handleCancel() {
+            closeModal({ clearFile: true });
+        }
+
+        async function handleSend() {
+            if (!fileInput || !fileInput.files || !fileInput.files.length) {
+                closeModal({ clearFile: true });
+                return;
             }
-        });
+
+            const file = fileInput.files[0];
+            const cap = (modalCaption && modalCaption.value ? String(modalCaption.value) : '').trim().slice(0, 300);
+            if (captionInput) captionInput.value = cap;
+
+            const isImage = /^image\//i.test(file.type || '');
+            if (isImage && cropper && typeof cropper.getCroppedCanvas === 'function') {
+                const canvas = cropper.getCroppedCanvas({
+                    // Keep output reasonable; server also enforces size.
+                    maxWidth: 1600,
+                    maxHeight: 1600,
+                    imageSmoothingEnabled: true,
+                    imageSmoothingQuality: 'high',
+                });
+
+                if (canvas && typeof canvas.toBlob === 'function') {
+                    const mime = (file.type && /^image\/(png|jpeg|webp)$/i.test(file.type)) ? file.type : 'image/jpeg';
+                    const blob = await new Promise((resolve) => {
+                        try {
+                            canvas.toBlob((b) => resolve(b || null), mime, 0.92);
+                        } catch {
+                            resolve(null);
+                        }
+                    });
+                    if (blob) {
+                        try {
+                            const dt = new DataTransfer();
+                            const safeName = (file.name || 'upload').replace(/\s+/g, '_');
+                            dt.items.add(new File([blob], safeName, { type: blob.type || mime }));
+                            fileInput.files = dt.files;
+                        } catch {
+                            // If DataTransfer isn't supported, fall back to original file.
+                        }
+                    }
+                }
+            }
+
+            closeModal({ clearFile: false });
+            try {
+                if (typeof msgForm.requestSubmit === 'function') msgForm.requestSubmit();
+                else msgForm.submit();
+            } catch {
+                // ignore
+            }
+        }
+
+        function wireModal() {
+            if (!modal) return;
+
+            if (modalBackdrop) {
+                modalBackdrop.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    handleCancel();
+                });
+            }
+            if (modalClose) modalClose.addEventListener('click', (e) => { e.preventDefault(); handleCancel(); });
+            if (modalCancel) modalCancel.addEventListener('click', (e) => { e.preventDefault(); handleCancel(); });
+            if (modalSend) modalSend.addEventListener('click', (e) => { e.preventDefault(); handleSend(); });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key !== 'Escape') return;
+                if (!modalOpen) return;
+                handleCancel();
+            });
+        }
+
+        wireModal();
     })();
 
     // --- Link policy (links only allowed in private chats) ---
@@ -1444,6 +1811,9 @@
                 // ignore
             }
 
+            const clientNonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+            payload.client_nonce = clientNonce;
+
             try {
                 socket.send(JSON.stringify(payload));
             } catch {
@@ -1451,9 +1821,32 @@
                 return;
             }
 
-            // Always jump to the latest message after sending (even if user is scrolled up).
-            // The actual message HTML is appended when the server echoes it back over WS,
-            // so we use a one-shot flag to force-scroll on insert.
+                        // Optimistic UI: show message instantly, then replace when server echoes back.
+                        try {
+                                const emptyEl = document.getElementById('empty_state');
+                                if (emptyEl) emptyEl.remove();
+                                if (messagesEl && messagesEl.classList.contains('hidden')) messagesEl.classList.remove('hidden');
+
+                                const safe = __escapeHtml(body).replace(/\n/g, '<br>');
+                                const pendingHtml = `
+<div data-pending="1" data-client-nonce="${clientNonce}" class="vixo-msg group relative w-full flex justify-end opacity-90">
+    <div class="flex flex-col items-end max-w-[90%] sm:max-w-[75%] lg:max-w-[65%]">
+        <div class="flex items-end gap-2">
+            <div data-message-bubble class="relative px-4 py-3 rounded-2xl shadow-sm shadow-black/20 backdrop-blur-md bg-gradient-to-r from-purple-500 via-indigo-500 to-sky-500 text-white vixo-keep-white rounded-tr-none border border-white/10">
+                <div class="text-[15px] sm:text-[16px] leading-relaxed text-white/95 vixo-keep-white">${safe}</div>
+            </div>
+        </div>
+    </div>
+</div>`;
+
+                                messagesEl.insertAdjacentHTML('beforeend', pendingHtml);
+                                const pendingEl = messagesEl.lastElementChild;
+                                if (pendingEl) __pendingByNonce.set(clientNonce, pendingEl);
+                        } catch {
+                                // ignore
+                        }
+
+            // Flag for scroll on server echo (don't scroll twice on optimistic insert).
             window.__forceNextChatScroll = true;
             try { __chatAutoScrollEnabled = true; } catch {}
 
@@ -1471,9 +1864,7 @@
             if (replyBar) replyBar.classList.add('hidden');
             if (replyBarPreview) replyBarPreview.textContent = '';
             if (replyBarAuthor) replyBarAuthor.textContent = '';
-            if (typeof scrollToBottom === 'function') {
-                scrollToBottom({ force: true, behavior: 'auto' });
-            }
+            // Don't auto-scroll here; we scroll once when the server echoes back.
         }, true);
 
         form.addEventListener('submit', () => {
@@ -1486,6 +1877,245 @@
     let socket = null;
     let wsConnected = false;
     let lastId = 0;
+    const __pendingByNonce = new Map();
+    const __seenChatNonces = new Map();
+    let __wsReconnectTimer = null;
+    let __pollTimer = null;
+
+    function __wsIsOpen() {
+        try {
+            return !!(socket && socket.readyState === WebSocket.OPEN);
+        } catch {
+            return false;
+        }
+    }
+
+    function startPolling() {
+        if (__pollTimer) return;
+        __pollTimer = setInterval(poll, 1200);
+    }
+
+    function stopPolling() {
+        if (!__pollTimer) return;
+        try { clearInterval(__pollTimer); } catch {}
+        __pollTimer = null;
+    }
+
+    // --- Challenges (private chats) ---
+    let __challengeState = null;
+    let __challengeTimer = null;
+    let __challengePingTimer = null;
+
+    function challengeKindLabel(kind) {
+        const k = String(kind || '').toLowerCase();
+        if (k === 'emoji_only') return 'Emoji-only';
+        if (k === 'no_vowels') return 'No vowels';
+        if (k === 'finish_meme') return 'Finish the meme';
+        if (k === 'truth_or_dare') return 'Truth or dare';
+        if (k === 'time_attack') return 'Time attack';
+        return 'Challenge';
+    }
+
+    function challengeRuleShort(kind, prompt) {
+        const k = String(kind || '').toLowerCase();
+        if (k === 'emoji_only') return 'Only emojis allowed. Any other character = fail.';
+        if (k === 'no_vowels') return 'No vowels (A,E,I,O,U). First vowel = fail.';
+        if (k === 'time_attack') return 'Send the required number of messages before time runs out.';
+        if (k === 'truth_or_dare') return 'Reply with a meaningful answer (truth) or follow the dare rule.';
+        if (k === 'finish_meme') return 'First meaningful reply wins.';
+        return String(prompt || '');
+    }
+
+    function formatSeconds(sec) {
+        const s = Math.max(0, parseInt(sec || 0, 10) || 0);
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+    }
+
+    function __showAnimated(el, fromClasses) {
+        if (!el) return;
+        if (!el.classList.contains('hidden')) {
+            // Ensure we don't get stuck in the "from" state.
+            for (const c of fromClasses) el.classList.remove(c);
+            return;
+        }
+        el.classList.remove('hidden');
+        for (const c of fromClasses) el.classList.add(c);
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                for (const c of fromClasses) el.classList.remove(c);
+            });
+        });
+    }
+
+    function __hideAnimated(el, toClasses, ms = 200) {
+        if (!el || el.classList.contains('hidden')) return;
+        for (const c of toClasses) el.classList.add(c);
+        window.setTimeout(() => {
+            el.classList.add('hidden');
+        }, ms);
+    }
+
+    function renderChallengeCountdown() {
+        const el = document.getElementById('challenge_countdown');
+        const cancelBtn = document.getElementById('challenge_cancel_btn');
+        const banner = document.getElementById('challenge_banner');
+        const bannerTitle = document.getElementById('challenge_banner_title');
+        const bannerDesc = document.getElementById('challenge_banner_desc');
+        const bannerSelf = document.getElementById('challenge_banner_self');
+        const bannerTime = document.getElementById('challenge_banner_time');
+        if (!el) return;
+
+        const st = __challengeState;
+        if (!st || !st.active) {
+            __hideAnimated(el, ['opacity-0', 'scale-95'], 200);
+            el.textContent = '';
+            if (cancelBtn) cancelBtn.classList.add('hidden');
+            __hideAnimated(banner, ['opacity-0', '-translate-y-1'], 200);
+            return;
+        }
+
+        const now = Math.floor(Date.now() / 1000);
+        const ends = parseInt(st.ends_at || 0, 10) || 0;
+        const remaining = Math.max(0, ends - now);
+        el.textContent = `⏳ ${formatSeconds(remaining)}`;
+        __showAnimated(el, ['opacity-0', 'scale-95']);
+        if (cancelBtn) cancelBtn.classList.remove('hidden');
+
+        if (banner && bannerTitle && bannerDesc && bannerSelf && bannerTime) {
+            bannerTitle.textContent = `🎮 ${challengeKindLabel(st.kind)}`;
+            bannerDesc.textContent = challengeRuleShort(st.kind, st.prompt);
+            bannerTime.textContent = `⏳ ${formatSeconds(remaining)}`;
+
+            const losers = Array.isArray(st.losers) ? st.losers.map((x) => parseInt(x, 10) || 0) : [];
+            const winners = Array.isArray(st.winners) ? st.winners.map((x) => parseInt(x, 10) || 0) : [];
+            if (currentUserId && losers.includes(currentUserId)) {
+                bannerSelf.textContent = 'Status: You failed ❌ (you can keep chatting, but you already lost this challenge)';
+                bannerSelf.className = 'mt-1 text-[11px] font-semibold text-red-200';
+            } else if (currentUserId && winners.includes(currentUserId)) {
+                bannerSelf.textContent = 'Status: You won ✅';
+                bannerSelf.className = 'mt-1 text-[11px] font-semibold text-emerald-200';
+            } else {
+                bannerSelf.textContent = 'Status: In progress…';
+                bannerSelf.className = 'mt-1 text-[11px] font-semibold text-emerald-200';
+            }
+
+            __showAnimated(banner, ['opacity-0', '-translate-y-1']);
+        }
+    }
+
+    function setChallengeState(state) {
+        __challengeState = (state && typeof state === 'object') ? state : null;
+        if (__challengeTimer) {
+            clearInterval(__challengeTimer);
+            __challengeTimer = null;
+        }
+        if (__challengePingTimer) {
+            clearInterval(__challengePingTimer);
+            __challengePingTimer = null;
+        }
+        renderChallengeCountdown();
+        if (__challengeState && __challengeState.active) {
+            __challengeTimer = setInterval(renderChallengeCountdown, 1000);
+            // Nudge the server to expire challenges based on server time.
+            // This avoids "challenge never ends" if nobody sends messages.
+            __challengePingTimer = setInterval(() => {
+                if (!wsConnected || !socket) return;
+                try { socket.send(JSON.stringify({ type: 'ping' })); } catch {}
+            }, 5000);
+        }
+    }
+
+    function initChallengeControls() {
+        const openBtn = document.getElementById('challenge_drawer_open');
+        const cancelBtn = document.getElementById('challenge_cancel_btn');
+        const drawer = document.getElementById('challenge_drawer');
+        const closeBtn = document.getElementById('challenge_drawer_close');
+        const backdrop = document.getElementById('challenge_drawer_backdrop');
+        if (!openBtn || !drawer) return;
+
+        const panel = document.getElementById('challenge_drawer_panel');
+        let __drawerCloseTimer = null;
+
+        function openDrawer() {
+            if (__drawerCloseTimer) {
+                clearTimeout(__drawerCloseTimer);
+                __drawerCloseTimer = null;
+            }
+            drawer.classList.remove('opacity-0', 'pointer-events-none');
+            document.body.classList.add('overflow-hidden');
+            // Trigger enter animation on next frame.
+            requestAnimationFrame(() => {
+                if (backdrop) {
+                    backdrop.classList.remove('opacity-0');
+                    backdrop.classList.add('opacity-100');
+                }
+                if (panel) {
+                    panel.classList.remove('opacity-0', 'translate-y-8', 'sm:translate-y-2', 'sm:scale-95');
+                    panel.classList.add('opacity-100', 'translate-y-0', 'sm:scale-100');
+                }
+            });
+        }
+
+        function closeDrawer() {
+            if (backdrop) {
+                backdrop.classList.add('opacity-0');
+                backdrop.classList.remove('opacity-100');
+            }
+            if (panel) {
+                panel.classList.add('opacity-0', 'translate-y-8', 'sm:translate-y-2', 'sm:scale-95');
+                panel.classList.remove('opacity-100', 'translate-y-0', 'sm:scale-100');
+            }
+            // Wait for animation to finish before hiding.
+            __drawerCloseTimer = window.setTimeout(() => {
+                drawer.classList.add('opacity-0', 'pointer-events-none');
+                document.body.classList.remove('overflow-hidden');
+                __drawerCloseTimer = null;
+            }, 200);
+        }
+
+        openBtn.addEventListener('click', function () {
+            openDrawer();
+        });
+        if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+        if (backdrop) backdrop.addEventListener('click', closeDrawer);
+
+        document.addEventListener('keydown', function (e) {
+            if (e && e.key === 'Escape' && !drawer.classList.contains('pointer-events-none')) {
+                closeDrawer();
+            }
+        });
+
+        drawer.addEventListener('click', function (e) {
+            const btn = e.target && e.target.closest ? e.target.closest('[data-challenge-kind]') : null;
+            if (!btn) return;
+            const kind = String(btn.getAttribute('data-challenge-kind') || '').trim();
+            if (!kind) return;
+
+            if (!wsConnected || !socket) {
+                if (typeof __popup === 'function') __popup('Not connected', 'Please wait for chat to connect.');
+                return;
+            }
+            try {
+                socket.send(JSON.stringify({ type: 'challenge_start', kind: kind }));
+                closeDrawer();
+            } catch {
+                // ignore
+            }
+        });
+
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', function () {
+                if (!wsConnected || !socket) return;
+                try {
+                    socket.send(JSON.stringify({ type: 'challenge_cancel' }));
+                } catch {
+                    // ignore
+                }
+            });
+        }
+    }
 
     function sendReadAck(id) {
         if (!wsConnected || !socket) return;
@@ -1583,6 +2213,16 @@
             scrollToBottom({ force: true, behavior: 'auto' });
             return;
         }
+        const c = document.getElementById('chat_container');
+        if (c) {
+            const prev = c.style.overflowY;
+            try { c.style.overflowY = 'hidden'; } catch {}
+            hardScrollToBottom(c);
+            window.setTimeout(() => {
+                try { c.style.overflowY = prev || ''; } catch {}
+            }, 180);
+            return;
+        }
         hardScrollToBottom();
     }
 
@@ -1593,14 +2233,41 @@
     }
 
     function connect() {
+        try {
+            // Prevent overlapping connections/reconnect storms.
+            if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+                return;
+            }
+        } catch {
+            // ignore
+        }
+
+        try {
+            if (socket && socket.close) socket.close();
+        } catch {
+            // ignore
+        }
+
         socket = new WebSocket(wsUrl);
 
         socket.onopen = function () {
             wsConnected = true;
+            stopPolling();
+            if (__wsReconnectTimer) {
+                clearTimeout(__wsReconnectTimer);
+                __wsReconnectTimer = null;
+            }
             updateLastIdFromDom();
             if (document.visibilityState === 'visible') sendReadAck(lastId);
             // On initial load/room switch, start at the latest message.
             forceScrollToBottomNow();
+
+            // Ask server for active challenge state (private chats only; server will no-op otherwise).
+            try {
+                socket.send(JSON.stringify({ type: 'challenge_state' }));
+            } catch {
+                // ignore
+            }
         };
 
         socket.onmessage = function (event) {
@@ -1613,6 +2280,71 @@
             }
 
             if (payload.type === 'chat_message' && payload.html) {
+                // De-dupe/reconcile WS echo for the same message.
+                try {
+                    const nonce = payload.client_nonce ? String(payload.client_nonce) : '';
+                    if (nonce) {
+                        // Drop duplicate frames for the same message (can happen with reconnects).
+                        if (__seenChatNonces.has(nonce)) return;
+                        __seenChatNonces.set(nonce, Date.now());
+
+                        // Best-effort prune.
+                        if (__seenChatNonces.size > 400) {
+                            const cutoff = Date.now() - 60_000;
+                            for (const [k, t] of __seenChatNonces) {
+                                if (t < cutoff || __seenChatNonces.size > 350) __seenChatNonces.delete(k);
+                                else break;
+                            }
+                        }
+
+                        const pending = __pendingByNonce.get(nonce);
+                        if (pending) {
+                            // Replace silently: temp hide, swap, reveal.
+                            try {
+                                const wasAtBottom = messagesEl && messagesEl.lastElementChild === pending;
+                                pending.style.visibility = 'hidden';
+                                pending.insertAdjacentHTML('afterend', payload.html);
+                                const newEl = pending.nextElementSibling;
+                                pending.remove();
+                                if (newEl) newEl.style.visibility = 'visible';
+                                // Skip extra scroll if we're already at the bottom.
+                                if (wasAtBottom) window.__forceNextChatScroll = false;
+                            } catch {}
+                            __pendingByNonce.delete(nonce);
+                        } else {
+                            messagesEl.insertAdjacentHTML('beforeend', payload.html);
+                        }
+                    } else {
+                        messagesEl.insertAdjacentHTML('beforeend', payload.html);
+                    }
+                } catch {
+                    // ignore
+                }
+                const emptyEl = document.getElementById('empty_state');
+                if (emptyEl) emptyEl.remove();
+                if (messagesEl && messagesEl.classList.contains('hidden')) {
+                    messagesEl.classList.remove('hidden');
+                }
+                hydrateLocalTimes(messagesEl);
+                applyConsecutiveHeaderGrouping(messagesEl);
+                updateLastIdFromDom();
+                const shouldForce = !!window.__forceNextChatScroll || (!!__chatAutoScrollEnabled && isNearBottom());
+                if (window.__forceNextChatScroll) {
+                    window.__forceNextChatScroll = false;
+                    __chatAutoScrollEnabled = true;
+                }
+                if (shouldForce) {
+                    forceScrollToBottomNow();
+                    __hidePrivateNewMsgJump();
+                } else {
+                    // Only in private chats (button exists): show an Instagram-like jump-to-latest indicator.
+                    __showPrivateNewMsgJump();
+                }
+                if (document.visibilityState === 'visible') sendReadAck(lastId);
+                return;
+            }
+
+            if (payload.type === 'challenge_event' && payload.html) {
                 const emptyEl = document.getElementById('empty_state');
                 if (emptyEl) emptyEl.remove();
                 if (messagesEl && messagesEl.classList.contains('hidden')) {
@@ -1622,13 +2354,18 @@
                 hydrateLocalTimes(messagesEl);
                 applyConsecutiveHeaderGrouping(messagesEl);
                 updateLastIdFromDom();
-                const shouldForce = !!window.__forceNextChatScroll || !!__chatAutoScrollEnabled;
+                if (payload.state) setChallengeState(payload.state);
+                const shouldForce = !!window.__forceNextChatScroll || (!!__chatAutoScrollEnabled && isNearBottom());
                 if (window.__forceNextChatScroll) {
                     window.__forceNextChatScroll = false;
                     __chatAutoScrollEnabled = true;
                 }
                 if (shouldForce) forceScrollToBottomNow();
-                if (document.visibilityState === 'visible') sendReadAck(lastId);
+                return;
+            }
+
+            if (payload.type === 'challenge_state' && payload.state) {
+                setChallengeState(payload.state);
                 return;
             }
 
@@ -1717,13 +2454,26 @@
 
         socket.onclose = function () {
             wsConnected = false;
+            startPolling();
             // Simple reconnect
-            setTimeout(connect, 1000);
+            if (!__wsReconnectTimer) {
+                __wsReconnectTimer = setTimeout(() => {
+                    __wsReconnectTimer = null;
+                    connect();
+                }, 1000);
+            }
         };
 
         socket.onerror = function () {
-            wsConnected = false;
+            // Don't flip to disconnected on transient errors; `onclose` will handle it.
         };
+    }
+
+    // Init challenge controls (if present in this room).
+    try {
+        initChallengeControls();
+    } catch {
+        // ignore
     }
 
     function isNearBottom() {
@@ -2121,6 +2871,9 @@
     const callPopupVideoEl = document.getElementById('call_popup_video');
     const callLocalEl = document.getElementById('call_local_player');
     const callRemoteEl = document.getElementById('call_remote_player');
+    const callMicBtn = document.getElementById('call_popup_mic');
+    const callCamBtn = document.getElementById('call_popup_cam');
+    const callSwitchBtn = document.getElementById('call_popup_switch');
     const callEndBtn = document.getElementById('call_popup_end');
 
     const callPartMeAvatarEl = document.getElementById('call_part_me_avatar');
@@ -2138,6 +2891,20 @@
     let callRoleActive = null;
     let callClient = null;
     let localTracks = { audio: null, video: null };
+
+    let callMicEnabled = true;
+    let callCamEnabled = true;
+
+    function syncCallControlVisibility() {
+        const isVideo = callTypeActive === 'video';
+        if (callCamBtn) callCamBtn.style.display = isVideo ? '' : 'none';
+        if (callSwitchBtn) callSwitchBtn.style.display = isVideo ? '' : 'none';
+    }
+
+    function syncCallControlLabels() {
+        if (callMicBtn) callMicBtn.textContent = callMicEnabled ? 'Mute' : 'Unmute';
+        if (callCamBtn) callCamBtn.textContent = callCamEnabled ? 'Cam Off' : 'Cam On';
+    }
 
     // Remote audio can be blocked by autoplay policies (Chrome/Safari). Keep refs to retry on user gesture.
     const callRemoteAudioTracks = new Map(); // uid -> audioTrack
@@ -2290,9 +3057,19 @@
         if (callPopupTitleEl) callPopupTitleEl.textContent = callTypeActive === 'video' ? 'Video call' : 'Voice call';
         setCallStatus('Connecting…');
 
+        callMicEnabled = true;
+        callCamEnabled = true;
+        syncCallControlVisibility();
+        syncCallControlLabels();
+
         if (callPopupVideoEl) {
-            if (callTypeActive === 'video') callPopupVideoEl.classList.remove('hidden');
-            else callPopupVideoEl.classList.add('hidden');
+            if (callTypeActive === 'video') {
+                callPopupVideoEl.classList.remove('hidden');
+                callPopupVideoEl.classList.add('grid');
+            } else {
+                callPopupVideoEl.classList.add('hidden');
+                callPopupVideoEl.classList.remove('grid');
+            }
         }
 
         try {
@@ -2430,6 +3207,82 @@
         });
     }
 
+    if (callMicBtn) {
+        callMicBtn.addEventListener('click', async (e) => {
+            try {
+                e.preventDefault();
+                e.stopPropagation();
+            } catch {}
+            try {
+                if (!localTracks.audio) {
+                    setCallStatus('Mic not ready yet');
+                    return;
+                }
+                callMicEnabled = !callMicEnabled;
+                await localTracks.audio.setEnabled(callMicEnabled);
+                syncCallControlLabels();
+                setCallStatus(callMicEnabled ? 'Mic on' : 'Mic muted');
+            } catch {
+                setCallStatus('Failed to toggle mic');
+            }
+        });
+    }
+
+    if (callCamBtn) {
+        callCamBtn.addEventListener('click', async (e) => {
+            try {
+                e.preventDefault();
+                e.stopPropagation();
+            } catch {}
+            try {
+                if (callTypeActive !== 'video') return;
+                if (!localTracks.video) {
+                    setCallStatus('Camera not ready yet');
+                    return;
+                }
+                callCamEnabled = !callCamEnabled;
+                await localTracks.video.setEnabled(callCamEnabled);
+                syncCallControlLabels();
+                setCallStatus(callCamEnabled ? 'Camera on' : 'Camera off');
+            } catch {
+                setCallStatus('Failed to toggle camera');
+            }
+        });
+    }
+
+    if (callSwitchBtn) {
+        callSwitchBtn.addEventListener('click', async (e) => {
+            try {
+                e.preventDefault();
+                e.stopPropagation();
+            } catch {}
+            try {
+                if (callTypeActive !== 'video') return;
+                if (!localTracks.video) {
+                    setCallStatus('Camera not ready yet');
+                    return;
+                }
+                const cams = await AgoraRTC.getCameras();
+                if (!cams || cams.length < 2) {
+                    setCallStatus('No alternate camera found');
+                    return;
+                }
+                const currentLabel = (typeof localTracks.video.getTrackLabel === 'function') ? localTracks.video.getTrackLabel() : '';
+                let idx = cams.findIndex((c) => c && c.label && currentLabel && c.label === currentLabel);
+                if (idx < 0) idx = 0;
+                const next = cams[(idx + 1) % cams.length];
+                if (!next || !next.deviceId) {
+                    setCallStatus('No alternate camera found');
+                    return;
+                }
+                await localTracks.video.setDevice(next.deviceId);
+                setCallStatus('Switched camera');
+            } catch {
+                setCallStatus('Failed to switch camera');
+            }
+        });
+    }
+
     // Draggable popup
     (function () {
         if (!callPopupEl || !callPopupHeaderEl) return;
@@ -2510,7 +3363,11 @@
 
     async function poll() {
         // Fallback: if websocket isn't connected, poll for new messages
-        if (wsConnected) return;
+        if (__wsIsOpen()) {
+            wsConnected = true;
+            return;
+        }
+        wsConnected = false;
         try {
             updateLastIdFromDom();
             const res = await fetch(`${pollUrl}?after=${lastId}`, { credentials: 'same-origin' });
@@ -2569,7 +3426,7 @@
         setTimeout(() => { forceScrollToBottomNow(); revealChatContainer(); }, 320);
     })();
 
-    setInterval(poll, 1200);
+    startPolling();
     connect();
 
     function clearReply() {
@@ -2613,6 +3470,270 @@
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, true);
 
+    (function initImageViewer() {
+        // Click any <img data-image-viewer> to open zoomable viewer.
+        // Supports: pinch-zoom (mobile), wheel-zoom (desktop), drag-to-pan, double-tap/dblclick to toggle zoom.
+        const isIOS = () => {
+            try {
+                return /iPad|iPhone|iPod/.test(navigator.userAgent || '') && !window.MSStream;
+            } catch {
+                return false;
+            }
+        };
+
+        let overlay = null;
+        let stage = null;
+        let pan = null;
+        let img = null;
+        let hint = null;
+        let closeBtn = null;
+
+        let scale = 1;
+        let tx = 0;
+        let ty = 0;
+        const MIN_SCALE = 1;
+        const MAX_SCALE = 4;
+
+        // touch state
+        let touchMode = '';
+        let startDist = 0;
+        let startScale = 1;
+        let startTx = 0;
+        let startTy = 0;
+        let startX = 0;
+        let startY = 0;
+        let lastTapAt = 0;
+
+        function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+        function apply() {
+            if (!pan || !img) return;
+            pan.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+            img.style.transform = `scale(${scale})`;
+            img.style.cursor = scale > 1 ? 'grab' : 'auto';
+        }
+
+        function reset() {
+            scale = 1;
+            tx = 0;
+            ty = 0;
+            apply();
+        }
+
+        function ensure() {
+            if (overlay) return;
+
+            overlay = document.createElement('div');
+            overlay.id = 'vixo_image_viewer';
+            overlay.className = 'fixed inset-0 z-[90] hidden';
+            overlay.innerHTML = `
+                <div data-iv-backdrop class="absolute inset-0 bg-black/70"></div>
+                <button type="button" data-iv-close class="absolute z-20 top-3 right-3 sm:top-5 sm:right-5 h-10 w-10 rounded-full bg-gray-900/70 border border-gray-700 text-gray-100 hover:bg-gray-800/80 transition" aria-label="Close">
+                    <span aria-hidden="true">×</span>
+                </button>
+                <div data-iv-stage class="absolute inset-0 flex items-center justify-center p-3 sm:p-6">
+                    <div data-iv-pan class="max-w-full max-h-full" style="transform: translate3d(0,0,0);">
+                        <img data-iv-img class="max-w-[95vw] max-h-[85vh] object-contain select-none" draggable="false" style="transform: scale(1); transform-origin: center center;" />
+                    </div>
+                </div>
+                <div data-iv-hint class="absolute z-20 bottom-4 left-1/2 -translate-x-1/2 text-[11px] text-gray-100/80 bg-gray-900/60 border border-gray-800 rounded-full px-3 py-1.5">
+                    Pinch/scroll to zoom • Double tap to reset
+                </div>
+            `;
+            document.body.appendChild(overlay);
+
+            stage = overlay.querySelector('[data-iv-stage]');
+            pan = overlay.querySelector('[data-iv-pan]');
+            img = overlay.querySelector('[data-iv-img]');
+            hint = overlay.querySelector('[data-iv-hint]');
+            closeBtn = overlay.querySelector('[data-iv-close]');
+
+            // Prevent browser gestures while interacting.
+            if (stage) stage.style.touchAction = 'none';
+
+            function close() {
+                overlay.classList.add('hidden');
+                if (!isIOS()) document.body.classList.remove('overflow-hidden');
+                if (img) img.src = '';
+                reset();
+            }
+
+            closeBtn?.addEventListener('click', close);
+            overlay.addEventListener('click', (e) => {
+                if (e.target && e.target.closest && e.target.closest('[data-iv-close]')) return;
+                const backdrop = e.target && e.target.closest ? e.target.closest('[data-iv-backdrop]') : null;
+                if (backdrop) close();
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && overlay && !overlay.classList.contains('hidden')) close();
+            });
+
+            // Zoom with wheel (desktop)
+            stage?.addEventListener('wheel', (e) => {
+                if (!overlay || overlay.classList.contains('hidden')) return;
+                e.preventDefault();
+                const delta = e.deltaY;
+                const factor = delta < 0 ? 1.12 : 0.9;
+                const next = clamp(scale * factor, MIN_SCALE, MAX_SCALE);
+                if (next === scale) return;
+                scale = next;
+                if (scale <= 1) {
+                    tx = 0;
+                    ty = 0;
+                }
+                apply();
+            }, { passive: false });
+
+            // Double click to toggle zoom
+            stage?.addEventListener('dblclick', (e) => {
+                if (!overlay || overlay.classList.contains('hidden')) return;
+                e.preventDefault();
+                if (scale > 1) {
+                    reset();
+                } else {
+                    scale = 2.5;
+                    apply();
+                }
+            });
+
+            // Touch: pinch + pan + double tap
+            stage?.addEventListener('touchstart', (e) => {
+                if (!overlay || overlay.classList.contains('hidden')) return;
+                if (!e.touches) return;
+
+                // double tap
+                if (e.touches.length === 1) {
+                    const now = Date.now();
+                    if (now - lastTapAt < 280) {
+                        e.preventDefault();
+                        if (scale > 1) {
+                            reset();
+                        } else {
+                            scale = 2.5;
+                            apply();
+                        }
+                        lastTapAt = 0;
+                        return;
+                    }
+                    lastTapAt = now;
+                }
+
+                if (e.touches.length === 2) {
+                    touchMode = 'pinch';
+                    const dx = e.touches[0].clientX - e.touches[1].clientX;
+                    const dy = e.touches[0].clientY - e.touches[1].clientY;
+                    startDist = Math.hypot(dx, dy);
+                    startScale = scale;
+                    startTx = tx;
+                    startTy = ty;
+                    e.preventDefault();
+                    return;
+                }
+
+                if (e.touches.length === 1 && scale > 1) {
+                    touchMode = 'pan';
+                    startX = e.touches[0].clientX;
+                    startY = e.touches[0].clientY;
+                    startTx = tx;
+                    startTy = ty;
+                    e.preventDefault();
+                }
+            }, { passive: false });
+
+            stage?.addEventListener('touchmove', (e) => {
+                if (!overlay || overlay.classList.contains('hidden')) return;
+                if (!e.touches) return;
+
+                if (touchMode === 'pinch' && e.touches.length === 2) {
+                    const dx = e.touches[0].clientX - e.touches[1].clientX;
+                    const dy = e.touches[0].clientY - e.touches[1].clientY;
+                    const dist = Math.hypot(dx, dy);
+                    if (!startDist) return;
+                    const next = clamp(startScale * (dist / startDist), MIN_SCALE, MAX_SCALE);
+                    scale = next;
+                    if (scale <= 1) {
+                        tx = 0;
+                        ty = 0;
+                    } else {
+                        tx = startTx;
+                        ty = startTy;
+                    }
+                    apply();
+                    e.preventDefault();
+                    return;
+                }
+
+                if (touchMode === 'pan' && e.touches.length === 1 && scale > 1) {
+                    const dx = e.touches[0].clientX - startX;
+                    const dy = e.touches[0].clientY - startY;
+                    tx = startTx + dx;
+                    ty = startTy + dy;
+                    apply();
+                    e.preventDefault();
+                }
+            }, { passive: false });
+
+            stage?.addEventListener('touchend', () => {
+                touchMode = '';
+                startDist = 0;
+            }, { passive: true });
+
+            // Mouse pan (desktop)
+            let mouseDown = false;
+            stage?.addEventListener('mousedown', (e) => {
+                if (!overlay || overlay.classList.contains('hidden')) return;
+                if (scale <= 1) return;
+                mouseDown = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                startTx = tx;
+                startTy = ty;
+                try { e.preventDefault(); } catch {}
+            });
+            window.addEventListener('mousemove', (e) => {
+                if (!mouseDown) return;
+                if (!overlay || overlay.classList.contains('hidden')) return;
+                if (scale <= 1) return;
+                tx = startTx + (e.clientX - startX);
+                ty = startTy + (e.clientY - startY);
+                apply();
+            });
+            window.addEventListener('mouseup', () => { mouseDown = false; });
+
+            // Hide hint after a moment
+            setTimeout(() => {
+                try { hint?.classList.add('opacity-0'); } catch {}
+            }, 1800);
+        }
+
+        function openWith(src, alt) {
+            ensure();
+            if (!overlay || !img) return;
+            img.src = src;
+            img.alt = alt || 'Image';
+            overlay.classList.remove('hidden');
+            // We can lock scroll safely here (no inputs), but avoid iOS quirks.
+            if (!isIOS()) document.body.classList.add('overflow-hidden');
+            reset();
+            // show hint each open
+            try {
+                hint?.classList.remove('opacity-0');
+                setTimeout(() => { try { hint?.classList.add('opacity-0'); } catch {} }, 1600);
+            } catch {}
+        }
+
+        document.addEventListener('click', function (e) {
+            const el = e.target && e.target.closest ? e.target.closest('img[data-image-viewer]') : null;
+            if (!el) return;
+            const src = el.getAttribute('src') || '';
+            if (!src) return;
+            e.preventDefault();
+            e.stopPropagation();
+            openWith(src, el.getAttribute('alt') || 'Image');
+        }, true);
+    })();
+
     (function initMobileSidebarToggle() {
         const sidebar = document.getElementById('chat_sidebar');
         const panel = document.getElementById('chat_sidebar_panel');
@@ -2621,6 +3742,13 @@
         if (!sidebar || !panel || !openBtn || !closeBtn) return;
 
         const isMobile = () => !window.matchMedia('(min-width: 1024px)').matches;
+        const isIOS = () => {
+            try {
+                return /iPad|iPhone|iPod/.test(navigator.userAgent || '') && !window.MSStream;
+            } catch {
+                return false;
+            }
+        };
 
         const overlayClasses = [
             'fixed', 'inset-0', 'z-50',
@@ -2632,23 +3760,30 @@
             if (!isMobile()) return;
             sidebar.classList.add('hidden');
             sidebar.classList.remove(...overlayClasses);
-            document.body.classList.remove('overflow-hidden');
+            if (!isIOS()) document.body.classList.remove('overflow-hidden');
         }
 
         function openSidebar() {
             if (!isMobile()) return;
             sidebar.classList.remove('hidden');
             sidebar.classList.add(...overlayClasses);
-            document.body.classList.add('overflow-hidden');
+            // iOS Safari: scroll-lock via overflow-hidden can break input focus/typing in fixed overlays.
+            if (!isIOS()) document.body.classList.add('overflow-hidden');
         }
 
-        function sync() {
-            if (!isMobile()) {
+        let lastMobile = isMobile();
+        function sync(force) {
+            const nowMobile = isMobile();
+            if (!force && nowMobile === lastMobile) return;
+            lastMobile = nowMobile;
+
+            if (!nowMobile) {
                 sidebar.classList.remove('hidden');
                 sidebar.classList.remove(...overlayClasses);
-                document.body.classList.remove('overflow-hidden');
+                if (!isIOS()) document.body.classList.remove('overflow-hidden');
                 return;
             }
+            // Only auto-close when we actually switch into mobile mode (not on iOS keyboard resize).
             closeSidebar();
         }
 
@@ -2666,7 +3801,15 @@
             closeSidebar();
         });
 
-        window.addEventListener('resize', sync);
-        sync();
+        // Use media-query change instead of window resize (iOS keyboard opens/closes fire resize events).
+        const mq = window.matchMedia('(min-width: 1024px)');
+        const onMq = () => sync(true);
+        try {
+            mq.addEventListener('change', onMq);
+        } catch {
+            try { mq.addListener(onMq); } catch {}
+        }
+
+        sync(true);
     })();
 })();

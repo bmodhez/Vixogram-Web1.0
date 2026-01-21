@@ -9,6 +9,10 @@ from .forms import SupportEnquiryForm
 from django.contrib.auth.models import User
 from django.http import HttpResponse
 from django.http import JsonResponse
+from django.urls import reverse
+from django.core import signing
+from urllib.parse import urlencode
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from a_users.models import Follow
 from a_users.models import UserReport
@@ -156,6 +160,8 @@ def profile_config_view(request, username=None):
 
 @login_required
 def contact_support_view(request):
+    topic = (request.GET.get('topic') or '').strip().lower()
+
     if request.method == 'POST':
         form = SupportEnquiryForm(request.POST)
         if form.is_valid():
@@ -171,12 +177,59 @@ def contact_support_view(request):
                 enquiry.user_agent = ''
             enquiry.save()
             messages.success(request, 'Sent to support. We will get back to you soon.')
-            return redirect('contact-support')
+            # After sending, take the user straight back to where they came from
+            # (typically the chat screen). Prevent open-redirects by validating host.
+            next_url = (request.POST.get('page') or '').strip()
+            if next_url and url_has_allowed_host_and_scheme(
+                url=next_url,
+                allowed_hosts={request.get_host()},
+                require_https=request.is_secure(),
+            ):
+                return redirect(next_url)
+            return redirect('home')
     else:
-        form = SupportEnquiryForm()
+        if topic == 'premium':
+            messages.info(request, 'Premium is not available yet.')
+            form = SupportEnquiryForm(initial={
+                'subject': 'Premium upgrade',
+            })
+        else:
+            form = SupportEnquiryForm()
+
+    enquiries = []
+    try:
+        enquiries = list(
+            SupportEnquiry.objects.filter(user=request.user).order_by('-created_at')[:8]
+        )
+    except Exception:
+        enquiries = []
 
     return render(request, 'a_users/contact_support.html', {
         'form': form,
+        'enquiries': enquiries,
+    })
+
+
+@login_required
+def invite_friends_view(request):
+    """Invite page with a signed, shareable link."""
+    token = signing.dumps(
+        {'u': int(getattr(request.user, 'id', 0))},
+        salt='invite-friends',
+        compress=True,
+    )
+    signup_path = reverse('account_signup')
+    invite_url = request.build_absolute_uri(f"{signup_path}?{urlencode({'ref': token})}")
+
+    points = 0
+    try:
+        points = int(getattr(getattr(request.user, 'profile', None), 'referral_points', 0) or 0)
+    except Exception:
+        points = 0
+
+    return render(request, 'a_users/invite_friends.html', {
+        'invite_url': invite_url,
+        'points': points,
     })
 
 

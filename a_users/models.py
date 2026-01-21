@@ -15,6 +15,7 @@ class Profile(models.Model):
     is_stealth = models.BooleanField(default=False)
     is_bot = models.BooleanField(default=False)
     is_dnd = models.BooleanField(default=False)
+    referral_points = models.PositiveIntegerField(default=0)
     
     def __str__(self):
         return str(self.user)
@@ -162,6 +163,8 @@ class SupportEnquiry(models.Model):
     user_agent = models.CharField(max_length=300, blank=True, default='')
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_OPEN)
     admin_note = models.TextField(blank=True, default='')
+    admin_reply = models.TextField(blank=True, default='')
+    replied_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -173,3 +176,27 @@ class SupportEnquiry(models.Model):
 
     def __str__(self):
         return f"SupportEnquiry({self.id}) u={self.user_id} {self.status}"
+
+
+class Referral(models.Model):
+    """Tracks invite/referral attribution and rewards.
+
+    A referral is created when a new user signs up with a valid invite token.
+    Points are only awarded after the referred user's email is verified.
+    """
+
+    referrer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='referrals_made')
+    referred = models.OneToOneField(User, on_delete=models.CASCADE, related_name='referral_received')
+    points_awarded = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    awarded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['referrer', '-created_at'], name='ref_referrer_created_idx'),
+            models.Index(fields=['awarded_at', '-created_at'], name='ref_awarded_created_idx'),
+        ]
+
+    def __str__(self):
+        return f"Referral({self.id}) referrer={self.referrer_id} referred={self.referred_id} awarded={bool(self.awarded_at)}"

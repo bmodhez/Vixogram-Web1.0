@@ -63,14 +63,25 @@
     }
 
     try {
+      const nextLabel = (t === 'light') ? 'Dark' : 'Light';
+
       const btn = document.getElementById('theme_toggle');
       if (btn) {
-        const label = (t === 'light') ? 'Dark' : 'Light';
         btn.setAttribute('data-theme', t);
-        btn.setAttribute('aria-label', `Switch to ${label} theme`);
+        btn.setAttribute('aria-label', `Switch to ${nextLabel} theme`);
         btn.innerHTML = (t === 'light')
           ? '<span class="inline-flex items-center gap-2"><span aria-hidden="true">☀️</span><span class="hidden sm:inline">Light</span></span>'
           : '<span class="inline-flex items-center gap-2"><span aria-hidden="true">🌙</span><span class="hidden sm:inline">Dark</span></span>';
+      }
+
+      const menuBtn = document.getElementById('theme_toggle_menu');
+      if (menuBtn) {
+        menuBtn.setAttribute('data-theme', t);
+        menuBtn.setAttribute('aria-label', `Switch to ${nextLabel} theme`);
+        const icon = menuBtn.querySelector('[data-theme-icon]');
+        const label = menuBtn.querySelector('[data-theme-label]');
+        if (icon) icon.textContent = (t === 'light') ? '☀️' : '🌙';
+        if (label) label.textContent = (t === 'light') ? 'Light' : 'Dark';
       }
     } catch {
       // ignore
@@ -92,11 +103,14 @@
   applyTheme(getStoredTheme());
 
   function initThemeToggle() {
-    const btn = document.getElementById('theme_toggle');
-    if (!btn) return;
-    btn.addEventListener('click', (e) => {
-      try { e.preventDefault(); } catch {}
-      toggleTheme();
+    const ids = ['theme_toggle', 'theme_toggle_menu'];
+    ids.forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.addEventListener('click', (e) => {
+        try { e.preventDefault(); } catch {}
+        toggleTheme();
+      });
     });
   }
 
@@ -588,6 +602,29 @@
 
     window.__openConfirm = open;
     window.__closeConfirm = close;
+  }
+
+  function initPremiumUpgradePopup() {
+    document.addEventListener('click', (e) => {
+      const t = e.target;
+      const btn = t && t.closest ? t.closest('[data-premium-upgrade]') : null;
+      if (!btn) return;
+      try { e.preventDefault(); } catch {}
+
+      const open = (typeof window.__openConfirm === 'function') ? window.__openConfirm : null;
+      if (open) {
+        open({
+          title: 'Premium',
+          message: 'Premium is not available yet.',
+          showCancel: false,
+          okText: 'OK',
+        });
+      } else {
+        // Fallback (should be rare if base.html includes the modal)
+        // eslint-disable-next-line no-alert
+        alert('Premium is not available yet.');
+      }
+    }, true);
   }
 
   function initImageViewer() {
@@ -1503,6 +1540,35 @@
 
           try { window.__refreshNotifDropdownIfOpen && window.__refreshNotifDropdownIfOpen(); } catch {}
         }
+
+        if (payload.type === 'support') {
+          bumpNotifUnread();
+          playNotifSound();
+          const container = ensureIncomingContainer();
+          const toast = document.createElement('div');
+          toast.className = 'pointer-events-auto flex items-start gap-3 rounded-xl border border-gray-800 bg-gray-900/90 px-4 py-3 text-sm text-gray-100 shadow-lg shadow-black/20 transition duration-200 ease-out transform-gpu';
+          const url = payload.url || '/profile/support/';
+          const preview = (payload.preview || '').trim();
+          toast.innerHTML = `
+            <div class="mt-0.5 h-2.5 w-2.5 flex-none rounded-full bg-emerald-400"></div>
+            <div class="flex-1 min-w-0">
+              <div class="font-semibold">Vixogram Team</div>
+              ${preview ? `<div class="mt-2 text-xs text-gray-300">${escapeHtml(preview)}</div>` : ''}
+              <div class="mt-3">
+                <a href="${url}" class="vixo-btn text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg transition-colors">View</a>
+              </div>
+            </div>
+            <button type="button" data-close class="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60 transition" aria-label="Dismiss">
+              <span aria-hidden="true">×</span>
+            </button>
+          `;
+          const removeToast = () => { toast.classList.add('opacity-0'); setTimeout(() => toast.remove(), 200); };
+          toast.querySelector('[data-close]')?.addEventListener('click', removeToast);
+          setTimeout(removeToast, 12000);
+          container.appendChild(toast);
+          animateToastIn(toast);
+          try { window.__refreshNotifDropdownIfOpen && window.__refreshNotifDropdownIfOpen(); } catch {}
+        }
       };
 
       socket.onclose = function () {
@@ -1673,6 +1739,7 @@
     initUserMenuDropdown();
     initToasts();
     initCustomConfirm();
+    initPremiumUpgradePopup();
     initImageViewer();
     initVideoViewer();
     initVideoDecodeFallback();

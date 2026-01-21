@@ -18,4 +18,5 @@ urlpatterns = [
     path('notifications/read-all/', notifications_mark_all_read_view, name='notifications-read-all'),
     path('notifications/clear-all/', notifications_clear_all_view, name='notifications-clear-all'),
     path('support/', contact_support_view, name='contact-support'),
+    path('invite/', invite_friends_view, name='invite-friends'),
 ]
