@@ -377,6 +377,39 @@ ASGI_APPLICATION = 'a_core.asgi.application'
 # Render ya Railway par ye variables environment se uthayenge
 REDIS_URL = os.environ.get('REDIS_URL')
 
+
+def _redis_ssl_cert_reqs_from_env() -> object | None:
+    """Return an ssl_cert_reqs value compatible with redis-py.
+
+    Supported env values:
+    - none / false / 0: disable cert verification (NOT recommended, but sometimes needed)
+    - required / true / 1: require cert verification (default)
+    """
+    raw = (os.environ.get('REDIS_SSL_CERT_REQS') or '').strip().lower()
+    if not raw:
+        return None
+    if raw in {'none', 'false', '0', 'off', 'no'}:
+        return None
+    # redis-py defaults to ssl.CERT_REQUIRED when using rediss://, so we don't
+    # need to explicitly set it here.
+    return 'required'
+
+
+def _redis_connection_options() -> dict:
+    opts: dict = {
+        'socket_connect_timeout': float(os.environ.get('REDIS_CONNECT_TIMEOUT', '1.0')),
+        'socket_timeout': float(os.environ.get('REDIS_SOCKET_TIMEOUT', '1.5')),
+        'retry_on_timeout': True,
+    }
+
+    # Optional TLS tuning for hosted Redis providers.
+    # Only applied if REDIS_SSL_CERT_REQS is explicitly set.
+    ssl_cert_reqs = _redis_ssl_cert_reqs_from_env()
+    if ssl_cert_reqs is not None:
+        opts['ssl_cert_reqs'] = ssl_cert_reqs
+
+    return opts
+
 # --- Cache / sessions (important for scale) ---
 # Rate limiting and other anti-abuse features rely on Django's cache.
 # If you scale to multiple processes/instances, you should use a shared cache
@@ -392,9 +425,7 @@ if USE_REDIS_CACHE and REDIS_URL:
             'BACKEND': 'django.core.cache.backends.redis.RedisCache',
             'LOCATION': REDIS_URL,
             'OPTIONS': {
-                'socket_connect_timeout': float(os.environ.get('REDIS_CONNECT_TIMEOUT', '1.0')),
-                'socket_timeout': float(os.environ.get('REDIS_SOCKET_TIMEOUT', '1.5')),
-                'retry_on_timeout': True,
+                **_redis_connection_options(),
             },
         }
     }
@@ -412,11 +443,25 @@ else:
 
 # Local/dev: don't depend on Redis (prevents WS disconnects when Redis isn't running).
 if ENVIRONMENT == 'production' and REDIS_URL:
+    _redis_host_entry: object
+
+    # channels_redis supports either string URLs or dicts.
+    # For TLS Redis (rediss://), some providers need ssl_cert_reqs disabled.
+    # We only apply that if REDIS_SSL_CERT_REQS is explicitly set.
+    ssl_cert_reqs = _redis_ssl_cert_reqs_from_env()
+    if ssl_cert_reqs is not None:
+        _redis_host_entry = {
+            'address': REDIS_URL,
+            'ssl_cert_reqs': ssl_cert_reqs,
+        }
+    else:
+        _redis_host_entry = REDIS_URL
+
     CHANNEL_LAYERS = {
         'default': {
             'BACKEND': 'channels_redis.core.RedisChannelLayer',
             'CONFIG': {
-                'hosts': [REDIS_URL],
+                'hosts': [_redis_host_entry],
             },
         },
     }
