@@ -2296,6 +2296,790 @@
     }
   }
 
+  function initChatViewportSizing() {
+    // Chat-only: ensure the chat panels fit below the real header height on mobile.
+    // The header can vary (navbar + optional announcement banner), so avoid hard-coded offsets.
+    try {
+      const isChatPage = document.documentElement.classList.contains('vixo-chat-page')
+        || document.body.classList.contains('vixo-chat-page');
+      if (!isChatPage) return;
+
+      const root = document.documentElement;
+      const nav = document.querySelector('.vixo-topbar');
+      const banner = document.getElementById('global-announcement-banner');
+
+      const computeOffset = () => {
+        let px = 0;
+        try {
+          if (nav) px += nav.getBoundingClientRect().height;
+        } catch {
+          // ignore
+        }
+        try {
+          if (banner && !banner.classList.contains('hidden')) px += banner.getBoundingClientRect().height;
+        } catch {
+          // ignore
+        }
+
+        // Small buffer for borders/subpixel rounding.
+        px += 1;
+        root.style.setProperty('--vixo-chat-top-offset', `${Math.max(0, Math.round(px))}px`);
+      };
+
+      computeOffset();
+
+      // Recompute on viewport changes.
+      const onResize = () => {
+        try {
+          window.requestAnimationFrame(computeOffset);
+        } catch {
+          computeOffset();
+        }
+      };
+
+      window.addEventListener('resize', onResize, { passive: true });
+      window.addEventListener('orientationchange', onResize, { passive: true });
+
+      // If the banner toggles, recompute.
+      try {
+        if (banner && 'MutationObserver' in window) {
+          const mo = new MutationObserver(() => computeOffset());
+          mo.observe(banner, { attributes: true, attributeFilter: ['class', 'style'] });
+        }
+      } catch {
+        // ignore
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  function initStoriesViewer() {
+    // Any element with data-story-username="<username>" opens the stories viewer.
+    // Stories are images only and auto-advance every 10 seconds.
+    try {
+      const SEEN_PREFIX = 'vixo_story_seen:';
+
+      const safeKey = (username) => SEEN_PREFIX + String(username || '').trim().toLowerCase();
+
+      const getSeenVersion = (username) => {
+        try {
+          return String(window.localStorage.getItem(safeKey(username)) || '');
+        } catch {
+          return '';
+        }
+      };
+
+      const setSeenVersion = (username, version) => {
+        const u = String(username || '').trim();
+        const v = String(version || '').trim();
+        if (!u || !v) return;
+        try {
+          window.localStorage.setItem(safeKey(u), v);
+        } catch {
+          // ignore
+        }
+      };
+
+      const computeVersionFromStories = (stories) => {
+        try {
+          const items = Array.isArray(stories) ? stories : [];
+          let best = '';
+          for (let i = 0; i < items.length; i += 1) {
+            const c = items[i] && items[i].created_at ? String(items[i].created_at) : '';
+            if (c && (!best || c > best)) best = c;
+          }
+          return best;
+        } catch {
+          return '';
+        }
+      };
+
+      const updateStoryRings = (root) => {
+        try {
+          const scope = root || document;
+          const triggers = scope.querySelectorAll('[data-story-username][data-story-version]');
+          triggers.forEach((el) => {
+            try {
+              const username = el.getAttribute('data-story-username') || '';
+              const version = el.getAttribute('data-story-version') || '';
+              const ring = el.querySelector('[data-story-ring]');
+              if (!ring) return;
+
+              const seen = getSeenVersion(username);
+              const hide = !!(seen && version && seen === version);
+              ring.classList.toggle('hidden', hide);
+            } catch {
+              // ignore
+            }
+          });
+        } catch {
+          // ignore
+        }
+      };
+
+      const buildUrl = (username) => {
+        const u = String(username || '').trim();
+        if (!u) return null;
+        return `/profile/u/${encodeURIComponent(u)}/stories/`;
+      };
+
+      const removeExisting = () => {
+        try {
+          const old = document.getElementById('vixo-story-viewer');
+          if (old) old.remove();
+        } catch {
+          // ignore
+        }
+      };
+
+      const showMiniToast = (text) => {
+        try {
+          const t = document.createElement('div');
+          t.className = 'fixed left-1/2 -translate-x-1/2 bottom-6 z-[90] max-w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-gray-800 bg-gray-900/90 px-4 py-3 text-sm text-gray-100 shadow-2xl shadow-black/40';
+          t.textContent = String(text || '');
+          document.body.appendChild(t);
+          window.setTimeout(() => {
+            try {
+              t.classList.add('opacity-0');
+              t.style.transition = 'opacity 180ms ease-out';
+            } catch {}
+          }, 1600);
+          window.setTimeout(() => {
+            try { t.remove(); } catch {}
+          }, 1900);
+        } catch {
+          // ignore
+        }
+      };
+
+      const buildPlaybackItems = (stories) => {
+        const storyItems = Array.isArray(stories) ? stories.filter(s => s && s.image_url) : [];
+        const n = storyItems.length;
+        if (n <= 1) {
+          return {
+            storyCount: n,
+            playback: storyItems.map((s) => ({ type: 'story', story: s })),
+          };
+        }
+
+        // Insert an ad story after every 2 stories.
+        // Special case: if there are exactly 2 stories, insert after the 1st.
+        const playback = [];
+        const block = (n === 2) ? 1 : 2;
+
+        for (let i = 0; i < n; i += 1) {
+          playback.push({ type: 'story', story: storyItems[i] });
+
+          const atEnd = (i === n - 1);
+          const shouldInsert = !atEnd && ((i + 1) % block === 0);
+          if (shouldInsert) {
+            playback.push({ type: 'ad' });
+          }
+        }
+
+        return { storyCount: n, playback };
+      };
+
+      const openViewer = ({ username, durationSeconds, stories, canDelete, storiesUrl }) => {
+        removeExisting();
+
+        const durStoryMs = Math.max(1000, Number(durationSeconds || 10) * 1000);
+        const durAdMs = 6000;
+
+        const built = buildPlaybackItems(stories);
+        const storyCount = built.storyCount;
+        const items = built.playback;
+
+        if (!items.length) {
+          // Best-effort: show a toast if available, else fallback.
+          try {
+            const container = document.getElementById('toast-container');
+            if (container) {
+              const toast = document.createElement('div');
+              toast.className = 'toast pointer-events-auto flex items-start gap-3 rounded-xl border border-gray-800 bg-gray-900/90 px-4 py-3 text-sm text-gray-100 shadow-lg shadow-black/20 transition duration-200 ease-out';
+              toast.setAttribute('data-duration', '2500');
+              toast.innerHTML = '<div class="mt-0.5 h-2.5 w-2.5 flex-none rounded-full bg-gray-500"></div><div class="flex-1 leading-5">No stories yet.</div>';
+              container.appendChild(toast);
+              // initToasts runs once at DOMContentLoaded; dismiss this toast manually.
+              window.setTimeout(() => {
+                try { toast.remove(); } catch {}
+              }, 2600);
+              return;
+            }
+          } catch {}
+          showMiniToast('No stories yet.');
+          return;
+        }
+
+        let index = 0;
+        let startedAt = 0;
+        let tickTimer = null;
+
+        const root = document.createElement('div');
+        root.id = 'vixo-story-viewer';
+        root.className = 'fixed inset-0 z-[80] bg-black/95 opacity-0 transition-opacity duration-200 ease-out';
+        root.setAttribute('role', 'dialog');
+        root.setAttribute('aria-modal', 'true');
+        root.setAttribute('aria-label', 'Stories');
+
+        root.innerHTML = `
+          <div class="absolute inset-0"></div>
+          <div class="relative w-full h-full flex items-center justify-center opacity-0 translate-y-1 scale-[0.985] transition-all duration-200 ease-out" data-story-panel>
+            <div class="absolute top-0 left-0 right-0 p-3 sm:p-4">
+              <div class="mx-auto max-w-md">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="min-w-0 text-sm font-semibold text-gray-100 truncate">@${String(username || '').replace(/</g, '')}</div>
+                  <div class="flex items-center gap-2">
+                    <div class="relative">
+                      <button type="button" data-story-menu-btn class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gray-900/60 hover:bg-gray-900/80 text-gray-100 border border-white/10" aria-label="Story menu">
+                        <svg viewBox="0 0 24 24" class="h-5 w-5" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+                      </button>
+                      <div data-story-menu-panel class="hidden absolute right-0 mt-2 w-44 overflow-hidden rounded-xl border border-white/10 bg-gray-950/95 shadow-2xl shadow-black/50">
+                        <button type="button" data-story-delete class="w-full text-left px-4 py-3 text-sm text-red-200 hover:bg-red-500/10">Delete story</button>
+                      </div>
+                    </div>
+                    <button type="button" data-story-close class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gray-900/60 hover:bg-gray-900/80 text-gray-100 border border-white/10">×</button>
+                  </div>
+                </div>
+                <div class="mt-2 flex items-center gap-1" data-story-progress></div>
+              </div>
+            </div>
+
+            <div class="w-full h-full flex items-center justify-center">
+              <div class="w-full max-w-md px-3 sm:px-4">
+                <div class="relative rounded-2xl overflow-hidden bg-black shadow-2xl shadow-black/40 border border-white/10">
+                  <img data-story-img class="block w-full h-[70vh] sm:h-[75vh] object-contain bg-black" alt="Story" />
+                  <div data-story-ad class="absolute inset-0 hidden bg-gradient-to-b from-gray-900/80 via-black to-black">
+                    <div class="w-full h-full flex items-center justify-center p-6">
+                      <div class="w-full max-w-sm text-center">
+                        <div class="text-[10px] tracking-[0.35em] text-white/60">ADVERTISEMENT</div>
+                        <div class="mt-3 text-xl font-semibold text-white">Vixogram Premium</div>
+                        <div class="mt-2 text-sm text-white/70">Unlock more features and support the app.</div>
+                        <a href="/pricing/" class="inline-flex mt-4 items-center justify-center rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400">View Plans</a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button type="button" data-story-prev class="absolute left-0 top-0 bottom-0 w-1/3" aria-label="Previous story">
+              <span data-story-prev-arrow class="absolute left-3 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/35 text-white/90 border border-white/10 backdrop-blur-sm">
+                <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+              </span>
+            </button>
+            <button type="button" data-story-next class="absolute right-0 top-0 bottom-0 w-1/3" aria-label="Next story">
+              <span data-story-next-arrow class="absolute right-3 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/35 text-white/90 border border-white/10 backdrop-blur-sm">
+                <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+              </span>
+            </button>
+
+            <div data-story-delete-confirm class="hidden absolute inset-0 z-[6] bg-black/70 backdrop-blur-[1px]">
+              <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-white/10 bg-gray-950/95 p-4 shadow-2xl shadow-black/60">
+                <div class="text-sm font-semibold text-white">Delete this story?</div>
+                <div class="mt-1 text-xs text-white/70" data-story-delete-countdown>Deleting in 5s…</div>
+                <div class="mt-3 flex items-center justify-end gap-2">
+                  <button type="button" data-story-delete-cancel class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white hover:bg-white/10">Cancel</button>
+                  <button type="button" data-story-delete-now class="rounded-xl bg-red-500 px-3 py-2 text-sm font-semibold text-white hover:bg-red-400">Delete now</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(root);
+        try { document.body.style.overflow = 'hidden'; } catch {}
+
+        // Open animation.
+        try {
+          const panel = root.querySelector('[data-story-panel]');
+          __vixoNextFrame(() => {
+            try { root.classList.remove('opacity-0'); } catch {}
+            try {
+              if (panel) {
+                panel.classList.remove('opacity-0', 'translate-y-1', 'scale-[0.985]');
+              }
+            } catch {}
+          });
+        } catch {
+          // ignore
+        }
+
+        const closeBtn = root.querySelector('[data-story-close]');
+        const menuBtn = root.querySelector('[data-story-menu-btn]');
+        const menuPanel = root.querySelector('[data-story-menu-panel]');
+        const deleteBtn = root.querySelector('[data-story-delete]');
+        const deleteConfirm = root.querySelector('[data-story-delete-confirm]');
+        const deleteCountdown = root.querySelector('[data-story-delete-countdown]');
+        const deleteCancel = root.querySelector('[data-story-delete-cancel]');
+        const deleteNow = root.querySelector('[data-story-delete-now]');
+        const img = root.querySelector('[data-story-img]');
+        const ad = root.querySelector('[data-story-ad]');
+        const progress = root.querySelector('[data-story-progress]');
+        const prevBtn = root.querySelector('[data-story-prev]');
+        const nextBtn = root.querySelector('[data-story-next]');
+        const prevArrow = root.querySelector('[data-story-prev-arrow]');
+        const nextArrow = root.querySelector('[data-story-next-arrow]');
+
+        const segments = [];
+        if (progress) {
+          progress.innerHTML = '';
+          for (let i = 0; i < items.length; i += 1) {
+            const seg = document.createElement('div');
+            seg.className = 'h-1.5 flex-1 rounded-full bg-white/20 overflow-hidden';
+            seg.innerHTML = '<div class="h-full w-0 bg-white/90" data-fill></div>';
+            progress.appendChild(seg);
+            segments.push(seg.querySelector('[data-fill]'));
+          }
+        }
+
+        const cleanupTimers = () => {
+          if (tickTimer) {
+            try { window.clearInterval(tickTimer); } catch {}
+            tickTimer = null;
+          }
+        };
+
+        let deleteTimer = null;
+        let deleteInterval = null;
+        const cleanupDeleteTimers = () => {
+          if (deleteTimer) {
+            try { window.clearTimeout(deleteTimer); } catch {}
+            deleteTimer = null;
+          }
+          if (deleteInterval) {
+            try { window.clearInterval(deleteInterval); } catch {}
+            deleteInterval = null;
+          }
+        };
+
+        const close = () => {
+          cleanupDeleteTimers();
+          cleanupTimers();
+          try { window.removeEventListener('keydown', onKeyDown); } catch {}
+          try {
+            const panel = root.querySelector('[data-story-panel]');
+            root.classList.add('opacity-0');
+            if (panel) {
+              panel.classList.add('opacity-0', 'translate-y-1', 'scale-[0.985]');
+            }
+          } catch {}
+          window.setTimeout(() => {
+            try { root.remove(); } catch {}
+            try { document.body.style.overflow = ''; } catch {}
+          }, 190);
+        };
+
+        const setSegment = (i, pct) => {
+          try {
+            for (let j = 0; j < segments.length; j += 1) {
+              if (!segments[j]) continue;
+              if (j < i) {
+                segments[j].style.width = '100%';
+              } else if (j > i) {
+                segments[j].style.width = '0%';
+              } else {
+                segments[j].style.width = `${Math.max(0, Math.min(100, pct))}%`;
+              }
+            }
+          } catch {
+            // ignore
+          }
+        };
+
+        const preload = (url) => {
+          try {
+            const im = new Image();
+            im.src = url;
+          } catch {
+            // ignore
+          }
+        };
+
+        const getItemDurationMs = (item) => {
+          try {
+            return (item && item.type === 'ad') ? durAdMs : durStoryMs;
+          } catch {
+            return durStoryMs;
+          }
+        };
+
+        const updateNavUi = () => {
+          // Only show arrow controls if there are 2+ real stories.
+          const showArrows = storyCount >= 2;
+          try {
+            if (prevArrow) prevArrow.classList.toggle('hidden', !showArrows);
+            if (nextArrow) nextArrow.classList.toggle('hidden', !showArrows);
+          } catch {}
+
+          // Subtle disable at edges.
+          try {
+            if (prevArrow) prevArrow.classList.toggle('opacity-30', index <= 0);
+            if (nextArrow) nextArrow.classList.toggle('opacity-30', index >= items.length - 1);
+          } catch {}
+        };
+
+        const hideMenu = () => {
+          try { if (menuPanel) menuPanel.classList.add('hidden'); } catch {}
+        };
+
+        const toggleMenu = () => {
+          try {
+            if (!menuPanel) return;
+            menuPanel.classList.toggle('hidden');
+          } catch {}
+        };
+
+        const getCurrentStoryId = () => {
+          try {
+            const it = items[index];
+            if (it && it.type === 'story' && it.story && it.story.id) return Number(it.story.id);
+          } catch {
+            // ignore
+          }
+          return null;
+        };
+
+        const hideDeleteConfirm = () => {
+          cleanupDeleteTimers();
+          try { if (deleteConfirm) deleteConfirm.classList.add('hidden'); } catch {}
+        };
+
+        const showDeleteConfirm = () => {
+          try { if (deleteConfirm) deleteConfirm.classList.remove('hidden'); } catch {}
+        };
+
+        const performDelete = async () => {
+          const storyId = getCurrentStoryId();
+          if (!storyId) {
+            showMiniToast('No story selected.');
+            hideDeleteConfirm();
+            return;
+          }
+
+          cleanupDeleteTimers();
+
+          let res = null;
+          try {
+            res = await fetch(`/profile/story/${storyId}/delete/`, {
+              method: 'POST',
+              headers: {
+                'Accept': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+              },
+              credentials: 'same-origin',
+            });
+          } catch {
+            res = null;
+          }
+
+          if (!res) {
+            showMiniToast('Network error.');
+            hideDeleteConfirm();
+            return;
+          }
+
+          if (res.status === 403) {
+            showMiniToast('Not allowed.');
+            hideDeleteConfirm();
+            return;
+          }
+
+          if (!res.ok) {
+            showMiniToast('Delete failed.');
+            hideDeleteConfirm();
+            return;
+          }
+
+          showMiniToast('Story deleted.');
+
+          // Refresh stories after delete.
+          try {
+            const u = storiesUrl || buildUrl(username);
+            if (u) {
+              const r2 = await fetch(u, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                credentials: 'same-origin',
+              });
+              if (r2 && r2.ok) {
+                const d2 = await r2.json();
+                const nextStories = d2 && d2.stories;
+                if (Array.isArray(nextStories) && nextStories.length) {
+                  openViewer({
+                    username: d2 && d2.username,
+                    durationSeconds: d2 && d2.duration_seconds,
+                    stories: nextStories,
+                    canDelete: d2 && d2.can_delete,
+                    storiesUrl: u,
+                  });
+                  return;
+                }
+              }
+            }
+          } catch {
+            // ignore
+          }
+
+          // No stories left or refresh failed: close viewer.
+          hideDeleteConfirm();
+          close();
+        };
+
+        const startDeleteCountdown = () => {
+          cleanupDeleteTimers();
+
+          const storyId = getCurrentStoryId();
+          if (!storyId) {
+            showMiniToast('Only stories can be deleted.');
+            return;
+          }
+
+          let remaining = 5;
+          showDeleteConfirm();
+
+          const update = () => {
+            try {
+              if (deleteCountdown) deleteCountdown.textContent = `Deleting in ${remaining}s…`;
+            } catch {}
+          };
+
+          update();
+
+          deleteInterval = window.setInterval(() => {
+            remaining = Math.max(0, remaining - 1);
+            update();
+          }, 1000);
+
+          deleteTimer = window.setTimeout(() => {
+            performDelete();
+          }, 5000);
+        };
+
+        const show = (i) => {
+          const nextIndex = Math.max(0, Math.min(items.length - 1, i));
+          index = nextIndex;
+          startedAt = Date.now();
+
+          const item = items[index];
+          if (item && item.type === 'ad') {
+            try {
+              if (img) {
+                img.classList.add('hidden');
+                img.removeAttribute('src');
+              }
+              if (ad) ad.classList.remove('hidden');
+            } catch {}
+          } else {
+            try {
+              if (ad) ad.classList.add('hidden');
+              if (img) {
+                img.classList.remove('hidden');
+                img.src = item && item.story ? item.story.image_url : (item ? item.image_url : '');
+              }
+            } catch {}
+          }
+          setSegment(index, 0);
+
+          updateNavUi();
+
+          // Preload next image.
+          try {
+            const n = items[index + 1];
+            if (n && n.type !== 'ad') {
+              const url = (n.story && n.story.image_url) ? n.story.image_url : n.image_url;
+              if (url) preload(url);
+            }
+          } catch {}
+
+          cleanupTimers();
+          tickTimer = window.setInterval(() => {
+            const elapsed = Date.now() - startedAt;
+            const pct = (elapsed / getItemDurationMs(item)) * 100;
+            setSegment(index, pct);
+            if (elapsed >= getItemDurationMs(item)) {
+              goNext();
+            }
+          }, 50);
+        };
+
+        const goPrev = () => {
+          if (index <= 0) {
+            show(0);
+            return;
+          }
+          show(index - 1);
+        };
+
+        const goNext = () => {
+          if (index >= items.length - 1) {
+            close();
+            return;
+          }
+          show(index + 1);
+        };
+
+        const onKeyDown = (e) => {
+          const k = String(e && e.key || '');
+          if (k === 'Escape') {
+            try {
+              if (deleteConfirm && !deleteConfirm.classList.contains('hidden')) {
+                hideDeleteConfirm();
+                return;
+              }
+            } catch {}
+            try {
+              if (menuPanel && !menuPanel.classList.contains('hidden')) {
+                hideMenu();
+                return;
+              }
+            } catch {}
+            close();
+            return;
+          }
+          if (k === 'ArrowLeft') { goPrev(); return; }
+          if (k === 'ArrowRight') { goNext(); return; }
+        };
+
+        if (closeBtn) closeBtn.addEventListener('click', close);
+        if (menuBtn) {
+          // Hide menu entirely unless permitted.
+          try { menuBtn.classList.toggle('hidden', !canDelete); } catch {}
+          menuBtn.addEventListener('click', (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            if (!canDelete) return;
+            toggleMenu();
+          });
+        }
+        if (deleteBtn) {
+          deleteBtn.addEventListener('click', (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            hideMenu();
+            if (!canDelete) return;
+
+            // Only allow delete when the current item is a real story.
+            const storyId = getCurrentStoryId();
+            if (!storyId) {
+              showMiniToast('Only stories can be deleted.');
+              return;
+            }
+            startDeleteCountdown();
+          });
+        }
+        if (deleteCancel) {
+          deleteCancel.addEventListener('click', (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            hideDeleteConfirm();
+          });
+        }
+        if (deleteNow) {
+          deleteNow.addEventListener('click', (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            performDelete();
+          });
+        }
+        if (prevBtn) prevBtn.addEventListener('click', goPrev);
+        if (nextBtn) nextBtn.addEventListener('click', goNext);
+
+        // Click outside image closes.
+        root.addEventListener('click', (e) => {
+          try {
+            if (menuPanel && !menuPanel.classList.contains('hidden')) {
+              // Clicking anywhere outside the menu closes it.
+              const inMenu = (e.target && e.target.closest) ? e.target.closest('[data-story-menu-panel]') : null;
+              const inBtn = (e.target && e.target.closest) ? e.target.closest('[data-story-menu-btn]') : null;
+              if (!inMenu && !inBtn) hideMenu();
+            }
+            if (e.target === root) close();
+          } catch {}
+        });
+
+        window.addEventListener('keydown', onKeyDown);
+        show(0);
+      };
+
+      // Initial pass (page load)
+      updateStoryRings(document);
+
+      // HTMX swaps (e.g., profile modal)
+      try {
+        if (!document.body.dataset.vixoStoryRingBound) {
+          document.body.dataset.vixoStoryRingBound = '1';
+          document.body.addEventListener('htmx:afterSwap', (e) => {
+            try {
+              const target = e && e.detail && e.detail.target;
+              if (!target) return;
+              updateStoryRings(target);
+            } catch {
+              // ignore
+            }
+          });
+        }
+      } catch {
+        // ignore
+      }
+
+      document.addEventListener('click', async (e) => {
+        try {
+          const t = e.target;
+          const el = t && t.closest ? t.closest('[data-story-username]') : null;
+          if (!el) return;
+          const username = el.getAttribute('data-story-username') || '';
+          const pageVersion = el.getAttribute('data-story-version') || '';
+          const url = buildUrl(username);
+          if (!url) return;
+          try { e.preventDefault(); } catch {}
+          try { e.stopPropagation(); } catch {}
+
+          const res = await fetch(url, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+            credentials: 'same-origin',
+          });
+
+          if (res.status === 403) {
+            try { alert('Private account.'); } catch {}
+            return;
+          }
+
+          if (!res.ok) {
+            try { alert('Failed to load stories.'); } catch {}
+            return;
+          }
+
+          const data = await res.json();
+
+          // Mark as seen once stories successfully load.
+          try {
+            const computed = computeVersionFromStories(data && data.stories);
+            const v = String(pageVersion || computed || '').trim();
+            if (v) setSeenVersion(username, v);
+            updateStoryRings(document);
+          } catch {
+            // ignore
+          }
+
+          openViewer({
+            username: data && data.username,
+            durationSeconds: data && data.duration_seconds,
+            stories: data && data.stories,
+            canDelete: data && data.can_delete,
+            storiesUrl: url,
+          });
+        } catch {
+          // ignore
+        }
+      }, true);
+    } catch {
+      // ignore
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     const baseCfg = readJsonScript('vixo-config') || {};
 
@@ -2314,6 +3098,8 @@
     initHtmxConfirmBridge();
     initGlobalAnnouncementSocket();
     initMaintenancePolling(baseCfg);
+    initChatViewportSizing();
+    initStoriesViewer();
 
     document.body.addEventListener('htmx:configRequest', (event) => {
       event.detail.headers['X-CSRFToken'] = getCookie('csrftoken');

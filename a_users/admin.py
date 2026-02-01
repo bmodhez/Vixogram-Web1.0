@@ -8,7 +8,7 @@ except Exception:  # pragma: no cover
 	async_to_sync = None
 	get_channel_layer = None
 
-from .models import BetaFeature, Profile, SupportEnquiry, UserReport
+from .models import BetaFeature, Profile, Story, SupportEnquiry, UserReport
 
 try:
 	from a_rtchat.models import Notification
@@ -112,3 +112,10 @@ class SupportEnquiryAdmin(admin.ModelAdmin):
 			)
 		except Exception:
 			pass
+
+
+@admin.register(Story)
+class StoryAdmin(admin.ModelAdmin):
+	list_display = ('id', 'user', 'created_at', 'expires_at')
+	list_filter = ('created_at',)
+	search_fields = ('user__username',)

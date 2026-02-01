@@ -2787,6 +2787,28 @@ def admin_users_view(request):
     if missing:
         Profile.objects.bulk_create(missing, ignore_conflicts=True)
 
+    # Attach recent devices (best-effort) for staff visibility.
+    try:
+        from a_users.models import UserDevice
+
+        device_rows = (
+            UserDevice.objects
+            .filter(user_id__in=user_ids)
+            .order_by('user_id', '-last_seen')
+            .only('user_id', 'device_label', 'user_agent', 'last_seen')
+        )
+        devices_by_user: dict[int, list[UserDevice]] = {}
+        for d in device_rows:
+            lst = devices_by_user.setdefault(int(d.user_id), [])
+            if len(lst) < 3:
+                lst.append(d)
+
+        for u in page_obj.object_list:
+            setattr(u, 'recent_devices', devices_by_user.get(int(u.id), []))
+    except Exception:
+        for u in page_obj.object_list:
+            setattr(u, 'recent_devices', [])
+
     return render(request, 'a_rtchat/admin_users.html', {
         'q': q,
         'page_obj': page_obj,

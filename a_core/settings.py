@@ -312,6 +312,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'a_users.middleware.UserDeviceTrackingMiddleware',
     'a_core.middleware.MaintenanceModeMiddleware',
     'a_users.middleware.ActiveUserRequiredMiddleware',
     'a_users.middleware.FounderClubEnforcementMiddleware',
@@ -351,6 +352,7 @@ TEMPLATES = [
                 'a_core.context_processors.welcome_popup',
                 'a_core.context_processors.site_stats',
                 'a_users.context_processors.notifications_badge',
+                'a_users.context_processors.story_upload_gate',
                 'a_rtchat.context_processors.admin_reports_badge',
                 'a_rtchat.context_processors.mobile_ads_config',
                 'a_rtchat.context_processors.global_announcement',
@@ -655,7 +657,7 @@ LOGIN_REDIRECT_URL = '/'
 
 # Email settings
 # - If EMAIL_HOST_USER + EMAIL_HOST_PASSWORD are set, send real emails via SMTP.
-# - Otherwise, fall back to console backend (emails printed in runserver terminal).
+# - Otherwise, avoid printing emails in the runserver terminal.
 # You can override everything via environment variables.
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', '').strip() or None
 
@@ -670,11 +672,26 @@ EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '8') or '8')
 # Avoid empty From: headers.
 DEFAULT_FROM_EMAIL = (os.getenv('DEFAULT_FROM_EMAIL', '') or '').strip() or (EMAIL_HOST_USER or 'no-reply@localhost')
 
+# When using file-based email backend, store messages here (so they don't spam the console).
+EMAIL_FILE_PATH = (os.getenv('EMAIL_FILE_PATH', '') or '').strip() or str(BASE_DIR / 'tmp_emails')
+
 if not EMAIL_BACKEND:
     if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
         EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
     else:
-        EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+        # Dev default: keep emails available without printing them to the terminal.
+        # Production safety: if SMTP isn't configured, drop emails instead of leaking them to logs.
+        if ENVIRONMENT == 'development':
+            EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
+        else:
+            EMAIL_BACKEND = 'django.core.mail.backends.dummy.EmailBackend'
+
+# Ensure the folder exists for file-based email backend.
+if EMAIL_BACKEND == 'django.core.mail.backends.filebased.EmailBackend':
+    try:
+        os.makedirs(EMAIL_FILE_PATH, exist_ok=True)
+    except Exception:
+        pass
 
 # django-allauth (v65+) settings
 # Allow login using either email or username.

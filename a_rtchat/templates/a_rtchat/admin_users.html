@@ -40,6 +40,7 @@
           <tr class="text-left text-gray-300">
             <th class="px-4 py-3">User</th>
             <th class="px-4 py-3">Email</th>
+            <th class="px-4 py-3">Devices</th>
             <th class="px-4 py-3">Role</th>
             <th class="px-4 py-3">Chat</th>
             <th class="px-4 py-3">Action</th>
@@ -50,6 +51,20 @@
             <tr class="bg-gray-900/40 text-gray-200">
               <td class="px-4 py-3 font-semibold">{{ u.username }}</td>
               <td class="px-4 py-3 text-gray-300">{{ u.email|default:'—' }}</td>
+              <td class="px-4 py-3">
+                {% if u.recent_devices and u.recent_devices|length > 0 %}
+                  <div class="space-y-1">
+                    {% for d in u.recent_devices %}
+                      <div class="text-xs text-gray-300" title="{{ d.user_agent|default:'' }}">
+                        <span class="font-semibold text-gray-200">{{ d.device_label|default:'Unknown device' }}</span>
+                        <span class="text-gray-500">• {{ d.last_seen|date:"Y-m-d H:i" }}</span>
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span class="text-xs text-gray-500">—</span>
+                {% endif %}
+              </td>
               <td class="px-4 py-3">
                 {% if u.is_superuser %}
                   <span class="text-amber-400 font-semibold">Superuser</span>
@@ -89,7 +104,7 @@
             </tr>
           {% empty %}
             <tr class="bg-gray-900/40 text-gray-300">
-              <td class="px-4 py-6" colspan="5">No users found.</td>
+              <td class="px-4 py-6" colspan="6">No users found.</td>
             </tr>
           {% endfor %}
         </tbody>

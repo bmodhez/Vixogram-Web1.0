@@ -340,14 +340,59 @@ html { scrollbar-width: thin; scrollbar-color: rgb(16 185 129) transparent; }
   -ms-overflow-style: none !important; /* IE/Edge */
 }
 
-/* Chat page: allow page-level scroll so the global footer + footer ads are reachable.
-  Keep the PAGE scrollbar visible (like profile page). Only chat panes hide scrollbars. */
+/* Chat page: allow page-level scroll so the footer + footer ads are reachable,
+   but keep the scrollbar invisible (avoid the green bar at far right). */
 body.vixo-chat-page {
   min-height: 100dvh;
   overflow-y: auto !important;
   overflow-x: hidden !important;
   overscroll-behavior-x: none;
   overscroll-behavior-y: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/old Edge */
+}
+
+body.vixo-chat-page::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+html.vixo-chat-page {
+  min-height: 100dvh;
+  overflow-x: hidden !important;
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/old Edge */
+}
+
+html.vixo-chat-page::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Some browsers show an overlay scrollbar thumb briefly on programmatic scroll.
+   Our global scrollbar theme is green, so force ALL scrollbars to be invisible on chat page. */
+html.vixo-chat-page {
+  scrollbar-color: transparent transparent; /* Firefox */
+}
+
+html.vixo-chat-page * {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/old Edge */
+}
+
+html.vixo-chat-page *::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+html.vixo-chat-page *::-webkit-scrollbar-thumb,
+html.vixo-chat-page *::-webkit-scrollbar-track {
+  background: transparent !important;
 }
 
 /* Chat composer: keep it visible on mobile browser UI/safe areas.
@@ -355,6 +400,15 @@ body.vixo-chat-page {
 #chat_composer_bar {
   bottom: env(safe-area-inset-bottom);
   padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+}
+
+/* Mobile chat: size the chat panels to the real header height (navbar + announcement banner).
+   This prevents the composer from being pushed off-screen when the header is taller than our old hard-coded offset. */
+@media (max-width: 639px) {
+  html.vixo-chat-page #chat_window,
+  html.vixo-chat-page #chat_sidebar_panel {
+    height: calc(100dvh - var(--vixo-chat-top-offset, 96px)) !important;
+  }
 }
 
 @media (max-width: 639px) {

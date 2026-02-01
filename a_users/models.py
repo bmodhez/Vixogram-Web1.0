@@ -2,8 +2,12 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.db.models import Q
 from django.conf import settings
+from django.utils import timezone
+
+from datetime import timedelta
 
 import base64
+import hashlib
 
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
@@ -69,6 +73,51 @@ class Profile(models.Model):
             return None
 
 
+class Story(models.Model):
+    """Image-only stories.
+
+    Notes:
+    - Only images are supported (no videos).
+    - Viewer autoplay duration is fixed at 10 seconds per story.
+    - Stories expire after 24 hours by default.
+    """
+
+    DURATION_SECONDS = 10
+    TTL_HOURS = 24
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='stories')
+    image = models.ImageField(upload_to='stories/', null=False, blank=False)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at'], name='story_user_created_idx'),
+            models.Index(fields=['user', 'expires_at'], name='story_user_expires_idx'),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            try:
+                self.expires_at = timezone.now() + timedelta(hours=self.TTL_HOURS)
+            except Exception:
+                self.expires_at = None
+        return super().save(*args, **kwargs)
+
+    def delete(self, using=None, keep_parents=False):
+        # Ensure the underlying file is removed from storage when the DB row is deleted.
+        try:
+            if getattr(self, 'image', None):
+                self.image.delete(save=False)
+        except Exception:
+            pass
+        return super().delete(using=using, keep_parents=keep_parents)
+
+    def __str__(self):
+        return f"Story({self.id}) u={self.user_id}"
+
+
 _DEFAULT_AVATAR_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128' role='img' aria-label='User avatar'>
 <circle cx='64' cy='64' r='60' fill='#4B5563'/>
 <circle cx='64' cy='52' r='20' fill='#F3F4F6'/>
@@ -90,6 +139,39 @@ class FCMToken(models.Model):
 
     def __str__(self):
         return f"FCMToken(user={self.user_id})"
+
+
+class UserDevice(models.Model):
+    """Tracks devices used by a user (best-effort) based on User-Agent.
+
+    Notes:
+    - This is not a security boundary; it's for staff visibility.
+    - Multiple physical devices may share the same User-Agent and will be grouped.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='devices')
+    ua_hash = models.CharField(max_length=64, db_index=True)
+    user_agent = models.CharField(max_length=300, blank=True, default='')
+    device_label = models.CharField(max_length=120, blank=True, default='')
+    first_seen = models.DateTimeField(auto_now_add=True, db_index=True)
+    last_seen = models.DateTimeField(auto_now=True, db_index=True)
+    last_ip = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'ua_hash'], name='uniq_user_device_uahash'),
+        ]
+        indexes = [
+            models.Index(fields=['user', '-last_seen'], name='ud_user_last_seen_idx'),
+        ]
+
+    @staticmethod
+    def hash_user_agent(user_agent: str) -> str:
+        raw = (user_agent or '').strip()[:300]
+        return hashlib.sha256(raw.encode('utf-8', errors='ignore')).hexdigest()
+
+    def __str__(self):
+        return f"UserDevice(user={self.user_id}, last_seen={self.last_seen})"
 
 
 class Follow(models.Model):
@@ -276,6 +358,11 @@ class BetaFeature(models.Model):
             return True
         if not user or not getattr(user, 'is_authenticated', False):
             return False
+        try:
+            if bool(getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False)):
+                return True
+        except Exception:
+            pass
         try:
             return bool(getattr(getattr(user, 'profile', None), 'is_founder_club', False))
         except Exception:

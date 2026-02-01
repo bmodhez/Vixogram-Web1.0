@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from django.conf import settings
 from .models import Profile
+from .models import Story
 from .models import UserReport
 from .models import SupportEnquiry
 import re
@@ -213,3 +214,37 @@ class SupportEnquiryForm(forms.ModelForm):
                 }
             ),
         }
+
+
+class StoryForm(forms.ModelForm):
+    class Meta:
+        model = Story
+        fields = ['image']
+        widgets = {
+            'image': forms.FileInput(attrs={
+                'id': 'story_image_input',
+                'class': 'hidden',
+                'accept': 'image/*',
+            }),
+        }
+
+    def clean_image(self):
+        f = self.cleaned_data.get('image')
+        if not f:
+            raise forms.ValidationError('Please choose an image.')
+
+        # Basic content-type check.
+        ct = getattr(f, 'content_type', '') or ''
+        if ct and not str(ct).lower().startswith('image/'):
+            raise forms.ValidationError('Only images are allowed for stories.')
+
+        # Simple size limit to prevent abuse (5MB).
+        try:
+            if hasattr(f, 'size') and int(f.size) > 5 * 1024 * 1024:
+                raise forms.ValidationError('Story image must be under 5MB.')
+        except forms.ValidationError:
+            raise
+        except Exception:
+            pass
+
+        return f

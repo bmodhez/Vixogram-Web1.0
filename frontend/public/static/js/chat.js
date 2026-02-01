@@ -689,7 +689,6 @@
                         const nativeEmoji = (emoji && emoji.native) ? emoji.native : '';
                         if (!nativeEmoji) return;
                         insertAtCursor(getActiveInput(), nativeEmoji);
-                        close();
                     },
                 });
 
@@ -719,7 +718,6 @@
                 b.className = 'h-9 w-9 rounded-lg hover:bg-gray-800/60';
                 b.addEventListener('click', () => {
                     insertAtCursor(getActiveInput(), em);
-                    close();
                 });
                 fallback.appendChild(b);
             });

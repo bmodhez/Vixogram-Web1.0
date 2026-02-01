@@ -4,6 +4,8 @@ from .views import *
 
 urlpatterns = [
     path('', profile_view, name='profile'),
+    path('story/add/', story_add_view, name='story-add'),
+    path('story/<int:story_id>/delete/', story_delete_view, name='story-delete'),
     path('config/', profile_config_view, name='profile-config-self'),
     path('edit/', profile_edit_view, name="profile-edit"),
     path('settings/', profile_settings_view, name="profile-settings"),
@@ -14,6 +16,7 @@ urlpatterns = [
     path('u/<username>/following/', profile_following_partial_view, name='profile-following'),
     path('u/<username>/report/', report_user_view, name='report-user'),
     path('u/<username>/follow/', follow_toggle_view, name='follow-toggle'),
+    path('u/<username>/stories/', user_stories_json_view, name='user-stories'),
     path('u/<username>/remove-follower/', remove_follower_view, name='remove-follower'),
     path('notifications/dropdown/', notifications_dropdown_view, name='notifications-dropdown'),
     path('notifications/<int:notif_id>/read/', notifications_mark_read_view, name='notifications-mark-read'),

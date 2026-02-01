@@ -14,13 +14,16 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css" />
 
     <script src="{% static 'js/vixogram.js' %}"></script>
     <script src="{% static 'js/mobile_ads.js' %}"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
+    <script src="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.js" defer></script>
     <script src="{% static 'js/profile.js' %}"></script>
+    <script src="{% static 'js/story_cropper.js' %}" defer></script>
 </head>
 <body class="min-h-screen flex flex-col text-white antialiased tracking-tight bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 {% block body_class %}{% endblock %}{% if request.resolver_match and request.resolver_match.url_name|default:''|slice:':8' == 'account_' %} vixo-auth-page{% endif %}">
     <audio id="notif_sound" preload="auto" class="hidden" src="{% static 'notification.mp3' %}"></audio>
@@ -44,43 +47,6 @@
 
             {% if user.is_authenticated %}
                 <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-                    {% if CONTACT_EMAIL or CONTACT_INSTAGRAM_URL %}
-                        <div class="relative">
-                            <button
-                                type="button"
-                                id="contact_btn"
-                                class="relative text-xs sm:text-sm text-gray-300 hover:text-white transition-all duration-200 ease-out px-2.5 sm:px-3 py-2 rounded-lg hover:bg-gray-800 hover:-translate-y-0.5 active:translate-y-0"
-                                aria-label="Contact"
-                                aria-haspopup="menu"
-                                aria-expanded="false"
-                            >
-                                <span class="inline-flex items-center gap-2">
-                                    <span class="text-base" aria-hidden="true">✉️</span>
-                                    <span class="hidden sm:inline">Contact</span>
-                                </span>
-                            </button>
-
-                            <div id="contact_dropdown" class="hidden fixed left-1/2 -translate-x-1/2 top-20 w-[min(20rem,calc(100vw-2rem))] sm:absolute sm:left-auto sm:translate-x-0 sm:top-auto sm:right-0 sm:mt-2 rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl shadow-black/30 overflow-hidden" role="menu">
-                                <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
-                                    <div class="text-sm font-semibold text-white">Contact</div>
-                                    <button type="button" id="contact_close" class="text-gray-300 hover:text-white transition-transform duration-200 ease-out hover:scale-110 active:scale-100">×</button>
-                                </div>
-                                <div class="px-4 py-4 space-y-2">
-                                    {% if CONTACT_EMAIL %}
-                                        <a href="mailto:{{ CONTACT_EMAIL }}" class="block px-3 py-2 rounded-xl text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
-                                            Email: <span class="text-emerald-300 font-semibold">{{ CONTACT_EMAIL }}</span>
-                                        </a>
-                                    {% endif %}
-                                    {% if CONTACT_INSTAGRAM_URL %}
-                                        <a href="{{ CONTACT_INSTAGRAM_URL }}" target="_blank" rel="noopener noreferrer" class="block px-3 py-2 rounded-xl text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
-                                            Instagram
-                                        </a>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                    {% endif %}
-
                     <a
                         href="{% url 'invite-friends' %}"
                         class="relative text-xs sm:text-sm text-gray-300 hover:text-white transition-all duration-200 ease-out px-2.5 sm:px-3 py-2 rounded-lg hover:bg-gray-800 hover:-translate-y-0.5 active:translate-y-0"
@@ -122,7 +88,7 @@
                             <span id="nav_notif_badge" class="hidden absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-emerald-500 text-[10px] leading-5 text-center font-bold text-white"></span>
                         </button>
 
-                        <div id="notif_dropdown" class="hidden fixed left-1/2 -translate-x-1/2 top-20 w-[min(22rem,calc(100vw-2rem))] sm:absolute sm:left-auto sm:translate-x-0 sm:top-auto sm:right-0 sm:mt-2 rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl shadow-black/30 overflow-hidden" role="menu">
+                        <div id="notif_dropdown" class="hidden fixed left-1/2 -translate-x-1/2 top-24 w-[min(22rem,calc(100vw-2rem))] sm:absolute sm:left-auto sm:translate-x-0 sm:top-auto sm:right-0 sm:mt-2 rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl shadow-black/30 overflow-hidden" role="menu">
                             <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
                                 <div class="text-sm font-semibold text-white">Notifications</div>
                                 <button type="button" id="notif_close" class="text-gray-300 hover:text-white transition-transform duration-200 ease-out hover:scale-110 active:scale-100">×</button>
@@ -155,10 +121,35 @@
                             <span class="text-indigo-100/90">users</span>
                         </div>
 
-                        <div id="user_menu" class="hidden fixed left-1/2 -translate-x-1/2 top-20 w-[min(18rem,calc(100vw-2rem))] sm:absolute sm:left-auto sm:translate-x-0 sm:top-full sm:right-0 sm:mt-2 rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl shadow-black/30 max-h-[calc(100vh-7rem)] overflow-x-hidden overflow-y-auto" role="menu">
+                        <div id="user_menu" class="hidden fixed left-1/2 -translate-x-1/2 top-24 w-[min(18rem,calc(100vw-2rem))] sm:absolute sm:left-auto sm:translate-x-0 sm:top-full sm:right-0 sm:mt-2 rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl shadow-black/30 max-h-[calc(100vh-8rem)] overflow-x-hidden overflow-y-auto" role="menu">
                             <a href="{% url 'profile' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
                                 View profile
                             </a>
+                            {% if CAN_ADD_STORY %}
+                                <a
+                                    href="{% url 'story-add' %}"
+                                    hx-get="{% url 'story-add' %}?modal=1"
+                                    hx-target="#global_modal_root"
+                                    hx-swap="innerHTML"
+                                    hx-push-url="false"
+                                    class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0"
+                                >
+                                    Add Story
+                                </a>
+                            {% else %}
+                                <button
+                                    type="button"
+                                    class="w-full text-left px-4 py-3 text-sm text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 transition-all duration-200 ease-out flex items-center justify-between gap-3"
+                                    title="Minimum requirements not met to add a story. Need {{ STORY_REQUIRED_POINTS|default:50 }} points ({{ STORY_REQUIRED_INVITES|default:5 }} verified invites)."
+                                    aria-label="Add Story (locked)"
+                                    onclick="try { document.body.dispatchEvent(new CustomEvent('vixo:toast', { detail: { message: 'Minimum requirements not met to add a story. Need {{ STORY_REQUIRED_POINTS|default:50 }} points ({{ STORY_REQUIRED_INVITES|default:5 }} verified invites). You have {{ STORY_POINTS|default:0 }} points and {{ STORY_VERIFIED_INVITES|default:0 }} invites.', kind: 'error', durationMs: 4500 } })); } catch (e) {}"
+                                >
+                                    <span>Add Story</span>
+                                    <span class="inline-flex items-center gap-1 text-xs font-semibold text-gray-500" aria-hidden="true">
+                                        <span>🔒</span>
+                                    </span>
+                                </button>
+                            {% endif %}
                             <a href="{% url 'contact-support' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
                                 Contact Support
                             </a>
@@ -181,38 +172,6 @@
                 </div>
             {% else %}
                 <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-                    {% if CONTACT_EMAIL or CONTACT_INSTAGRAM_URL %}
-                        <div class="relative">
-                            <button
-                                type="button"
-                                id="contact_btn"
-                                class="text-xs sm:text-sm text-gray-200 hover:text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-800 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0"
-                                aria-label="Contact"
-                                aria-haspopup="menu"
-                                aria-expanded="false"
-                            >
-                                Contact
-                            </button>
-                            <div id="contact_dropdown" class="hidden absolute right-0 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl shadow-black/30 overflow-hidden" role="menu">
-                                <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
-                                    <div class="text-sm font-semibold text-white">Contact</div>
-                                    <button type="button" id="contact_close" class="text-gray-300 hover:text-white transition-transform duration-200 ease-out hover:scale-110 active:scale-100">×</button>
-                                </div>
-                                <div class="px-4 py-4 space-y-2">
-                                    {% if CONTACT_EMAIL %}
-                                        <a href="mailto:{{ CONTACT_EMAIL }}" class="block px-3 py-2 rounded-xl text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
-                                            Email: <span class="text-emerald-300 font-semibold">{{ CONTACT_EMAIL }}</span>
-                                        </a>
-                                    {% endif %}
-                                    {% if CONTACT_INSTAGRAM_URL %}
-                                        <a href="{{ CONTACT_INSTAGRAM_URL }}" target="_blank" rel="noopener noreferrer" class="block px-3 py-2 rounded-xl text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
-                                            Instagram
-                                        </a>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                    {% endif %}
                     <a href="{% url 'account_login' %}" class="text-xs sm:text-sm text-gray-200 hover:text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-800 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
                         Login
                     </a>
@@ -276,7 +235,7 @@
 
     {% with urlname=request.resolver_match.url_name|default:'' %}
     <div class="w-full flex-1">
-        <div class="w-full {% if urlname|slice:':8' == 'account_' %}px-0 py-0{% else %}px-4 sm:px-6 py-5 sm:py-6{% endif %}">
+        <div class="w-full {% if urlname|slice:':8' == 'account_' %}px-0 py-0{% elif urlname == 'home' or urlname == 'chatroom' or urlname == 'start-chat' or urlname == 'chat-call' %}px-0 sm:px-6 py-0 sm:py-6{% else %}px-4 sm:px-6 py-5 sm:py-6{% endif %}">
             <div class="vixo-site-grid grid grid-cols-1 {% if urlname|slice:':8' != 'account_' %}{% if user.is_authenticated and user.profile.is_founder_club %}{% else %}xl:grid-cols-[max-content_minmax(0,80rem)_max-content]{% endif %}{% endif %} gap-3 items-start justify-center">
                 <!-- Side ad slots (in-flow so they never overlap content) -->
                 {% if urlname|slice:':8' != 'account_' %}

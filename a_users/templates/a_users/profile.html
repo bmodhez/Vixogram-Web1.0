@@ -28,8 +28,22 @@
 
             <div class="px-8 pb-8 pt-2">
                 <div class="flex justify-center">
-                    <img class="relative z-10 w-28 h-28 rounded-full object-cover ring-4 ring-black/40 border border-white/20"
-                         src="{{ profile.avatar }}" alt="{{ profile.user.username }}">
+                    {% if has_active_stories %}
+                        <button
+                            type="button"
+                            class="relative z-10 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/80"
+                            data-story-username="{{ profile.user.username }}"
+                            data-story-version="{{ active_story_version|default:'' }}"
+                            aria-label="View @{{ profile.user.username }} stories"
+                        >
+                            <span data-story-ring class="pointer-events-none absolute -inset-1 rounded-full border-2 border-dotted border-sky-400/90"></span>
+                            <img class="relative w-28 h-28 rounded-full object-cover ring-4 ring-black/40 border border-white/20"
+                                 src="{{ profile.avatar }}" alt="{{ profile.user.username }}">
+                        </button>
+                    {% else %}
+                        <img class="relative z-10 w-28 h-28 rounded-full object-cover ring-4 ring-black/40 border border-white/20"
+                             src="{{ profile.avatar }}" alt="{{ profile.user.username }}">
+                    {% endif %}
                 </div>
 
                 <div class="text-center mt-4">

@@ -6,7 +6,7 @@
 
 {% block content %}
 <wrapper class="block w-full min-w-0 max-w-full overflow-x-hidden">
-    <div class="flex flex-col lg:flex-row lg:items-stretch gap-4 lg:gap-6 min-w-0 max-w-full">
+    <div class="flex flex-col lg:flex-row lg:items-stretch gap-0 sm:gap-4 lg:gap-6 min-w-0 max-w-full">
 
         <aside id="chat_sidebar" class="hidden lg:block w-full lg:w-72 shrink-0">
             <div id="chat_sidebar_panel" data-chat-list class="vixo-chat-surface w-full max-w-md lg:max-w-none lg:w-72 h-[calc(100dvh-6rem)] sm:h-[calc(100dvh-6.5rem)] min-h-0 bg-gray-800/70 border border-gray-800 rounded-2xl shadow-2xl p-4 overflow-y-auto">
@@ -223,9 +223,9 @@
             </div>
         </aside>
 
-        <div id="chat_window" class="vixo-chat-surface w-full min-w-0 max-w-full h-[calc(100dvh-6rem)] sm:h-[calc(100dvh-6.5rem)] min-h-0 flex flex-col bg-gray-900/60 border border-gray-800 rounded-2xl shadow-2xl relative p-1 grow overflow-x-hidden">
+        <div id="chat_window" class="vixo-chat-surface w-full min-w-0 max-w-full h-[calc(100dvh-6rem)] sm:h-[calc(100dvh-6.5rem)] min-h-0 flex flex-col bg-gray-900/60 border-0 sm:border border-gray-800 rounded-none sm:rounded-2xl shadow-none sm:shadow-2xl relative p-0 sm:p-1 grow overflow-x-hidden">
         
-        <div id="chat_topbar" class="vixo-chat-surface flex items-center justify-between gap-2 text-emerald-400 bg-gray-900/60 p-2 sticky top-0 z-10 border-b border-gray-800 rounded-t-2xl">
+        <div id="chat_topbar" class="vixo-chat-surface flex items-center justify-between gap-2 text-emerald-400 bg-gray-900/60 p-2 sticky top-0 z-10 border-b border-gray-800 rounded-none sm:rounded-t-2xl">
             <div class="flex items-center min-w-0 flex-1">
                 <button type="button" id="chat_sidebar_open" class="lg:hidden mr-2 inline-flex h-9 w-9 items-center justify-center rounded-lg bg-gray-800/60 hover:bg-gray-800 text-gray-100" aria-label="Open chats">
                     <span class="block w-5">
@@ -388,7 +388,7 @@
             </div>
         {% endif %}
 
-        <div id='chat_container' class="vixo-chat-bg overflow-y-auto overflow-x-hidden overscroll-x-none grow p-3 sm:p-4 vixo-chat-init-hidden">
+        <div id='chat_container' class="vixo-chat-bg overflow-y-auto overflow-x-hidden overscroll-x-none grow p-2 sm:p-4 vixo-chat-init-hidden">
             <div id="challenge_banner" class="hidden sticky top-0 z-10 mb-3 transition duration-200 ease-out opacity-0 -translate-y-1">
                 <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-50">
                     <div class="flex items-start justify-between gap-3">
@@ -464,7 +464,7 @@
             </button>
         {% endif %}
 
-        <div id="chat_composer_bar" class="vixo-chat-surface vixo-chat-composer sticky bottom-0 z-10 p-4 bg-gray-900/60 border-t border-gray-800 rounded-b-2xl">
+        <div id="chat_composer_bar" class="vixo-chat-surface vixo-chat-composer sticky bottom-0 z-10 p-3 sm:p-4 bg-gray-900/60 border-t border-gray-800 rounded-none sm:rounded-b-2xl">
             <div id="reply_bar" class="hidden mb-2 rounded-xl border border-gray-800 bg-gray-900/80 px-3 py-2">
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">

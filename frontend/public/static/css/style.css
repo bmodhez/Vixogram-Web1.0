@@ -281,13 +281,22 @@ html { scrollbar-width: thin; scrollbar-color: rgb(16 185 129) transparent; }
   -ms-overflow-style: none !important; /* IE/Edge */
 }
 
-/* Chat page: prevent a page-level scrollbar (the green bar at far right).
-   Keep scrolling inside #chat_container / #chat_sidebar_panel only. */
+/* Chat page: allow page-level scroll so the footer + footer ads are reachable,
+   but keep the scrollbar invisible (avoid the green bar at far right). */
 body.vixo-chat-page {
-  height: 100dvh;
-  overflow: hidden !important;
+  min-height: 100dvh;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   overscroll-behavior-x: none;
   overscroll-behavior-y: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/old Edge */
+}
+
+body.vixo-chat-page::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* Chat composer: keep it visible on mobile browser UI/safe areas.
@@ -297,6 +306,15 @@ body.vixo-chat-page {
   padding-bottom: calc(1rem + env(safe-area-inset-bottom));
 }
 
+/* Mobile chat: size the chat panels to the real header height (navbar + announcement banner).
+   This prevents the composer from being pushed off-screen when the header is taller than our old hard-coded offset. */
+@media (max-width: 639px) {
+  html.vixo-chat-page #chat_window,
+  html.vixo-chat-page #chat_sidebar_panel {
+    height: calc(100dvh - var(--vixo-chat-top-offset, 96px)) !important;
+  }
+}
+
 @media (max-width: 639px) {
   #chat_composer_bar {
     bottom: calc(env(safe-area-inset-bottom) + 8px);
@@ -304,8 +322,8 @@ body.vixo-chat-page {
 }
 
 html.vixo-chat-page {
-  height: 100dvh;
-  overflow: hidden !important;
+  min-height: 100dvh;
+  overflow-x: hidden !important;
   overscroll-behavior-x: none;
   overscroll-behavior-y: auto;
   scrollbar-width: none; /* Firefox */

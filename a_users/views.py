@@ -1,16 +1,30 @@
 import json
+import base64
+import re
+import uuid
+from datetime import timedelta
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.conf import settings
 from django.utils import timezone
-from .models import Profile
+from django.views.decorators.http import require_POST
+from django.db.models import Q
+
+from .models import Profile, Story
 from .forms import ProfileForm
 from .forms import ReportUserForm
 from .forms import ProfilePrivacyForm
 from .forms import SupportEnquiryForm
 from .forms import UsernameChangeForm
+from .forms import StoryForm
+
+try:
+    from .story_policy import can_user_add_story, story_upload_locked_message
+except Exception:  # pragma: no cover
+    can_user_add_story = None
+    story_upload_locked_message = None
 
 try:
     from a_rtchat.rate_limit import check_rate_limit, get_client_ip, make_key
@@ -24,6 +38,7 @@ from django.http import JsonResponse
 from django.http import Http404
 from django.urls import reverse
 from django.core import signing
+from django.core.files.base import ContentFile
 from urllib.parse import urlencode
 from django.utils.http import url_has_allowed_host_and_scheme
 
@@ -119,6 +134,34 @@ def profile_view(request, username=None):
             follow_lists_locked_reason = 'Verify your email to view followers/following.'
         elif is_private and not is_owner:
             follow_lists_locked_reason = 'This account is private. Only counts are visible.'
+    
+    # Stories visibility: private accounts -> only owner or followers.
+    has_active_stories = False
+    active_story_version = ''
+    can_view_stories = bool((not is_private) or is_owner or is_following)
+    if can_view_stories:
+        try:
+            now = timezone.now()
+            legacy_cutoff = now - timedelta(hours=int(getattr(Story, 'TTL_HOURS', 24)))
+            active_qs = (
+                Story.objects
+                .filter(user=profile_user)
+                .filter(
+                    Q(expires_at__gt=now)
+                    | Q(expires_at__isnull=True, created_at__gte=legacy_cutoff)
+                )
+            )
+            has_active_stories = active_qs.exists()
+            if has_active_stories:
+                latest = active_qs.order_by('-created_at').values_list('created_at', flat=True).first()
+                if latest:
+                    try:
+                        active_story_version = latest.isoformat()
+                    except Exception:
+                        active_story_version = str(latest)
+        except Exception:
+            has_active_stories = False
+            active_story_version = ''
         
     ctx = {
         'profile': user_profile,
@@ -133,6 +176,9 @@ def profile_view(request, username=None):
         'is_private': is_private,
         'show_presence': show_presence,
         'presence_online': visible_online,
+        'has_active_stories': bool(has_active_stories),
+        'can_view_stories': bool(can_view_stories),
+        'active_story_version': str(active_story_version or ''),
     }
 
     # JS config for realtime presence (used by static/js/profile.js)
@@ -157,6 +203,253 @@ def profile_view(request, username=None):
         return render(request, 'a_users/partials/profile_modal.html', ctx)
 
     return render(request, 'a_users/profile.html', ctx)
+
+
+def user_stories_json_view(request, username: str):
+    """Return active stories for a user.
+
+    - Images only.
+    - Viewer duration is fixed (10s/story) in JS; we return it here too.
+    - Private accounts: only owner or followers can view.
+    """
+    profile_user = get_object_or_404(User, username=username)
+    profile = getattr(profile_user, 'profile', None)
+
+    is_owner = bool(request.user.is_authenticated and request.user == profile_user)
+    is_private = bool(getattr(profile, 'is_private_account', False))
+
+    is_admin = False
+    try:
+        is_admin = bool(request.user.is_authenticated and (getattr(request.user, 'is_staff', False) or getattr(request.user, 'is_superuser', False)))
+    except Exception:
+        is_admin = False
+
+    is_following = False
+    if request.user.is_authenticated and (not is_owner):
+        try:
+            is_following = Follow.objects.filter(follower=request.user, following=profile_user).exists()
+        except Exception:
+            is_following = False
+
+    if is_private and not (is_owner or is_following or is_admin):
+        return JsonResponse({'detail': 'Private account'}, status=403)
+
+    now = timezone.now()
+
+    def cleanup_expired_for(user_obj):
+        """Best-effort cleanup so expired stories don't linger."""
+        try:
+            cutoff = now - timedelta(hours=getattr(Story, 'TTL_HOURS', 24))
+            expired_qs = (
+                Story.objects
+                .filter(user=user_obj)
+                .filter(
+                    Q(expires_at__lte=now)
+                    | Q(expires_at__isnull=True, created_at__lt=cutoff)
+                )
+            )
+            for s in expired_qs[:200]:
+                try:
+                    s.delete()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    # Auto-delete expired stories (lazy cleanup).
+    cleanup_expired_for(profile_user)
+
+    # If expires_at is missing (legacy/edge), treat it as a 24h story.
+    legacy_cutoff = now - timedelta(hours=getattr(Story, 'TTL_HOURS', 24))
+    qs = (
+        Story.objects
+        .filter(user=profile_user)
+        .filter(
+            Q(expires_at__isnull=True, created_at__gte=legacy_cutoff)
+            | Q(expires_at__gt=now)
+        )
+        .order_by('created_at')
+    )
+
+    stories = []
+    for s in qs[:40]:
+        try:
+            url = s.image.url
+        except Exception:
+            url = ''
+        if not url:
+            continue
+        stories.append({
+            'id': int(s.id),
+            'image_url': url,
+            'created_at': s.created_at.isoformat() if getattr(s, 'created_at', None) else None,
+            'expires_at': s.expires_at.isoformat() if getattr(s, 'expires_at', None) else None,
+        })
+
+    res = JsonResponse({
+        'username': profile_user.username,
+        'is_owner': bool(is_owner),
+        'can_delete': bool(is_owner or is_admin),
+        'duration_seconds': int(getattr(Story, 'DURATION_SECONDS', 10)),
+        'count': len(stories),
+        'stories': stories,
+    })
+    try:
+        res['Cache-Control'] = 'no-store'
+    except Exception:
+        pass
+    return res
+
+
+@login_required
+@require_POST
+def story_delete_view(request, story_id: int):
+    """Delete a story.
+
+    Only the story owner (or staff/superuser) may delete.
+    """
+    story = get_object_or_404(Story, id=story_id)
+
+    is_admin = False
+    try:
+        is_admin = bool(getattr(request.user, 'is_staff', False) or getattr(request.user, 'is_superuser', False))
+    except Exception:
+        is_admin = False
+
+    if story.user_id != getattr(request.user, 'id', None) and not is_admin:
+        return JsonResponse({'detail': 'Forbidden'}, status=403)
+
+    try:
+        story.delete()
+    except Exception:
+        return JsonResponse({'detail': 'Failed to delete'}, status=400)
+
+    res = JsonResponse({'ok': True})
+    try:
+        res['Cache-Control'] = 'no-store'
+    except Exception:
+        pass
+    return res
+
+
+@login_required
+def story_add_view(request):
+    """Create a new story for the current user (image-only)."""
+    now = timezone.now()
+
+    is_htmx = (request.headers.get('HX-Request') == 'true') or (request.META.get('HTTP_HX_REQUEST') == 'true')
+    is_modal = bool(request.GET.get('modal') == '1')
+
+    # Gate story uploads behind invite points.
+    try:
+        allowed = bool(can_user_add_story(request.user)) if can_user_add_story is not None else True
+    except Exception:
+        allowed = True
+
+    if not allowed:
+        msg = (
+            story_upload_locked_message(request.user)
+            if story_upload_locked_message is not None
+            else 'Minimum requirements not met to add a story.'
+        )
+
+        if is_htmx and is_modal:
+            return HttpResponse(
+                f"""
+                <div></div>
+                <script>
+                  try {{
+                    document.body.dispatchEvent(new CustomEvent('vixo:toast', {{ detail: {{ message: {json.dumps(msg)}, kind: 'error', durationMs: 4500 }} }}));
+                  }} catch (e) {{}}
+                  try {{ document.body.dispatchEvent(new Event('vixo:closeGlobalModal')); }} catch (e) {{}}
+                </script>
+                """.strip(),
+                status=403,
+            )
+
+        try:
+            messages.error(request, msg)
+        except Exception:
+            pass
+        return redirect('invite-friends')
+
+    # Opportunistic cleanup for the current user.
+    try:
+        cutoff = now - timedelta(hours=getattr(Story, 'TTL_HOURS', 24))
+        expired_qs = (
+            Story.objects
+            .filter(user=request.user)
+            .filter(
+                Q(expires_at__lte=now)
+                | Q(expires_at__isnull=True, created_at__lt=cutoff)
+            )
+        )
+        for s in expired_qs[:200]:
+            try:
+                s.delete()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    if request.method == 'POST':
+        files = request.FILES
+        # If client provided a cropped data URL, prefer it over the raw file.
+        try:
+            cropped = (request.POST.get('cropped_image_data') or '').strip()
+            if cropped.startswith('data:image/') and ';base64,' in cropped:
+                m = re.match(r'^data:(image/[a-zA-Z0-9.+-]+);base64,(.*)$', cropped)
+                if m:
+                    mime = (m.group(1) or '').lower()
+                    b64 = (m.group(2) or '').strip()
+                    raw = base64.b64decode(b64)
+                    ext = {
+                        'image/jpeg': 'jpg',
+                        'image/jpg': 'jpg',
+                        'image/png': 'png',
+                        'image/webp': 'webp',
+                    }.get(mime, 'jpg')
+                    f = ContentFile(raw, name=f"story_{uuid.uuid4().hex}.{ext}")
+                    files = request.FILES.copy()
+                    files['image'] = f
+        except Exception:
+            files = request.FILES
+
+        form = StoryForm(request.POST, files)
+        if form.is_valid():
+            story = form.save(commit=False)
+            story.user = request.user
+            story.save()
+            messages.success(request, 'Story added. It will auto-expire in 24 hours.')
+            if is_htmx and is_modal:
+                # Close modal + show toast without page navigation.
+                return HttpResponse(
+                    """
+                    <div></div>
+                    <script>
+                      try {
+                        document.body.dispatchEvent(new CustomEvent('vixo:toast', { detail: { message: 'Story added.', kind: 'success', durationMs: 2500 } }));
+                      } catch (e) {}
+                      try { document.body.dispatchEvent(new Event('vixo:closeGlobalModal')); } catch (e) {}
+                    </script>
+                    """.strip()
+                )
+            return redirect('profile')
+    else:
+        form = StoryForm()
+
+    ctx = {
+        'form': form,
+        'duration_seconds': int(getattr(Story, 'DURATION_SECONDS', 10)),
+        'ttl_hours': int(getattr(Story, 'TTL_HOURS', 24)),
+
+    }
+
+    # HTMX modal: render fragment into global modal root.
+    if is_htmx and is_modal:
+        return render(request, 'a_users/partials/story_add_modal.html', ctx)
+
+    return render(request, 'a_users/story_add.html', ctx)
 
 
 @login_required
