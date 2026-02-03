@@ -2536,7 +2536,7 @@
         root.innerHTML = `
           <div class="absolute inset-0"></div>
           <div class="relative w-full h-full flex items-center justify-center opacity-0 translate-y-1 scale-[0.985] transition-all duration-200 ease-out" data-story-panel>
-            <div class="absolute top-0 left-0 right-0 p-3 sm:p-4">
+            <div class="absolute top-0 left-0 right-0 p-3 sm:p-4 z-20">
               <div class="mx-auto max-w-md">
                 <div class="flex items-center justify-between gap-3">
                   <div class="min-w-0 text-sm font-semibold text-gray-100 truncate">@${String(username || '').replace(/</g, '')}</div>
@@ -2545,7 +2545,7 @@
                       <button type="button" data-story-menu-btn class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gray-900/60 hover:bg-gray-900/80 text-gray-100 border border-white/10" aria-label="Story menu">
                         <svg viewBox="0 0 24 24" class="h-5 w-5" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
                       </button>
-                      <div data-story-menu-panel class="hidden absolute right-0 mt-2 w-44 overflow-hidden rounded-xl border border-white/10 bg-gray-950/95 shadow-2xl shadow-black/50">
+                      <div data-story-menu-panel class="hidden absolute right-0 mt-2 w-44 overflow-hidden rounded-xl border border-white/10 bg-gray-950/95 shadow-2xl shadow-black/50 z-30">
                         <button type="button" data-story-delete class="w-full text-left px-4 py-3 text-sm text-red-200 hover:bg-red-500/10">Delete story</button>
                       </div>
                     </div>
@@ -2574,12 +2574,12 @@
               </div>
             </div>
 
-            <button type="button" data-story-prev class="absolute left-0 top-0 bottom-0 w-1/3" aria-label="Previous story">
+            <button type="button" data-story-prev class="absolute left-0 top-0 bottom-0 w-1/3 z-0" aria-label="Previous story">
               <span data-story-prev-arrow class="absolute left-3 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/35 text-white/90 border border-white/10 backdrop-blur-sm">
                 <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
               </span>
             </button>
-            <button type="button" data-story-next class="absolute right-0 top-0 bottom-0 w-1/3" aria-label="Next story">
+            <button type="button" data-story-next class="absolute right-0 top-0 bottom-0 w-1/3 z-0" aria-label="Next story">
               <span data-story-next-arrow class="absolute right-3 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/35 text-white/90 border border-white/10 backdrop-blur-sm">
                 <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
               </span>
@@ -2836,7 +2836,10 @@
         const toggleMenu = () => {
           try {
             if (!menuPanel) return;
+            const willOpen = menuPanel.classList.contains('hidden');
             menuPanel.classList.toggle('hidden');
+            if (willOpen) pausePlayback();
+            else resumePlayback();
           } catch {}
         };
 
@@ -3023,6 +3026,11 @@
         };
 
         const goPrev = () => {
+          if (Date.now() < (suppressClickUntil || 0)) return;
+          try {
+            if (menuPanel && !menuPanel.classList.contains('hidden')) return;
+            if (deleteConfirm && !deleteConfirm.classList.contains('hidden')) return;
+          } catch {}
           if (index <= 0) {
             show(0);
             return;
@@ -3031,6 +3039,11 @@
         };
 
         const goNext = () => {
+          if (Date.now() < (suppressClickUntil || 0)) return;
+          try {
+            if (menuPanel && !menuPanel.classList.contains('hidden')) return;
+            if (deleteConfirm && !deleteConfirm.classList.contains('hidden')) return;
+          } catch {}
           if (index >= items.length - 1) {
             close();
             return;
@@ -3067,6 +3080,7 @@
           menuBtn.addEventListener('click', (e) => {
             try { e.preventDefault(); } catch {}
             try { e.stopPropagation(); } catch {}
+            suppressClickUntil = Date.now() + 450;
             if (!canDelete) return;
             toggleMenu();
           });

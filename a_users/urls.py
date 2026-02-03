@@ -25,4 +25,5 @@ urlpatterns = [
     path('support/', contact_support_view, name='contact-support'),
     path('invite/', invite_friends_view, name='invite-friends'),
     path('founder-club/apply/', founder_club_apply_view, name='founder-club-apply'),
+    path('location/save/', save_location_view, name='profile-location-save'),
 ]

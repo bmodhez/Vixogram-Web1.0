@@ -314,6 +314,23 @@ def _requires_verified_email_for_chat(user) -> bool:
         return True
 
 
+@login_required
+def chat_verify_status(request):
+    """Return whether the user is verified for chat (used by verify-gate refresh)."""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'method_not_allowed'}, status=405)
+
+    verified = _has_verified_email(request.user)
+    requires = _requires_verified_email_for_chat(request.user)
+    return JsonResponse(
+        {
+            'verified': bool(verified),
+            'requires_verification': bool(requires),
+            'reason': 'Verification not yet done. Please verify your email and try again.' if requires else '',
+        }
+    )
+
+
 def _groupchat_display_name(room) -> str:
     return (getattr(room, 'groupchat_name', None) or getattr(room, 'group_name', '') or '').strip()
 

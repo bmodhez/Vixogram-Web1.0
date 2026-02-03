@@ -49,7 +49,7 @@
                     </span>
                 {% endif %}
 
-                <time class="ml-auto text-[11px] text-gray-400/70" data-dt="{{ message.created|date:'c' }}"></time>
+                {# Time moved into bubble footer (WhatsApp-like) #}
             </div>
 
             {% if message.auto_badges %}
@@ -103,6 +103,20 @@
                 {% endif %}
                 <div class="text-[14px] sm:text-[15px] leading-relaxed text-white/95{% if message.author == user %} vixo-keep-white{% endif %}">{% include 'a_rtchat/partials/message_content.html' %}</div>
 
+                <div class="mt-1 flex items-end justify-end gap-1 text-[11px] {% if message.author == user %}text-white/80{% else %}text-gray-300/80{% endif %}">
+                    {% if message.edited_at %}
+                        <span class="opacity-70">edited</span>
+                    {% endif %}
+                    <time data-dt="{{ message.created|date:'c' }}"></time>
+                    {% if message.author == user and chat_group.is_private %}
+                        {% with other_read=other_last_read_id|default:0 %}
+                            <span class="ml-0.5" data-read-tick data-message-id="{{ message.id }}">
+                                {% if other_read >= message.id %}✓✓{% else %}✓{% endif %}
+                            </span>
+                        {% endwith %}
+                    {% endif %}
+                </div>
+
                 {% if message.link_url %}
                     <a href="{{ message.link_url }}" target="_blank" rel="noopener noreferrer"
                        class="mt-3 block rounded-xl border border-gray-800 bg-gray-950/30 overflow-hidden hover:bg-gray-800/30 transition-colors">
@@ -133,18 +147,7 @@
 
         {% include 'a_rtchat/partials/reactions_bar.html' %}
         
-        <div class="mt-0.5 px-1 flex items-center gap-1">
-            {% if message.author == user and chat_group.is_private %}
-                {% with other_read=other_last_read_id|default:0 %}
-                    <span class="text-[11px] text-gray-400/70" data-read-tick data-message-id="{{ message.id }}">
-                        {% if other_read >= message.id %}✓✓{% else %}✓{% endif %}
-                    </span>
-                {% endwith %}
-            {% endif %}
-            {% if message.edited_at %}
-                <span class="text-[11px] text-gray-400/60">edited</span>
-            {% endif %}
-        </div>
+        {# Ticks/time moved into bubble footer #}
     </div>
 </div>
 {% endif %}

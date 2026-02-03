@@ -22,8 +22,11 @@ try:
 
     env = environ.Env()
     _env_path = BASE_DIR / '.env'
+    _env_alt_path = BASE_DIR / 'env'
     if _env_path.exists():
         environ.Env.read_env(str(_env_path), overwrite=True)
+    elif _env_alt_path.exists():
+        environ.Env.read_env(str(_env_alt_path), overwrite=True)
 except Exception:
     # If django-environ isn't installed or .env missing, fall back to normal os.environ
     pass
@@ -275,6 +278,8 @@ INSTALLED_APPS = [
     'allauth.account',
     'allauth.socialaccount',
     'django_htmx',
+    # Project package: included so its management commands are discoverable.
+    'a_core',
     'a_home',
     'a_users.apps.AUsersConfig',
     'a_rtchat',
@@ -725,6 +730,9 @@ ACCOUNT_UNIQUE_EMAIL = True
 # Users can manually request verification from settings.
 _email_verification_default = 'optional'
 ACCOUNT_EMAIL_VERIFICATION = (os.getenv('ACCOUNT_EMAIL_VERIFICATION', _email_verification_default) or _email_verification_default).strip().lower()
+
+# Email subjects should not be prefixed with "[example.com]".
+ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 
 # If True, suppress the automatic verification email sent right after signup.
 # Users can still trigger email verification manually from the Email settings page.

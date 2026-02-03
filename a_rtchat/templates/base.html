@@ -208,26 +208,30 @@
     {% if messages %}
         <div id="toast-container" class="fixed top-16 right-3 sm:top-20 sm:right-6 z-50 w-[min(24rem,calc(100vw-3rem))] space-y-3 pointer-events-none">
             {% for message in messages %}
-                {% with tags=message.tags %}
-                    <div
-                        class="toast pointer-events-auto flex items-start gap-3 rounded-xl border border-gray-800 bg-gray-900/90 px-4 py-3 text-sm text-gray-100 shadow-lg shadow-black/20 transition duration-200 ease-out"
-                        data-duration="4000"
-                        role="status"
-                        aria-live="polite"
-                    >
-                        <div class="mt-0.5 h-2.5 w-2.5 flex-none rounded-full {% if 'error' in tags %}bg-red-500{% elif 'success' in tags %}bg-emerald-400{% else %}bg-gray-500{% endif %}"></div>
-                        <div class="flex-1 leading-5">
-                            {{ message }}
-                        </div>
-                        <button
-                            type="button"
-                            class="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60 transition"
-                            aria-label="Dismiss"
-                            data-toast-close
-                        >
-                            <span aria-hidden="true">×</span>
-                        </button>
-                    </div>
+                {% with msg_text=message|stringformat:"s" %}
+                    {% if "confirmation email sent" not in msg_text|lower %}
+                        {% with tags=message.tags %}
+                            <div
+                                class="toast pointer-events-auto flex items-start gap-3 rounded-xl border border-gray-800 bg-gray-900/90 px-4 py-3 text-sm text-gray-100 shadow-lg shadow-black/20 transition duration-200 ease-out"
+                                data-duration="4000"
+                                role="status"
+                                aria-live="polite"
+                            >
+                                <div class="mt-0.5 h-2.5 w-2.5 flex-none rounded-full {% if 'error' in tags %}bg-red-500{% elif 'success' in tags %}bg-emerald-400{% else %}bg-gray-500{% endif %}"></div>
+                                <div class="flex-1 leading-5">
+                                    {{ message }}
+                                </div>
+                                <button
+                                    type="button"
+                                    class="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60 transition"
+                                    aria-label="Dismiss"
+                                    data-toast-close
+                                >
+                                    <span aria-hidden="true">×</span>
+                                </button>
+                            </div>
+                        {% endwith %}
+                    {% endif %}
                 {% endwith %}
             {% endfor %}
         </div>
@@ -805,6 +809,18 @@
                                 const lng = pos && pos.coords ? pos.coords.longitude : null;
                                 if (typeof lat === 'number' && typeof lng === 'number') {
                                     try { window.localStorage.setItem('vixo:last_location', JSON.stringify({ lat: lat, lng: lng, t: Date.now() })); } catch {}
+                                    try {
+                                        const csrf = (typeof getCookie === 'function') ? (getCookie('csrftoken') || '') : '';
+                                        fetch('/profile/location/save/', {
+                                            method: 'POST',
+                                            credentials: 'same-origin',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                ...(csrf ? { 'X-CSRFToken': csrf } : {}),
+                                            },
+                                            body: JSON.stringify({ lat: lat, lng: lng }),
+                                        }).catch(() => {});
+                                    } catch {}
                                 }
                             } catch {}
                             toast('Location enabled.', 'success');

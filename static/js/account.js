@@ -142,6 +142,10 @@
             // If we've already delayed once, allow the submit to proceed.
             if (form.dataset && form.dataset.vixoSubmitDelayed === '1') return;
 
+            // Preserve which button initiated the submit.
+            // allauth relies on the submit button name (e.g. action_send).
+            const submitter = e.submitter || form.__vixoLastSubmitter || null;
+
             // If another handler (e.g., reCAPTCHA v3) prevents default, don't start progress yet.
             if (e.defaultPrevented) return;
             showAuthProgress();
@@ -154,9 +158,28 @@
                 window.setTimeout(function () {
                     try {
                         if (typeof form.requestSubmit === 'function') {
-                            form.requestSubmit();
+                            // Use requestSubmit(submitter) so the button name/value is included.
+                            if (submitter && submitter.form === form) form.requestSubmit(submitter);
+                            else form.requestSubmit();
                         } else {
-                            form.submit();
+                            // Fallback: mimic submitter by injecting a hidden input.
+                            try {
+                                const name = submitter && submitter.getAttribute ? (submitter.getAttribute('name') || '') : '';
+                                const value = submitter && submitter.getAttribute ? (submitter.getAttribute('value') || '') : '';
+                                if (name) {
+                                    const tmp = document.createElement('input');
+                                    tmp.type = 'hidden';
+                                    tmp.name = name;
+                                    tmp.value = value;
+                                    form.appendChild(tmp);
+                                    form.submit();
+                                    form.removeChild(tmp);
+                                } else {
+                                    form.submit();
+                                }
+                            } catch {
+                                try { form.submit(); } catch {}
+                            }
                         }
                     } catch {
                         try { form.submit(); } catch {}
@@ -176,6 +199,7 @@
             if (!form) return;
             const action = (form.getAttribute('action') || '').toLowerCase();
             if (action && !action.includes('/accounts/')) return;
+            try { form.__vixoLastSubmitter = btn; } catch {}
             showAuthProgress();
         }, true);
     }
@@ -185,6 +209,46 @@
         const el = document.getElementById('id_email');
         if (el && !el.getAttribute('placeholder')) {
             el.setAttribute('placeholder', 'you@example.com');
+        }
+    } catch {
+        // ignore
+    }
+
+    // If add-email submit succeeded, clear the input on next load.
+    try {
+        const forms = document.querySelectorAll('form[action$="/accounts/email/"]');
+        forms.forEach((form) => {
+            form.addEventListener('submit', function (e) {
+                const submitter = e.submitter || form.__vixoLastSubmitter || null;
+                if (!submitter || !submitter.getAttribute) return;
+                const name = (submitter.getAttribute('name') || '').toLowerCase();
+                if (name === 'action_add') {
+                    sessionStorage.setItem('vixo:clear_add_email', '1');
+                } else if (name === 'action_send' || name === 'action_primary' || name === 'action_remove') {
+                    // Clear stale add-email errors/values after other actions.
+                    sessionStorage.setItem('vixo:clear_add_email_force', '1');
+                }
+            }, true);
+        });
+
+        const el = document.getElementById('id_email');
+        if (el) {
+            const form = el.closest('form');
+            const hasError = !!(form && form.querySelector('.text-red-400, .errorlist, .error'));
+            const shouldClear = sessionStorage.getItem('vixo:clear_add_email') === '1'
+                || sessionStorage.getItem('vixo:clear_add_email_force') === '1';
+            if (shouldClear) {
+                if (!hasError || sessionStorage.getItem('vixo:clear_add_email_force') === '1') {
+                    el.value = '';
+                    // Hide stale error text if present.
+                    if (form) {
+                        const err = form.querySelector('.text-red-400');
+                        if (err) err.textContent = '';
+                    }
+                }
+                sessionStorage.removeItem('vixo:clear_add_email');
+                sessionStorage.removeItem('vixo:clear_add_email_force');
+            }
         }
     } catch {
         // ignore

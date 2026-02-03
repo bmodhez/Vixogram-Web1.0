@@ -472,7 +472,7 @@ html.vixo-chat-page *::-webkit-scrollbar-track {
 
 /* Decorative chat background (dark mode/default) */
 .vixo-chat-bg {
-  background-image: linear-gradient(rgba(2, 6, 23, 0.78), rgba(2, 6, 23, 0.78)), url('../chatbg.jpeg');
+  background-image: linear-gradient(rgba(2, 6, 23, 0.78), rgba(2, 6, 23, 0.78)), url('../chatbg.jpg');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -560,11 +560,9 @@ html.vixo-chat-page *::-webkit-scrollbar-track {
 .theme-light .placeholder\:text-gray-400::placeholder { color: rgb(100 116 139) !important; }
 .theme-light .placeholder-gray-400::placeholder { color: rgb(100 116 139) !important; }
 
-/* Decorative chat background: too heavy on light, so disable */
+/* Decorative chat background: keep dark chatbg even in light theme */
 .theme-light .vixo-chat-bg {
-  background-image:
-    linear-gradient(rgba(248, 250, 252, 0.92), rgba(248, 250, 252, 0.92)),
-    url('../lightbg.jpeg') !important;
+  background-image: linear-gradient(rgba(2, 6, 23, 0.78), rgba(2, 6, 23, 0.78)), url('../blackchatbg.jpg') !important;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;

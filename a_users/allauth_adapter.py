@@ -89,3 +89,15 @@ class CustomAccountAdapter(DefaultAccountAdapter):
                 return None
 
             raise
+
+    def send_confirmation_mail(self, request, emailconfirmation, signup):
+        """Suppress signup confirmation email when configured.
+
+        Keeps manual resend working from the Email settings page.
+        """
+        try:
+            if bool(getattr(settings, 'ALLAUTH_SUPPRESS_SIGNUP_CONFIRMATION_EMAIL', False)) and bool(signup):
+                return None
+        except Exception:
+            pass
+        return super().send_confirmation_mail(request, emailconfirmation, signup)

@@ -5,6 +5,7 @@ urlpatterns = [
     path('', chat_view, name="home"),
     path('chat/<username>', get_or_create_chatroom, name="start-chat"),
     path('chat/room/<chatroom_name>', chat_view, name="chatroom"),
+    path('chat/verify/status/', chat_verify_status, name='chat-verify-status'),
     path('chat/config/<chatroom_name>', chat_config_view, name='chat-config'),
     path('chat/poll/<chatroom_name>', chat_poll_view, name="chat-poll"),
     path('chat/older/<chatroom_name>', chat_older_view, name="chat-older"),

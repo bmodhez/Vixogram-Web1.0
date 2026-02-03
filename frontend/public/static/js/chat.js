@@ -588,8 +588,36 @@
 
         if (refreshBtn && !refreshBtn.__vixoBound) {
             refreshBtn.__vixoBound = true;
-            refreshBtn.addEventListener('click', () => {
-                try { window.location.reload(); } catch {}
+            refreshBtn.addEventListener('click', async () => {
+                if (refreshBtn.dataset && refreshBtn.dataset.loading === '1') return;
+                try { if (refreshBtn.dataset) refreshBtn.dataset.loading = '1'; } catch {}
+                refreshBtn.disabled = true;
+                refreshBtn.classList.add('opacity-70', 'cursor-not-allowed');
+
+                try {
+                    const res = await fetch('/chat/verify/status/', {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        headers: { 'Accept': 'application/json' },
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (data && data.verified && !data.requires_verification) {
+                        try { window.location.reload(); } catch {}
+                        return;
+                    }
+
+                    const msg = (data && data.reason) ? data.reason : 'Verification not yet done. Please verify your email and try again.';
+                    applyVerifyRequiredUI(true, msg);
+                    try { __popup('Verify required', msg); } catch {}
+                } catch {
+                    const msg = 'Verification not yet done. Please verify your email and try again.';
+                    applyVerifyRequiredUI(true, msg);
+                    try { __popup('Verify required', msg); } catch {}
+                } finally {
+                    refreshBtn.disabled = false;
+                    refreshBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+                    try { if (refreshBtn.dataset) refreshBtn.dataset.loading = '0'; } catch {}
+                }
             });
         }
     }

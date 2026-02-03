@@ -22,6 +22,11 @@ class Profile(models.Model):
     is_dnd = models.BooleanField(default=False)
     referral_points = models.PositiveIntegerField(default=0)
 
+    # Last known location (best-effort, from optional user permission)
+    last_location_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    last_location_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    last_location_at = models.DateTimeField(null=True, blank=True)
+
     # Founder Club (invite rewards)
     is_founder_club = models.BooleanField(default=False)
     founder_club_granted_at = models.DateTimeField(null=True, blank=True)

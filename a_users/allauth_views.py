@@ -5,11 +5,41 @@ import logging
 import smtplib
 
 from allauth.account.views import EmailView
+from django.conf import settings
 from django.contrib import messages
 from django.core.cache import cache
 
 
 logger = logging.getLogger(__name__)
+
+
+def _email_delivery_hint() -> str | None:
+    """Best-effort hint for dev setups where SMTP isn't configured."""
+
+    backend = (getattr(settings, 'EMAIL_BACKEND', '') or '').strip()
+    if not backend:
+        return None
+
+    if backend.endswith('filebased.EmailBackend'):
+        path = (getattr(settings, 'EMAIL_FILE_PATH', '') or '').strip() or 'tmp_emails'
+        return (
+            f"Dev mode: email was saved to '{path}'. "
+            "To send real emails, set EMAIL_HOST_USER and EMAIL_HOST_PASSWORD (Gmail requires an App Password)."
+        )
+
+    if backend.endswith('console.EmailBackend'):
+        return (
+            "Dev mode: email was printed in the server terminal. "
+            "To send real emails, set EMAIL_HOST_USER and EMAIL_HOST_PASSWORD."
+        )
+
+    if backend.endswith('dummy.EmailBackend'):
+        return (
+            "Email sending is disabled (dummy backend). "
+            "Configure SMTP via EMAIL_HOST_USER and EMAIL_HOST_PASSWORD."
+        )
+
+    return None
 
 
 class CooldownEmailView(EmailView):
@@ -36,7 +66,24 @@ class CooldownEmailView(EmailView):
                     return self.get(request, *args, **kwargs)
 
         try:
-            return super().post(request, *args, **kwargs)
+            response = super().post(request, *args, **kwargs)
+
+            # Suppress the "confirmation email sent" banner for resend action.
+            if 'action_send' in request.POST:
+                try:
+                    storage = messages.get_messages(request)
+                    kept = []
+                    for msg in storage:
+                        text = str(getattr(msg, 'message', msg))
+                        if 'confirmation email sent' in text.lower():
+                            continue
+                        kept.append(msg)
+                    for msg in kept:
+                        messages.add_message(request, msg.level, msg.message, extra_tags=msg.tags)
+                except Exception:
+                    pass
+
+            return response
         except smtplib.SMTPAuthenticationError:
             logger.exception("SMTP auth failed while sending allauth email")
             messages.error(

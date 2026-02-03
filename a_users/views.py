@@ -54,6 +54,39 @@ except Exception:  # pragma: no cover
     Notification = None
 
 
+@login_required
+@require_POST
+def save_location_view(request):
+    """Save a user's last known location (optional permission)."""
+    try:
+        payload = json.loads((request.body or b'{}').decode('utf-8'))
+    except Exception:
+        payload = {}
+
+    lat = payload.get('lat')
+    lng = payload.get('lng')
+
+    try:
+        lat = float(lat)
+        lng = float(lng)
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'invalid_coords'}, status=400)
+
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lng <= 180.0):
+        return JsonResponse({'ok': False, 'error': 'out_of_range'}, status=400)
+
+    try:
+        profile = request.user.profile
+        profile.last_location_lat = lat
+        profile.last_location_lng = lng
+        profile.last_location_at = timezone.now()
+        profile.save(update_fields=['last_location_lat', 'last_location_lng', 'last_location_at'])
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'save_failed'}, status=500)
+
+    return JsonResponse({'ok': True})
+
+
 def _is_user_globally_online(user) -> bool:
     """Best-effort online check for profile presence.
 
