@@ -5,9 +5,16 @@ import logging
 import smtplib
 
 from allauth.account.views import EmailView
+from allauth.account.views import LoginView
 from django.conf import settings
 from django.contrib import messages
 from django.core.cache import cache
+from django.http import HttpResponseRedirect
+
+try:
+    from urllib.parse import urlencode
+except Exception:  # pragma: no cover
+    urlencode = None
 
 
 logger = logging.getLogger(__name__)
@@ -95,3 +102,46 @@ class CooldownEmailView(EmailView):
             logger.exception("SMTP error while sending allauth email")
             messages.error(request, "Could not send email right now. Please try again later.")
             return self.get(request, *args, **kwargs)
+
+
+class PRGLoginView(LoginView):
+    """Login view that avoids browser POST-resubmission screens.
+
+    Browsers show a built-in "Resubmit the form" page when users refresh a POST response.
+    This view redirects to GET on invalid POST as well, so refresh stays safe.
+    """
+
+    def form_invalid(self, form):
+        # Keep message short; inline form errors would be lost after redirect.
+        msg = 'Invalid login details. Please try again.'
+        try:
+            errs = form.non_field_errors()
+            if errs:
+                msg = str(errs[0])
+        except Exception:
+            pass
+        try:
+            messages.error(self.request, msg)
+        except Exception:
+            pass
+
+        # Preserve ?next= across the redirect.
+        try:
+            next_name = getattr(self, 'redirect_field_name', 'next') or 'next'
+        except Exception:
+            next_name = 'next'
+
+        nxt = ''
+        try:
+            nxt = (self.request.POST.get(next_name) or self.request.GET.get(next_name) or '').strip()
+        except Exception:
+            nxt = ''
+
+        url = self.request.path
+        if nxt and urlencode is not None:
+            try:
+                url = f"{url}?{urlencode({next_name: nxt})}"
+            except Exception:
+                url = self.request.path
+
+        return HttpResponseRedirect(url)

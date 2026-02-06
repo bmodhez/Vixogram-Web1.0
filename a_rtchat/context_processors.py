@@ -79,12 +79,16 @@ def mobile_ads_config(request):
                 'body': getattr(settings, 'MOBILE_AD_CHAT_LIST_BODY', ''),
                 'ctaText': getattr(settings, 'MOBILE_AD_CHAT_LIST_CTA_TEXT', ''),
                 'ctaUrl': getattr(settings, 'MOBILE_AD_CHAT_LIST_CTA_URL', ''),
+                'imageUrl': getattr(settings, 'MOBILE_AD_CHAT_LIST_IMAGE_URL', ''),
+                'advertiser': getattr(settings, 'MOBILE_AD_CHAT_LIST_ADVERTISER', ''),
             },
             'MOBILE_AD_CHAT_FEED': {
                 'title': getattr(settings, 'MOBILE_AD_CHAT_FEED_TITLE', ''),
                 'body': getattr(settings, 'MOBILE_AD_CHAT_FEED_BODY', ''),
                 'ctaText': getattr(settings, 'MOBILE_AD_CHAT_FEED_CTA_TEXT', ''),
                 'ctaUrl': getattr(settings, 'MOBILE_AD_CHAT_FEED_CTA_URL', ''),
+                'imageUrl': getattr(settings, 'MOBILE_AD_CHAT_FEED_IMAGE_URL', ''),
+                'advertiser': getattr(settings, 'MOBILE_AD_CHAT_FEED_ADVERTISER', ''),
             },
         }
     except Exception:

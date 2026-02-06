@@ -1,0 +1,80 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>403 • Vixogram</title>
+
+    <link rel="icon" type="image/png" href="{% static 'favicon.png' %}">
+    <link rel="shortcut icon" type="image/png" href="{% static 'favicon.png' %}">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+        .vixo-glow {
+            box-shadow:
+              0 0 0 1px rgba(255,255,255,.08),
+              0 30px 90px rgba(0,0,0,.65);
+        }
+        .vixo-grid {
+            background-image:
+              radial-gradient(circle at 1px 1px, rgba(255,255,255,.06) 1px, transparent 0);
+            background-size: 28px 28px;
+        }
+    </style>
+</head>
+<body class="h-full min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-white">
+    <div class="min-h-screen flex items-center justify-center px-4 py-10">
+        <div class="relative w-full max-w-3xl">
+            <div aria-hidden="true" class="pointer-events-none absolute -top-28 -left-20 h-72 w-72 rounded-full bg-fuchsia-500/15 blur-3xl"></div>
+            <div aria-hidden="true" class="pointer-events-none absolute -bottom-24 -right-16 h-80 w-80 rounded-full bg-emerald-400/10 blur-3xl"></div>
+
+            <div class="relative rounded-3xl border border-white/10 bg-gray-900/50 backdrop-blur overflow-hidden vixo-glow">
+                <div class="vixo-grid absolute inset-0 opacity-40"></div>
+                <div aria-hidden="true" class="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-fuchsia-500 via-emerald-400/80 to-indigo-500"></div>
+
+                <div class="relative px-6 sm:px-10 py-10 sm:py-12">
+                    <div class="flex items-center justify-center gap-3">
+                        <img src="{% static 'vixologo.png' %}" alt="Vixogram" class="h-12 w-auto" />
+                        <div class="text-xl sm:text-2xl font-extrabold tracking-wide">Vixogram</div>
+                    </div>
+
+                    <div class="mt-10 text-center">
+                        <div class="text-5xl sm:text-6xl font-extrabold tracking-widest">
+                            <span class="bg-gradient-to-r from-emerald-300 via-indigo-300 to-fuchsia-300 bg-clip-text text-transparent">403</span>
+                        </div>
+                        <div class="mt-3 text-2xl sm:text-3xl font-bold text-gray-100">403 – Forbidden</div>
+                        <p class="mt-4 text-sm sm:text-base text-gray-300 max-w-xl mx-auto">
+                            For security reasons, this request was blocked.<br>
+                            Your session may have expired or the form was submitted incorrectly.
+                        </p>
+                        <p class="mt-4 text-sm sm:text-base text-gray-300 max-w-xl mx-auto">
+                            Please go back and try again.
+                        </p>
+                    </div>
+
+                    <div class="mt-10 flex flex-wrap items-center justify-center gap-3">
+                        <button type="button" onclick="history.back()" class="inline-flex items-center justify-center rounded-full border border-white/10 bg-gray-800/60 hover:bg-gray-800 px-6 py-2.5 text-sm font-semibold transition">
+                            Go Back
+                        </button>
+                        <a href="/" class="inline-flex items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-500/15 hover:bg-emerald-500/20 text-emerald-200 px-6 py-2.5 text-sm font-semibold transition">
+                            Home
+                        </a>
+                    </div>
+
+                    <div class="mt-10 pt-6 border-t border-white/10 text-center text-xs text-gray-400">
+                        © {% now "Y" %} Vixogram
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

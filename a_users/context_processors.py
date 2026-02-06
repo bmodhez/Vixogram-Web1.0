@@ -6,11 +6,17 @@ except Exception:  # pragma: no cover
     Notification = None
 
 try:
+    from a_users.models import FollowRequest
+except Exception:  # pragma: no cover
+    FollowRequest = None
+
+try:
     from .story_policy import can_user_add_story, get_story_upload_requirements, get_user_story_progress
 except Exception:  # pragma: no cover
     can_user_add_story = None
     get_story_upload_requirements = None
     get_user_story_progress = None
+
 
 
 def notifications_badge(request):
@@ -25,21 +31,27 @@ def notifications_badge(request):
         return {'NAV_NOTIF_UNREAD': 0}
 
 
+def follow_requests_badge(request):
+    if not getattr(request, 'user', None) or not request.user.is_authenticated:
+        return {'NAV_FOLLOWREQ_PENDING': 0}
+    if FollowRequest is None:
+        return {'NAV_FOLLOWREQ_PENDING': 0}
+    try:
+        c = FollowRequest.objects.filter(to_user=request.user).count()
+        return {'NAV_FOLLOWREQ_PENDING': int(c or 0)}
+    except Exception:
+        return {'NAV_FOLLOWREQ_PENDING': 0}
+
+
 def story_upload_gate(request):
     """Global template flags for story upload gating."""
     user = getattr(request, 'user', None)
 
-    required_points, required_invites = 50, 5
+    # Story upload is free for all authenticated users.
+    required_points, required_invites = 0, 0
     points, verified_invites = 0, 0
-    can_add = False
-
     try:
-        if get_story_upload_requirements is not None:
-            required_points, required_invites = get_story_upload_requirements()
-        if get_user_story_progress is not None:
-            points, verified_invites = get_user_story_progress(user)
-        if can_user_add_story is not None:
-            can_add = bool(can_user_add_story(user))
+        can_add = bool(user and getattr(user, 'is_authenticated', False))
     except Exception:
         can_add = False
 

@@ -633,6 +633,13 @@
       const inside = e.target && e.target.closest ? e.target.closest('#user_menu, #user_menu_btn') : null;
       if (!inside) close();
     }, true);
+
+    dropdown.addEventListener('click', (e) => {
+      const t = e && e.target;
+      if (!(t instanceof HTMLElement)) return;
+      const closeEl = t.closest('[data-user-menu-close="1"]');
+      if (closeEl) close();
+    }, true);
   }
 
   function initCustomConfirm() {
@@ -749,7 +756,7 @@
     let pendingResolve = null;
     let isOpen = false;
 
-    const open = ({ title, message, defaultValue, placeholder, okText, cancelText } = {}) => {
+    const open = ({ title, message, defaultValue, placeholder, okText, cancelText, maxLength } = {}) => {
       titleEl.textContent = title || 'Enter value';
 
       const msg = String(message || '').trim();
@@ -759,6 +766,18 @@
       }
 
       inputEl.value = (defaultValue === undefined || defaultValue === null) ? '' : String(defaultValue);
+
+      // Optional max length for the prompt input.
+      // If omitted, remove any previous maxlength so other prompts are unaffected.
+      try {
+        const n = parseInt(String(maxLength ?? ''), 10);
+        if (Number.isFinite(n) && n > 0) inputEl.setAttribute('maxlength', String(n));
+        else inputEl.removeAttribute('maxlength');
+        if (Number.isFinite(n) && n > 0 && String(inputEl.value || '').length > n) {
+          inputEl.value = String(inputEl.value || '').slice(0, n);
+        }
+      } catch {}
+
       if (placeholder !== undefined && placeholder !== null) {
         try { inputEl.setAttribute('placeholder', String(placeholder)); } catch {}
       }
@@ -834,14 +853,13 @@
       if (open) {
         open({
           title: 'Premium',
-          message: 'Premium is not available yet.',
+          message: 'Premium will be available soon.',
           showCancel: false,
           okText: 'OK',
         });
       } else {
-        // Fallback (should be rare if base.html includes the modal)
         // eslint-disable-next-line no-alert
-        alert('Premium is not available yet.');
+        alert('Premium will be available soon.');
       }
     }, true);
   }
@@ -1119,6 +1137,7 @@
     const recentInvites = new Map();
     const recentMentions = new Map();
     let notifUnread = parseInt(String(baseCfg.navNotifUnread || 0), 10) || 0;
+    let followReqPending = parseInt(String(baseCfg.navFollowReqPending || 0), 10) || 0;
 
     // Tab title badge like: "(1) Vixogram - Chat. Call. Connect."
     const __rawInitialTitle = String(document.title || '');
@@ -1273,6 +1292,30 @@
         }
       }
       setTabTitle();
+    }
+
+    function updateFollowReqBadges() {
+      const navEl = document.getElementById('nav_followreq_badge');
+      const menuEl = document.getElementById('followreq_menu_badge');
+      const text = (followReqPending > 99) ? '99+' : String(followReqPending);
+
+      if (navEl) {
+        if (followReqPending > 0) {
+          navEl.textContent = text;
+          navEl.classList.remove('hidden');
+        } else {
+          navEl.classList.add('hidden');
+        }
+      }
+
+      if (menuEl) {
+        if (followReqPending > 0) {
+          menuEl.textContent = text;
+          menuEl.classList.remove('hidden');
+        } else {
+          menuEl.classList.add('hidden');
+        }
+      }
     }
 
     function bumpNotifUnread() {
@@ -1809,6 +1852,7 @@
     document.addEventListener('click', unlockAudioOnce, { once: true, capture: true });
 
     updateNotifBadge();
+    updateFollowReqBadges();
     initNotifDropdown();
 
     function connect() {
@@ -1904,6 +1948,15 @@
           container.appendChild(toast);
           animateToastIn(toast);
 
+        if (payload.type === 'follow_request') {
+          const n = parseInt(String(payload.pending_count ?? ''), 10);
+          if (Number.isFinite(n)) {
+            followReqPending = Math.max(0, n);
+          } else {
+            followReqPending = Math.min(999, (followReqPending || 0) + 1);
+          }
+          updateFollowReqBadges();
+        }
           try { window.__refreshNotifDropdownIfOpen && window.__refreshNotifDropdownIfOpen(); } catch {}
         }
 
@@ -1951,6 +2004,20 @@
         try { if (socket && socket.close) socket.close(); } catch {}
       }, { once: true });
     }
+
+    // HTMX-driven updates (accept/reject in modal)
+    document.body.addEventListener('followRequestsChanged', (e) => {
+      try {
+        const detail = (e && e.detail) || {};
+        const n = parseInt(String(detail.pending_count ?? ''), 10);
+        if (Number.isFinite(n)) {
+          followReqPending = Math.max(0, n);
+          updateFollowReqBadges();
+        }
+      } catch {
+        // ignore
+      }
+    });
 
     connect();
 
@@ -2481,7 +2548,7 @@
         return { storyCount: n, playback };
       };
 
-      const openViewer = ({ username, durationSeconds, stories, canDelete, storiesUrl }) => {
+      const openViewer = ({ username, durationSeconds, stories, canDelete, storiesUrl, isOwner }) => {
         removeExisting();
 
         const durStoryMs = Math.max(1000, Number(durationSeconds || 10) * 1000);
@@ -2560,6 +2627,23 @@
               <div class="w-full max-w-md px-3 sm:px-4">
                 <div class="relative rounded-2xl overflow-hidden bg-black shadow-2xl shadow-black/40 border border-white/10">
                   <img data-story-img class="block w-full h-[70vh] sm:h-[75vh] object-contain bg-black" alt="Story" />
+                  <div data-story-viewers-wrap class="hidden absolute bottom-3 left-3" style="z-index: 40; pointer-events: auto;">
+                    <button type="button" data-story-viewers-btn class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/35 text-white/95 border border-white/10 backdrop-blur-sm" aria-label="View story viewers">
+                      <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                      </svg>
+                    </button>
+                    <div data-story-viewers-panel class="hidden absolute left-0 bottom-12 w-[min(18rem,calc(100vw-2rem))] rounded-2xl border border-white/10 bg-gray-950/95 shadow-2xl shadow-black/60 overflow-hidden">
+                      <div class="px-3 py-2 text-xs font-semibold text-white/80 border-b border-white/10">Viewed by</div>
+                      <div class="max-h-56 overflow-auto">
+                        <div data-story-viewers-list class="p-2 space-y-1"></div>
+                        <div class="p-2 pt-1">
+                          <button type="button" data-story-viewers-more class="hidden w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10">Load more</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                   <div data-story-ad class="absolute inset-0 hidden bg-gradient-to-b from-gray-900/80 via-black to-black">
                     <div class="w-full h-full flex items-center justify-center p-6">
                       <div class="w-full max-w-sm text-center">
@@ -2574,12 +2658,12 @@
               </div>
             </div>
 
-            <button type="button" data-story-prev class="absolute left-0 top-0 bottom-0 w-1/3 z-0" aria-label="Previous story">
+            <button type="button" data-story-prev class="absolute left-0 top-0 bottom-0 w-1/3 z-0" style="z-index: 5;" aria-label="Previous story">
               <span data-story-prev-arrow class="absolute left-3 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/35 text-white/90 border border-white/10 backdrop-blur-sm">
                 <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
               </span>
             </button>
-            <button type="button" data-story-next class="absolute right-0 top-0 bottom-0 w-1/3 z-0" aria-label="Next story">
+            <button type="button" data-story-next class="absolute right-0 top-0 bottom-0 w-1/3 z-0" style="z-index: 5;" aria-label="Next story">
               <span data-story-next-arrow class="absolute right-3 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/35 text-white/90 border border-white/10 backdrop-blur-sm">
                 <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
               </span>
@@ -2631,6 +2715,159 @@
         const nextBtn = root.querySelector('[data-story-next]');
         const prevArrow = root.querySelector('[data-story-prev-arrow]');
         const nextArrow = root.querySelector('[data-story-next-arrow]');
+        const viewersWrap = root.querySelector('[data-story-viewers-wrap]');
+        const viewersBtn = root.querySelector('[data-story-viewers-btn]');
+        const viewersPanel = root.querySelector('[data-story-viewers-panel]');
+        const viewersList = root.querySelector('[data-story-viewers-list]');
+        const viewersMoreBtn = root.querySelector('[data-story-viewers-more]');
+
+        // Show viewers UI only for the story owner.
+        try {
+          if (viewersWrap) viewersWrap.classList.toggle('hidden', !isOwner);
+        } catch {}
+
+        const viewersStateByStory = new Map();
+
+        const setNavEnabled = (enabled) => {
+          const on = !!enabled;
+          try { if (prevBtn) prevBtn.style.pointerEvents = on ? '' : 'none'; } catch {}
+          try { if (nextBtn) nextBtn.style.pointerEvents = on ? '' : 'none'; } catch {}
+        };
+
+        const hideViewers = () => {
+          try {
+            if (viewersPanel) viewersPanel.classList.add('hidden');
+          } catch {}
+          try {
+            if (viewersMoreBtn) {
+              viewersMoreBtn.classList.add('hidden');
+              viewersMoreBtn.disabled = false;
+              viewersMoreBtn.textContent = 'Load more';
+            }
+          } catch {}
+          setNavEnabled(true);
+        };
+
+        const renderViewers = (arr, { append } = {}) => {
+          try {
+            if (!viewersList) return;
+            if (!append) viewersList.innerHTML = '';
+            const items = Array.isArray(arr) ? arr : [];
+            if (!items.length && !append) {
+              const empty = document.createElement('div');
+              empty.className = 'px-2 py-2 text-sm text-white/70';
+              empty.textContent = 'No viewers yet.';
+              viewersList.appendChild(empty);
+              return;
+            }
+            items.forEach((v) => {
+              try {
+                const uname = String(v && v.username || '').trim();
+                if (!uname) return;
+                const avatar = String(v && v.avatar || '').trim();
+                const a = document.createElement('a');
+                a.href = `/profile/u/${encodeURIComponent(uname)}/`;
+                a.className = 'flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-white/5';
+
+                const imgEl = document.createElement('img');
+                imgEl.className = 'h-9 w-9 rounded-full object-cover bg-gray-800 flex-none';
+                imgEl.alt = uname;
+                imgEl.loading = 'lazy';
+                if (avatar) imgEl.src = avatar;
+
+                const meta = document.createElement('div');
+                meta.className = 'min-w-0';
+                const u1 = document.createElement('div');
+                u1.className = 'text-sm font-semibold text-white truncate';
+                u1.textContent = '@' + uname;
+
+                meta.appendChild(u1);
+                a.appendChild(imgEl);
+                a.appendChild(meta);
+                viewersList.appendChild(a);
+              } catch {}
+            });
+          } catch {}
+        };
+
+        const ensureViewersState = (sid) => {
+          const key = Number(sid || 0);
+          if (!key) return null;
+          let st = viewersStateByStory.get(key);
+          if (!st) {
+            st = { items: [], nextCursor: null, nextCursorId: null, hasMore: false, loading: false };
+            viewersStateByStory.set(key, st);
+          }
+          return st;
+        };
+
+        const updateMoreBtn = (st) => {
+          try {
+            if (!viewersMoreBtn) return;
+            viewersMoreBtn.classList.toggle('hidden', !(st && st.hasMore));
+          } catch {}
+        };
+
+        const fetchViewersPage = async ({ storyId, cursor, cursorId, limit, showLoading }) => {
+          const sid = Number(storyId || 0);
+          if (!sid) return { viewers: [], hasMore: false, nextCursor: null, nextCursorId: null };
+          const lim = Math.max(1, Math.min(100, Number(limit || 50)));
+
+          try {
+            if (showLoading && viewersList) viewersList.innerHTML = '<div class="px-2 py-2 text-sm text-white/70">Loading…</div>';
+          } catch {}
+
+          try {
+            let url = `/profile/story/${sid}/viewers/?limit=${encodeURIComponent(String(lim))}`;
+            if (cursor) url += `&cursor=${encodeURIComponent(String(cursor))}`;
+            if (cursorId) url += `&cursor_id=${encodeURIComponent(String(cursorId))}`;
+
+            const r = await fetch(url, {
+              method: 'GET',
+              headers: { 'Accept': 'application/json' },
+              credentials: 'same-origin',
+            });
+            if (!r.ok) {
+              return { viewers: [], hasMore: false, nextCursor: null, nextCursorId: null };
+            }
+            const data = await r.json();
+            const arr = (data && data.viewers) ? data.viewers : [];
+            return {
+              viewers: Array.isArray(arr) ? arr : [],
+              hasMore: !!(data && data.has_more),
+              nextCursor: (data && data.next_cursor) ? data.next_cursor : null,
+              nextCursorId: (data && data.next_cursor_id) ? data.next_cursor_id : null,
+            };
+          } catch {
+            return { viewers: [], hasMore: false, nextCursor: null, nextCursorId: null };
+          }
+        };
+
+        const markSeen = async (storyId) => {
+          const sid = Number(storyId || 0);
+          if (!sid) return;
+          try {
+            await fetch(`/profile/story/${sid}/seen/`, {
+              method: 'POST',
+              headers: {
+                'Accept': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken') || '',
+              },
+              credentials: 'same-origin',
+            });
+          } catch {
+            // ignore
+          }
+        };
+
+        const getCurrentStoryIdSafe = () => {
+          try {
+            const item = items[index];
+            return (item && item.type !== 'ad' && item.story && item.story.id) ? item.story.id : null;
+          } catch {
+            return null;
+          }
+        };
 
         try {
           if (img) img.setAttribute('draggable', 'false');
@@ -2654,7 +2891,7 @@
         const isInteractiveHoldIgnore = (target) => {
           try {
             if (!target || !target.closest) return false;
-            return !!target.closest('[data-story-menu-btn],[data-story-menu-panel],[data-story-delete-confirm],[data-story-delete-now],[data-story-delete-cancel]');
+            return !!target.closest('[data-story-menu-btn],[data-story-menu-panel],[data-story-delete-confirm],[data-story-delete-now],[data-story-delete-cancel],[data-story-viewers-btn],[data-story-viewers-panel],[data-story-viewers-more]');
           } catch {
             return false;
           }
@@ -3000,6 +3237,17 @@
               }
             } catch {}
           }
+
+          // Close viewers panel when story changes.
+          hideViewers();
+
+          // Mark story as seen (server-side).
+          try {
+            const sid = (item && item.type !== 'ad' && item.story && item.story.id) ? item.story.id : null;
+            if (sid) {
+              markSeen(sid);
+            }
+          } catch {}
           setSegment(index, 0);
 
           updateNavUi();
@@ -3030,6 +3278,7 @@
           try {
             if (menuPanel && !menuPanel.classList.contains('hidden')) return;
             if (deleteConfirm && !deleteConfirm.classList.contains('hidden')) return;
+            if (viewersPanel && !viewersPanel.classList.contains('hidden')) return;
           } catch {}
           if (index <= 0) {
             show(0);
@@ -3043,6 +3292,7 @@
           try {
             if (menuPanel && !menuPanel.classList.contains('hidden')) return;
             if (deleteConfirm && !deleteConfirm.classList.contains('hidden')) return;
+            if (viewersPanel && !viewersPanel.classList.contains('hidden')) return;
           } catch {}
           if (index >= items.length - 1) {
             close();
@@ -3121,6 +3371,15 @@
         // Click outside image closes.
         root.addEventListener('click', (e) => {
           try {
+            // Hide viewers when clicking outside the viewers UI.
+            try {
+              if (viewersPanel && !viewersPanel.classList.contains('hidden')) {
+                const inPanel = (e.target && e.target.closest) ? e.target.closest('[data-story-viewers-panel]') : null;
+                const inBtn = (e.target && e.target.closest) ? e.target.closest('[data-story-viewers-btn]') : null;
+                if (!inPanel && !inBtn) hideViewers();
+              }
+            } catch {}
+
             if (menuPanel && !menuPanel.classList.contains('hidden')) {
               // Clicking anywhere outside the menu closes it.
               const inMenu = (e.target && e.target.closest) ? e.target.closest('[data-story-menu-panel]') : null;
@@ -3130,6 +3389,112 @@
             if (e.target === root) close();
           } catch {}
         });
+
+        if (viewersBtn) {
+          viewersBtn.addEventListener('click', async (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            suppressClickUntil = Date.now() + 450;
+            if (!isOwner) return;
+            const sid = getCurrentStoryIdSafe();
+            if (!sid) return;
+
+            const isHidden = !viewersPanel || viewersPanel.classList.contains('hidden');
+            if (!viewersPanel) return;
+            if (!isHidden) {
+              hideViewers();
+              return;
+            }
+            setNavEnabled(false);
+            try { viewersPanel.classList.remove('hidden'); } catch {}
+
+            const st = ensureViewersState(sid);
+            if (!st) return;
+            st.items = [];
+            st.nextCursor = null;
+            st.nextCursorId = null;
+            st.hasMore = false;
+            st.loading = true;
+
+            const page = await fetchViewersPage({ storyId: sid, limit: 50, showLoading: true });
+            st.items = Array.isArray(page.viewers) ? page.viewers : [];
+            st.nextCursor = page.nextCursor;
+            st.nextCursorId = page.nextCursorId;
+            st.hasMore = !!page.hasMore;
+            st.loading = false;
+
+            renderViewers(st.items);
+            updateMoreBtn(st);
+          });
+        }
+
+        if (viewersMoreBtn) {
+          viewersMoreBtn.addEventListener('click', async (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            suppressClickUntil = Date.now() + 450;
+            if (!isOwner) return;
+            const sid = getCurrentStoryIdSafe();
+            if (!sid) return;
+
+            const st = ensureViewersState(sid);
+            if (!st) return;
+            if (st.loading) return;
+            if (!st.hasMore) {
+              updateMoreBtn(st);
+              return;
+            }
+
+            st.loading = true;
+            try {
+              viewersMoreBtn.disabled = true;
+              viewersMoreBtn.textContent = 'Loading…';
+            } catch {}
+
+            const page = await fetchViewersPage({
+              storyId: sid,
+              cursor: st.nextCursor,
+              cursorId: st.nextCursorId,
+              limit: 50,
+              showLoading: false,
+            });
+
+            const nextItems = Array.isArray(page.viewers) ? page.viewers : [];
+            st.items = Array.isArray(st.items) ? st.items : [];
+            st.items = st.items.concat(nextItems);
+            st.nextCursor = page.nextCursor;
+            st.nextCursorId = page.nextCursorId;
+            st.hasMore = !!page.hasMore;
+            st.loading = false;
+
+            renderViewers(nextItems, { append: true });
+            updateMoreBtn(st);
+
+            try {
+              viewersMoreBtn.disabled = false;
+              viewersMoreBtn.textContent = 'Load more';
+            } catch {}
+          });
+        }
+
+        // Capture taps in the eye region so the overlay nav doesn't steal them.
+        // This is needed because the left/right navigation overlay covers the full height.
+        try {
+          root.addEventListener('pointerdown', (e) => {
+            try {
+              if (!isOwner || !viewersWrap || !viewersBtn) return;
+              const rect = viewersWrap.getBoundingClientRect();
+              const x = Number(e && e.clientX || 0);
+              const y = Number(e && e.clientY || 0);
+              const inside = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+              if (!inside) return;
+              try { e.preventDefault(); } catch {}
+              try { e.stopPropagation(); } catch {}
+              try { if (e.stopImmediatePropagation) e.stopImmediatePropagation(); } catch {}
+              try { viewersBtn.click(); } catch {}
+            } catch {}
+          }, true);
+        } catch {}
 
         window.addEventListener('keydown', onKeyDown);
         show(0);
@@ -3201,6 +3566,7 @@
             durationSeconds: data && data.duration_seconds,
             stories: data && data.stories,
             canDelete: data && data.can_delete,
+            isOwner: data && data.is_owner,
             storiesUrl: url,
           });
         } catch {

@@ -138,7 +138,7 @@ from .models_read import ChatReadState
 from .models import Notification
 from .link_policy import contains_link
 from .link_preview import extract_first_http_url, fetch_link_preview
-from .room_policy import room_allows_links, is_free_promotion_room
+from .room_policy import room_allows_links, is_free_promotion_room, is_meme_central_room
 from urllib.parse import urlparse
 from .challenges import (
     get_active_challenge,
@@ -1016,7 +1016,35 @@ class ChatroomConsumer(WebsocketConsumer):
             except (TypeError, ValueError):
                 reply_to_pk = None
             if reply_to_pk:
-                reply_to = GroupMessage.objects.filter(pk=reply_to_pk, group=self.chatroom).first()
+                if reply_to_id:
+                    try:
+                        reply_to_pk = int(reply_to_id)
+                    except (TypeError, ValueError):
+                        reply_to_pk = None
+                    if reply_to_pk:
+                        reply_to = GroupMessage.objects.filter(pk=reply_to_pk, group=self.chatroom).first()
+        
+                # Meme Central: enforce a per-message cooldown.
+                if is_meme_central_room(self.chatroom):
+                    cd = check_rate_limit(
+                        make_key('chat_cd', self.chatroom_name, self.user.id),
+                        limit=1,
+                        period_seconds=3,
+                    )
+                    if not cd.allowed:
+                        self._send_cooldown(cd.retry_after, reason='cooldown')
+                        return
+
+                # Free Promotion: enforce a strict 60-second cooldown between sends.
+                if is_free_promotion_room(self.chatroom):
+                    cd = check_rate_limit(
+                        make_key('chat_cd', self.chatroom_name, self.user.id),
+                        limit=1,
+                        period_seconds=60,
+                    )
+                    if not cd.allowed:
+                        self._send_cooldown(cd.retry_after, reason='cooldown')
+                        return
         
         message = GroupMessage.objects.create(
             body = body,
@@ -1042,18 +1070,23 @@ class ChatroomConsumer(WebsocketConsumer):
         except Exception:
             pass
 
-        # Retention: keep only the newest messages per room (best-effort)
-        # Apply only to public/group chats, not private chats.
-        if not bool(getattr(self.chatroom, 'is_private', False)):
-            try:
-                from a_rtchat.retention import trim_chat_group_messages
+        # Retention: keep only the newest messages per room (best-effort).
+        # Public/group rooms and private rooms can use different caps.
+        try:
+            from a_rtchat.retention import trim_chat_group_messages
 
-                trim_chat_group_messages(
-                    chat_group_id=getattr(self.chatroom, 'id', 0),
-                    keep_last=int(getattr(settings, 'CHAT_MAX_MESSAGES_PER_ROOM', 300)),
-                )
-            except Exception:
-                pass
+            is_private = bool(getattr(self.chatroom, 'is_private', False))
+            if is_private:
+                keep_last = int(getattr(settings, 'PRIVATE_CHAT_MAX_MESSAGES_PER_ROOM', 1000))
+            else:
+                keep_last = int(getattr(settings, 'CHAT_MAX_MESSAGES_PER_ROOM', 300))
+
+            trim_chat_group_messages(
+                chat_group_id=getattr(self.chatroom, 'id', 0),
+                keep_last=max(1, keep_last),
+            )
+        except Exception:
+            pass
 
         # Public chat bot (Natasha): reply occasionally, async.
         try:
@@ -1868,6 +1901,20 @@ class NotificationsConsumer(WebsocketConsumer):
             'from_username': event.get('from_username') or '',
             'url': event.get('url') or '',
             'preview': event.get('preview') or '',
+        }))
+
+    def follow_request_notify_handler(self, event):
+        try:
+            from a_users.models import Profile
+
+            if Profile.objects.filter(user_id=getattr(self.user, 'id', None), is_dnd=True).exists():
+                return
+        except Exception:
+            pass
+        self.send(text_data=json.dumps({
+            'type': 'follow_request',
+            'from_username': event.get('from_username') or '',
+            'pending_count': int(event.get('pending_count') or 0),
         }))
 
     def support_notify_handler(self, event):

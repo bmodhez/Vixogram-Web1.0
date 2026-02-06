@@ -68,6 +68,10 @@ _RESERVED_USERNAMES = {
 # This only applies when the username starts with a reserved word.
 _VARIANT_SEP_RE = re.compile(r'^[._-]?$')
 
+# Basic heuristic to prevent users from entering an email address as username.
+# We keep it intentionally strict: any '@' is rejected.
+_EMAIL_LIKE_RE = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+
 
 def _normalize(username: str) -> str:
     return (username or '').strip().lower()
@@ -102,5 +106,19 @@ def is_reserved_username(username: str) -> bool:
 
 
 def validate_public_username(username: str) -> None:
+    u_raw = (username or '').strip()
+    u_norm = _normalize(u_raw)
+
+    # Disallow email addresses in the username field.
+    if '@' in u_raw or _EMAIL_LIKE_RE.match(u_norm or ''):
+        raise ValidationError(_("Username cannot contain @ or ."), code='username_email')
+
+    # Disallow links/domains like "abc.com" or "foo.in".
+    # Product requirement: username must not look like an URL/domain.
+    if '.' in u_raw:
+        raise ValidationError(_("Username cannot contain @ or ."), code='username_link')
+    if 'http' in u_norm or 'www' in u_norm or '://' in u_norm:
+        raise ValidationError(_("Links/domains are not allowed in username."), code='username_link')
+
     if is_reserved_username(username):
         raise ValidationError(_("This username is reserved. Please choose another."), code='reserved_username')

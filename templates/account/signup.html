@@ -6,17 +6,22 @@
 {% block body_class %}vixo-auth-page{% endblock %}
 
 {% block content %}
-<div class="vixo-auth-bg min-h-[calc(100vh-7rem)] relative flex items-center justify-center px-4 py-10 overflow-hidden" style="--vixo-auth-bg: url('{% static 'registrationbg.jpeg' %}');">
+<div class="vixo-auth-bg min-h-[calc(100vh-7rem)] relative flex items-center justify-center px-4 py-10 overflow-hidden" style="--vixo-auth-bg: url('{% static 'authbg.jpeg' %}');">
   <div aria-hidden="true" class="pointer-events-none absolute -top-24 -left-24 h-80 w-80 rounded-full bg-[#8E2DE2]/25 blur-3xl"></div>
   <div aria-hidden="true" class="pointer-events-none absolute -bottom-28 -right-28 h-96 w-96 rounded-full bg-[#4A00E0]/20 blur-3xl"></div>
 
   <div class="relative z-10 w-full max-w-5xl flex items-center justify-center gap-10">
+    <div aria-hidden="true" class="vixo-auth-watermark vixo-auth-watermark--left">
+      <div class="vixo-auth-watermark__pos">
+        <div class="vixo-auth-watermark__text">Make friends, share moments, and chat <span class="vixo-auth-watermark__nowrap">without limits.</span></div>
+      </div>
+    </div>
     <!-- Desktop/tablet character: fully visible next to the card -->
     <div aria-hidden="true" class="hidden md:flex items-end justify-center w-[380px] lg:w-[440px] xl:w-[480px] opacity-90">
       <img src="{% static 'signup.png' %}" alt="" class="w-full h-auto max-h-[560px] object-contain drop-shadow-2xl" />
     </div>
 
-    <div class="relative w-full max-w-md bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl shadow-black/30 p-6 motion-safe:animate-[fadeInUp_500ms_ease-out]">
+    <div class="relative w-full max-w-md bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl shadow-black/30 p-6 motion-safe:animate-[fadeInUp_500ms_ease-out] vixo-auth-card{% if form.errors %} vixo-auth-card--shake{% endif %}">
       <!-- Mobile character: visually touches the top edge of the card (account for PNG padding) -->
       <div aria-hidden="true" class="pointer-events-none absolute right-4 top-0 -translate-y-[82%] md:hidden opacity-90">
         <img src="{% static 'signup.png' %}" alt="" class="w-[140px] drop-shadow-2xl" />
@@ -33,14 +38,8 @@
       </div>
     </div>
 
-    <form method="post" action="{% url 'account_signup' %}" class="mt-6 space-y-4" novalidate>
+    <form method="post" action="{% url 'account_signup' %}" class="mt-6 space-y-4" novalidate data-vixo-auth="signup">
       {% csrf_token %}
-
-      {% if form.non_field_errors %}
-        <div class="text-sm text-red-300 bg-gray-900/40 border border-gray-800 rounded-xl px-4 py-3">
-          {{ form.non_field_errors }}
-        </div>
-      {% endif %}
 
       {% if form.email %}
         <div class="space-y-1">

@@ -1,0 +1,67 @@
+{% load static %}
+
+<div class="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Follow requests">
+    <div class="absolute inset-0 bg-black/60 vixo-modal-overlay" data-modal-backdrop></div>
+
+    <div class="relative min-h-full flex items-center justify-center px-4 py-8 pointer-events-none">
+        <div class="w-full max-w-md pointer-events-auto vixo-modal-card">
+            <div class="rounded-2xl shadow-2xl border border-white/10 overflow-hidden bg-gray-900/95">
+                <div class="flex items-center justify-between px-5 py-4 border-b border-gray-800">
+                    <div class="text-sm font-semibold text-white">
+                        Follow requests
+                        {% if pending_count and pending_count > 0 %}
+                            <span class="ml-2 inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-red-500 text-[10px] leading-5 text-center font-bold text-white">{{ pending_count }}</span>
+                        {% endif %}
+                    </div>
+                    <button type="button" data-modal-close class="text-gray-300 hover:text-white transition-transform duration-200 ease-out hover:scale-110 active:scale-100">×</button>
+                </div>
+
+                <div class="px-5 py-4 max-h-[26rem] overflow-y-auto">
+                    {% if items %}
+                        <div class="space-y-3">
+                            {% for fr in items %}
+                                <div class="flex items-center gap-3 rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-3">
+                                    <img src="{{ fr.from_user.profile.avatar }}" class="w-9 h-9 rounded-full object-cover border border-gray-700" alt="@{{ fr.from_user.username }}">
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-sm font-semibold text-gray-100 truncate">@{{ fr.from_user.username }}</div>
+                                        <div class="text-[11px] text-gray-400">Requested</div>
+                                    </div>
+
+                                    <div class="flex items-center gap-2">
+                                        <form method="post"
+                                              action="{% url 'follow-request-decide' fr.id 'accept' %}"
+                                              hx-post="{% url 'follow-request-decide' fr.id 'accept' %}"
+                                              hx-target="#global_modal_root"
+                                              hx-swap="innerHTML"
+                                              hx-push-url="false"
+                                              class="m-0">
+                                            {% csrf_token %}
+                                            <button type="submit" class="inline-flex items-center justify-center h-9 w-9 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition" aria-label="Accept">
+                                                <span class="text-base" aria-hidden="true">✓</span>
+                                            </button>
+                                        </form>
+
+                                        <form method="post"
+                                              action="{% url 'follow-request-decide' fr.id 'reject' %}"
+                                              hx-post="{% url 'follow-request-decide' fr.id 'reject' %}"
+                                              hx-target="#global_modal_root"
+                                              hx-swap="innerHTML"
+                                              hx-push-url="false"
+                                              class="m-0">
+                                            {% csrf_token %}
+                                            <button type="submit" class="inline-flex items-center justify-center h-9 w-9 rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 transition" aria-label="Reject">
+                                                <span class="text-base" aria-hidden="true">✕</span>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-sm text-gray-400">No follow requests right now.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

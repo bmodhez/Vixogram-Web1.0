@@ -185,3 +185,36 @@ if django_user_logged_in is not None:
             request.session['welcome_popup_source'] = 'login'
         except Exception:
             pass
+
+
+if django_user_logged_in is not None:
+    @receiver(django_user_logged_in)
+    def show_location_popup_on_login(request, user, **kwargs):
+        """Ask for location permission for existing users too.
+
+        We only prompt when the user's profile has never recorded a location.
+        This keeps the UX aligned with the existing single modal in base.html,
+        while ensuring last_location_* fields can actually populate.
+        """
+        try:
+            if request is None:
+                return
+            if not getattr(user, 'is_authenticated', False):
+                return
+            # Don't schedule twice in the same session.
+            if request.session.get('show_location_popup'):
+                return
+
+            try:
+                profile = user.profile
+            except Exception:
+                return
+
+            # If we've already saved a location at least once, don't prompt.
+            if getattr(profile, 'last_location_at', None):
+                return
+
+            request.session['show_location_popup'] = True
+            request.session['location_popup_source'] = 'login'
+        except Exception:
+            pass

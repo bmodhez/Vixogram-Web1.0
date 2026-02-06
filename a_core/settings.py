@@ -252,13 +252,15 @@ if ENVIRONMENT == "production" or (_render_origin and _render_origin.startswith(
     SESSION_COOKIE_SECURE = True
 
 # VS Code Port Forwarding / Dev Tunnels typically terminates TLS at the proxy.
-# Trust the forwarded proto so Django/allauth generate https:// links.
-_using_devtunnel = any(
-    str(h).strip().lower().endswith(".devtunnels.ms") for h in (ALLOWED_HOSTS or [])
-)
+# IMPORTANT: Do NOT auto-enable this just because ALLOWED_HOSTS contains
+# ".devtunnels.ms"; that would force https:// links even for local 127.0.0.1.
+# Enable explicitly when you are actually serving via a Dev Tunnel.
+_using_devtunnel = _env_bool('DEVTUNNEL_ENABLED', default=False)
 if _using_devtunnel:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    USE_X_FORWARDED_HOST = True
+
+# Custom CSRF failure view (shows a friendly 403 page).
+CSRF_FAILURE_VIEW = "a_core.error_views.csrf_failure"
 
 # Application definition
 INSTALLED_APPS = [
@@ -359,6 +361,7 @@ TEMPLATES = [
                 'a_core.context_processors.location_popup',
                 'a_core.context_processors.site_stats',
                 'a_users.context_processors.notifications_badge',
+                'a_users.context_processors.follow_requests_badge',
                 'a_users.context_processors.story_upload_gate',
                 'a_rtchat.context_processors.admin_reports_badge',
                 'a_rtchat.context_processors.mobile_ads_config',
@@ -371,18 +374,23 @@ TEMPLATES = [
 # --- Mobile Ads (future-safe, mobile-only UI logic lives in JS) ---
 # Default: ON in dev, OFF in production unless explicitly enabled.
 MOBILE_ADS_ENABLED = _env_bool('MOBILE_ADS_ENABLED', default=(ENVIRONMENT != 'production'))
-MOBILE_ADS_DISABLE_FOR_STAFF = _env_bool('MOBILE_ADS_DISABLE_FOR_STAFF', default=True)
+MOBILE_ADS_DISABLE_FOR_STAFF = _env_bool('MOBILE_ADS_DISABLE_FOR_STAFF', default=(ENVIRONMENT == 'production'))
 
-# Content is intentionally "house ad" style (replace with real provider later).
-MOBILE_AD_CHAT_LIST_TITLE = os.environ.get('MOBILE_AD_CHAT_LIST_TITLE', 'Try Vixogram Invite')
-MOBILE_AD_CHAT_LIST_BODY = os.environ.get('MOBILE_AD_CHAT_LIST_BODY', 'Invite friends and unlock more fun chats.')
-MOBILE_AD_CHAT_LIST_CTA_TEXT = os.environ.get('MOBILE_AD_CHAT_LIST_CTA_TEXT', 'Invite')
-MOBILE_AD_CHAT_LIST_CTA_URL = os.environ.get('MOBILE_AD_CHAT_LIST_CTA_URL', '/invite/')
+# External-ad friendly defaults (configure via env vars for real ads).
+# Tip: set *_CTA_URL to your advertiser landing page.
+MOBILE_AD_CHAT_LIST_TITLE = os.environ.get('MOBILE_AD_CHAT_LIST_TITLE', 'Sponsored')
+MOBILE_AD_CHAT_LIST_BODY = os.environ.get('MOBILE_AD_CHAT_LIST_BODY', '')
+MOBILE_AD_CHAT_LIST_CTA_TEXT = os.environ.get('MOBILE_AD_CHAT_LIST_CTA_TEXT', 'Learn more')
+MOBILE_AD_CHAT_LIST_CTA_URL = os.environ.get('MOBILE_AD_CHAT_LIST_CTA_URL', '')
+MOBILE_AD_CHAT_LIST_IMAGE_URL = os.environ.get('MOBILE_AD_CHAT_LIST_IMAGE_URL', '')
+MOBILE_AD_CHAT_LIST_ADVERTISER = os.environ.get('MOBILE_AD_CHAT_LIST_ADVERTISER', '')
 
 MOBILE_AD_CHAT_FEED_TITLE = os.environ.get('MOBILE_AD_CHAT_FEED_TITLE', 'Sponsored')
-MOBILE_AD_CHAT_FEED_BODY = os.environ.get('MOBILE_AD_CHAT_FEED_BODY', 'Discover communities and meet new people on Vixogram.')
-MOBILE_AD_CHAT_FEED_CTA_TEXT = os.environ.get('MOBILE_AD_CHAT_FEED_CTA_TEXT', 'Explore')
-MOBILE_AD_CHAT_FEED_CTA_URL = os.environ.get('MOBILE_AD_CHAT_FEED_CTA_URL', '/')
+MOBILE_AD_CHAT_FEED_BODY = os.environ.get('MOBILE_AD_CHAT_FEED_BODY', '')
+MOBILE_AD_CHAT_FEED_CTA_TEXT = os.environ.get('MOBILE_AD_CHAT_FEED_CTA_TEXT', 'Open')
+MOBILE_AD_CHAT_FEED_CTA_URL = os.environ.get('MOBILE_AD_CHAT_FEED_CTA_URL', '')
+MOBILE_AD_CHAT_FEED_IMAGE_URL = os.environ.get('MOBILE_AD_CHAT_FEED_IMAGE_URL', '')
+MOBILE_AD_CHAT_FEED_ADVERTISER = os.environ.get('MOBILE_AD_CHAT_FEED_ADVERTISER', '')
 
 ASGI_APPLICATION = 'a_core.asgi.application'
 
@@ -532,6 +540,10 @@ CHAT_MSG_RATE_PERIOD = int(os.environ.get('CHAT_MSG_RATE_PERIOD', '10'))
 # Chat message retention (per room)
 # Keep only the newest N messages per room; older messages are deleted.
 CHAT_MAX_MESSAGES_PER_ROOM = int(os.environ.get('CHAT_MAX_MESSAGES_PER_ROOM', '250'))
+
+# Private rooms can have a different cap to protect DB size.
+# Default is higher than public rooms, but still bounded.
+PRIVATE_CHAT_MAX_MESSAGES_PER_ROOM = int(os.environ.get('PRIVATE_CHAT_MAX_MESSAGES_PER_ROOM', '1000'))
 
 # Chat UI performance
 # Initial messages rendered into the DOM on room open. Keep this small to prevent
@@ -762,6 +774,7 @@ ALLAUTH_ASYNC_EMAIL = _env_bool('ALLAUTH_ASYNC_EMAIL', default=(ENVIRONMENT == '
 ACCOUNT_FORMS = {
     'login': 'a_users.allauth_forms.CustomLoginForm',
     'signup': 'a_users.allauth_forms.CustomSignupForm',
+    'add_email': 'a_users.allauth_forms.CustomAddEmailForm',
     'reset_password': 'a_users.allauth_forms.CustomResetPasswordForm',
     'reset_password_from_key': 'a_users.allauth_forms.CustomResetPasswordKeyForm',
 }

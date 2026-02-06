@@ -24,6 +24,17 @@ _LOGIN_INPUT_CLASS = (
 _CHECKBOX_CLASS = "accent-indigo-500"
 
 
+def _validate_gmail_address(email: str) -> str:
+    email = (email or '').strip()
+    if not email:
+        return email
+    lower = email.lower()
+    if not lower.endswith('@gmail.com'):
+        raise ValidationError('Please use a valid @gmail.com email address.')
+    # Safety: avoid trailing spaces/odd casing being stored.
+    return lower
+
+
 class CustomLoginForm(LoginForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -88,6 +99,10 @@ class CustomSignupForm(SignupForm):
         validate_public_username(username)
         return username
 
+    def clean_email(self):
+        email = super().clean_email()
+        return _validate_gmail_address(email)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -106,7 +121,7 @@ class CustomSignupForm(SignupForm):
                 field.widget.attrs.update(
                     {
                         "class": f"{_BASE_INPUT_CLASS} !pl-12",
-                        "placeholder": "Password" if name == "password1" else "Confirm password",
+                        "placeholder": "Create password" if name == "password1" else "Confirm password",
                         "autocomplete": "new-password",
                     }
                 )
@@ -170,3 +185,16 @@ class CustomResetPasswordKeyForm(ResetPasswordKeyForm):
                     "autocomplete": "new-password",
                 }
             )
+
+
+try:
+    from allauth.account.forms import AddEmailForm
+except Exception:  # pragma: no cover
+    AddEmailForm = None
+
+
+if AddEmailForm is not None:
+    class CustomAddEmailForm(AddEmailForm):
+        def clean_email(self):
+            email = super().clean_email()
+            return _validate_gmail_address(email)

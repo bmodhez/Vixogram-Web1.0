@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="mx-auto w-full max-w-3xl">
+  <div class="rounded-2xl border border-gray-800 bg-gray-950/30 p-6 sm:p-8">
+    <div class="text-sm font-semibold text-emerald-200">Checkout</div>
+    <div class="mt-2 text-3xl font-extrabold text-white">You’re upgrading to {{ plan_name }}</div>
+
+    <div class="mt-2 text-sm text-gray-300">
+      Full AI access • No ads • Premium features
+    </div>
+
+    <div class="mt-6 rounded-2xl border border-gray-800 bg-gray-900/50 p-5">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <div class="text-lg font-extrabold text-white">{{ plan_name }}</div>
+          <div class="mt-2 space-y-1 text-sm text-gray-200">
+            {% for b in bullets %}
+              <div>• {{ b }}</div>
+            {% endfor %}
+          </div>
+          <div class="mt-3 text-xs font-semibold text-gray-400">{{ trust_line }}</div>
+        </div>
+        <div class="text-right">
+          <div class="text-sm font-semibold text-gray-100">{{ price_label }}</div>
+        </div>
+      </div>
+
+      <div class="mt-5">
+        {% if payment_enabled %}
+          <form id="pro-pay-form" method="post" action="{% url 'pro-payment-complete' %}">
+            {% csrf_token %}
+            <input type="hidden" name="razorpay_order_id" id="razorpay_order_id" value="{{ razorpay_order_id }}" />
+            <input type="hidden" name="razorpay_payment_id" id="razorpay_payment_id" value="" />
+            <input type="hidden" name="razorpay_signature" id="razorpay_signature" value="" />
+
+            <button
+              id="pro-pay-btn"
+              type="button"
+              class="w-full inline-flex items-center justify-center rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-3 transition-colors"
+            >
+              Pay ₹399
+            </button>
+            <div class="mt-2 text-[11px] text-gray-400 text-center">Secure payment via Razorpay</div>
+          </form>
+        {% else %}
+          <div class="rounded-xl border border-gray-800 bg-gray-900/50 p-4 text-sm text-gray-300">
+            Payments are not configured yet.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if payment_enabled %}
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+  (function () {
+    const btn = document.getElementById('pro-pay-btn');
+    const form = document.getElementById('pro-pay-form');
+    if (!btn || !form) return;
+
+    const orderId = String(document.getElementById('razorpay_order_id')?.value || '').trim();
+    if (!orderId) return;
+
+    const pay = () => {
+      const opts = {
+        key: "{{ razorpay_key_id }}",
+        amount: {{ amount_paise|default:0 }},
+        currency: "INR",
+        name: "Vixogram",
+        description: "{{ plan_name }}",
+        order_id: orderId,
+        prefill: {
+          name: "{{ user_name|escapejs }}",
+          email: "{{ user_email|escapejs }}"
+        },
+        theme: { color: "#10b981" },
+        handler: function (response) {
+          try {
+            document.getElementById('razorpay_payment_id').value = response.razorpay_payment_id || '';
+            document.getElementById('razorpay_signature').value = response.razorpay_signature || '';
+
+            const fd = new FormData(form);
+            const csrf = (typeof getCookie === 'function') ? (getCookie('csrftoken') || '') : '';
+            fetch(form.action, {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': csrf
+              },
+              body: fd
+            }).then(r => r.json()).then((data) => {
+              if (data && data.ok && data.redirect_url) {
+                window.location.href = data.redirect_url;
+                return;
+              }
+              const msg = (data && data.error) ? data.error : 'Payment could not be completed.';
+              try { window.showToast && window.showToast(msg); } catch {}
+            }).catch(() => {
+              try { window.showToast && window.showToast('Payment captured. Please refresh.'); } catch {}
+            });
+          } catch (e) {
+            try { window.showToast && window.showToast('Payment captured. Please refresh.'); } catch {}
+          }
+        }
+      };
+
+      try {
+        const rzp = new window.Razorpay(opts);
+        rzp.open();
+      } catch (e) {
+        try { window.showToast && window.showToast('Payment failed to open.'); } catch {}
+      }
+    };
+
+    btn.addEventListener('click', function (e) {
+      try { e.preventDefault(); } catch {}
+      pay();
+    });
+  })();
+</script>
+{% endif %}
+{% endblock %}

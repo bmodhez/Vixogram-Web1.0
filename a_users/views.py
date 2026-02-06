@@ -9,10 +9,11 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.conf import settings
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_POST
 from django.db.models import Q
 
-from .models import Profile, Story
+from .models import Profile, Story, StoryView
 from .forms import ProfileForm
 from .forms import ReportUserForm
 from .forms import ProfilePrivacyForm
@@ -21,10 +22,11 @@ from .forms import UsernameChangeForm
 from .forms import StoryForm
 
 try:
-    from .story_policy import can_user_add_story, story_upload_locked_message
+    from .story_policy import can_user_add_story, story_upload_locked_message, get_story_max_active
 except Exception:  # pragma: no cover
     can_user_add_story = None
     story_upload_locked_message = None
+    get_story_max_active = None
 
 try:
     from a_rtchat.rate_limit import check_rate_limit, get_client_ip, make_key
@@ -42,7 +44,7 @@ from django.core.files.base import ContentFile
 from urllib.parse import urlencode
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from a_users.models import Follow
+from a_users.models import Follow, FollowRequest
 from a_users.models import UserReport
 from a_users.models import SupportEnquiry
 from a_users.models import Referral
@@ -131,9 +133,15 @@ def profile_view(request, username=None):
     followers_count = Follow.objects.filter(following=profile_user).count()
     following_count = Follow.objects.filter(follower=profile_user).count()
     is_verified_badge = bool(getattr(profile_user, 'is_superuser', False) or (followers_count >= VERIFIED_FOLLOWERS_THRESHOLD))
+
     is_following = False
+    is_follow_requested = False
     if request.user.is_authenticated and request.user != profile_user:
         is_following = Follow.objects.filter(follower=request.user, following=profile_user).exists()
+        try:
+            is_follow_requested = FollowRequest.objects.filter(from_user=request.user, to_user=profile_user).exists()
+        except Exception:
+            is_follow_requested = False
 
     viewer_verified = _has_verified_email(getattr(request, 'user', None))
     is_owner = bool(request.user.is_authenticated and request.user == profile_user)
@@ -157,16 +165,22 @@ def profile_view(request, username=None):
     except Exception:
         visible_online = False
 
-    show_follow_lists = bool(viewer_verified and (not is_private or is_owner))
+    # Follow lists visibility rules:
+    # - Owner: always.
+    # - Private accounts: followers can view after request is accepted.
+    # - Public accounts: keep the verified-email gate.
+    show_follow_lists = bool(is_owner or is_following or (viewer_verified and (not is_private)))
     follow_lists_locked_reason = ''
 
     if not show_follow_lists:
-        if not request.user.is_authenticated:
+        if request.user.is_authenticated and is_private and (not is_owner) and (not is_following):
+            follow_lists_locked_reason = 'This acc is private. You cannot view following/followers unless the user accepts your request'
+        elif not request.user.is_authenticated:
             follow_lists_locked_reason = 'Login and verify your email to view followers/following.'
         elif not viewer_verified:
             follow_lists_locked_reason = 'Verify your email to view followers/following.'
-        elif is_private and not is_owner:
-            follow_lists_locked_reason = 'This account is private. Only counts are visible.'
+        else:
+            follow_lists_locked_reason = 'Followers & Following are locked right now.'
     
     # Stories visibility: private accounts -> only owner or followers.
     has_active_stories = False
@@ -203,6 +217,7 @@ def profile_view(request, username=None):
         'following_count': following_count,
         'is_verified_badge': is_verified_badge,
         'is_following': is_following,
+        'is_follow_requested': bool(is_follow_requested),
         'show_follow_lists': show_follow_lists,
         'follow_lists_locked_reason': follow_lists_locked_reason,
         'is_owner': is_owner,
@@ -336,6 +351,180 @@ def user_stories_json_view(request, username: str):
 
 @login_required
 @require_POST
+def story_seen_view(request, story_id: int):
+    """Mark a story as seen by the current user (best-effort)."""
+    story = get_object_or_404(Story, id=story_id)
+
+    # Don't record self-views.
+    try:
+        if getattr(story, 'user_id', None) == getattr(request.user, 'id', None):
+            return JsonResponse({'ok': True})
+    except Exception:
+        pass
+
+    owner = getattr(story, 'user', None)
+    owner_profile = getattr(owner, 'profile', None) if owner else None
+
+    is_admin = False
+    try:
+        is_admin = bool(getattr(request.user, 'is_staff', False) or getattr(request.user, 'is_superuser', False))
+    except Exception:
+        is_admin = False
+
+    is_private = bool(getattr(owner_profile, 'is_private_account', False))
+    if is_private and not is_admin:
+        # Only followers can view private stories.
+        is_following = False
+        try:
+            is_following = Follow.objects.filter(follower=request.user, following=owner).exists()
+        except Exception:
+            is_following = False
+        if not is_following:
+            return JsonResponse({'detail': 'Private account'}, status=403)
+
+    try:
+        obj, created = StoryView.objects.get_or_create(story=story, viewer=request.user)
+        if not created:
+            obj.last_seen = timezone.now()
+            obj.save(update_fields=['last_seen'])
+    except Exception:
+        # Best-effort; don't break story playback.
+        pass
+
+    res = JsonResponse({'ok': True})
+    try:
+        res['Cache-Control'] = 'no-store'
+    except Exception:
+        pass
+    return res
+
+
+@login_required
+def story_viewers_json_view(request, story_id: int):
+    """Return the viewers list for a story.
+
+    Only the story owner (or staff/superuser) can fetch this.
+    """
+    story = get_object_or_404(Story, id=story_id)
+
+    is_admin = False
+    try:
+        is_admin = bool(getattr(request.user, 'is_staff', False) or getattr(request.user, 'is_superuser', False))
+    except Exception:
+        is_admin = False
+
+    is_owner = bool(getattr(story, 'user_id', None) == getattr(request.user, 'id', None))
+    if not (is_owner or is_admin):
+        return JsonResponse({'detail': 'Forbidden'}, status=403)
+
+    # Pagination
+    # - Default limit = 50
+    # - Cursor is the last item of the previous page: (last_seen, id)
+    # Query params:
+    #   ?limit=50&cursor=<iso_datetime>&cursor_id=<int>
+    try:
+        limit = int(request.GET.get('limit') or 50)
+    except Exception:
+        limit = 50
+    limit = max(1, min(100, limit))
+
+    cursor_raw = (request.GET.get('cursor') or '').strip()
+    cursor_id_raw = (request.GET.get('cursor_id') or '').strip()
+
+    cursor_dt = None
+    cursor_id = None
+    if cursor_raw:
+        try:
+            cursor_dt = parse_datetime(cursor_raw)
+            if cursor_dt and timezone.is_naive(cursor_dt):
+                cursor_dt = timezone.make_aware(cursor_dt, timezone.get_current_timezone())
+        except Exception:
+            cursor_dt = None
+    if cursor_id_raw:
+        try:
+            cursor_id = int(cursor_id_raw)
+        except Exception:
+            cursor_id = None
+
+    viewers = []
+    has_more = False
+    next_cursor = None
+    next_cursor_id = None
+
+    try:
+        qs = (
+            StoryView.objects
+            .filter(story=story)
+            .select_related('viewer', 'viewer__profile')
+            .order_by('-last_seen', '-id')
+        )
+
+        if cursor_dt is not None:
+            # Fetch items strictly older than the cursor.
+            if cursor_id is not None:
+                qs = qs.filter(Q(last_seen__lt=cursor_dt) | (Q(last_seen=cursor_dt) & Q(id__lt=cursor_id)))
+            else:
+                qs = qs.filter(last_seen__lt=cursor_dt)
+
+        rows = list(qs[: limit + 1])
+        if len(rows) > limit:
+            has_more = True
+            rows = rows[:limit]
+
+        if rows:
+            last = rows[-1]
+            try:
+                next_cursor = last.last_seen.isoformat() if getattr(last, 'last_seen', None) else None
+            except Exception:
+                next_cursor = None
+            try:
+                next_cursor_id = int(last.id)
+            except Exception:
+                next_cursor_id = None
+
+        for row in rows:
+            u = getattr(row, 'viewer', None)
+            if not u:
+                continue
+            p = getattr(u, 'profile', None)
+            try:
+                avatar = getattr(p, 'avatar', None) if p else None
+            except Exception:
+                avatar = None
+            if not avatar:
+                try:
+                    avatar = DEFAULT_AVATAR_DATA_URI
+                except Exception:
+                    avatar = ''
+
+            viewers.append({
+                'username': getattr(u, 'username', ''),
+                'displayname': getattr(p, 'name', None) if p else None,
+                'avatar': avatar,
+            })
+    except Exception:
+        viewers = []
+        has_more = False
+        next_cursor = None
+        next_cursor_id = None
+
+    res = JsonResponse({
+        'count': len(viewers),
+        'viewers': viewers,
+        'has_more': bool(has_more),
+        'next_cursor': next_cursor,
+        'next_cursor_id': next_cursor_id,
+        'limit': limit,
+    })
+    try:
+        res['Cache-Control'] = 'no-store'
+    except Exception:
+        pass
+    return res
+
+
+@login_required
+@require_POST
 def story_delete_view(request, story_id: int):
     """Delete a story.
 
@@ -373,39 +562,6 @@ def story_add_view(request):
     is_htmx = (request.headers.get('HX-Request') == 'true') or (request.META.get('HTTP_HX_REQUEST') == 'true')
     is_modal = bool(request.GET.get('modal') == '1')
 
-    # Gate story uploads behind invite points.
-    try:
-        allowed = bool(can_user_add_story(request.user)) if can_user_add_story is not None else True
-    except Exception:
-        allowed = True
-
-    if not allowed:
-        msg = (
-            story_upload_locked_message(request.user)
-            if story_upload_locked_message is not None
-            else 'Minimum requirements not met to add a story.'
-        )
-
-        if is_htmx and is_modal:
-            return HttpResponse(
-                f"""
-                <div></div>
-                <script>
-                  try {{
-                    document.body.dispatchEvent(new CustomEvent('vixo:toast', {{ detail: {{ message: {json.dumps(msg)}, kind: 'error', durationMs: 4500 }} }}));
-                  }} catch (e) {{}}
-                  try {{ document.body.dispatchEvent(new Event('vixo:closeGlobalModal')); }} catch (e) {{}}
-                </script>
-                """.strip(),
-                status=403,
-            )
-
-        try:
-            messages.error(request, msg)
-        except Exception:
-            pass
-        return redirect('invite-friends')
-
     # Opportunistic cleanup for the current user.
     try:
         cutoff = now - timedelta(hours=getattr(Story, 'TTL_HOURS', 24))
@@ -424,6 +580,47 @@ def story_add_view(request):
                 pass
     except Exception:
         pass
+
+    def _active_story_count() -> int:
+        """Active = not expired (or missing expires_at but within TTL window)."""
+        try:
+            cutoff = now - timedelta(hours=getattr(Story, 'TTL_HOURS', 24))
+            return int(
+                Story.objects
+                .filter(user=request.user)
+                .filter(
+                    Q(expires_at__gt=now)
+                    | Q(expires_at__isnull=True, created_at__gte=cutoff)
+                )
+                .count()
+            )
+        except Exception:
+            return 0
+
+    max_active = 25
+    try:
+        if callable(get_story_max_active):
+            max_active = int(get_story_max_active() or 25)
+    except Exception:
+        max_active = 25
+
+    if _active_story_count() >= max_active:
+        msg = f'You can put only {max_active} stories.'
+        if is_htmx and is_modal:
+            # User clicked "Add Story" from menu: show popup and close.
+            return HttpResponse(
+                f"""
+                <div></div>
+                <script>
+                  try {{
+                    document.body.dispatchEvent(new CustomEvent('vixo:toast', {{ detail: {{ message: {msg!r}, kind: 'error', durationMs: 3000 }} }}));
+                  }} catch (e) {{}}
+                  try {{ document.body.dispatchEvent(new Event('vixo:closeGlobalModal')); }} catch (e) {{}}
+                </script>
+                """.strip()
+            )
+        messages.error(request, msg)
+        return redirect('profile')
 
     if request.method == 'POST':
         files = request.FILES
@@ -450,6 +647,35 @@ def story_add_view(request):
 
         form = StoryForm(request.POST, files)
         if form.is_valid():
+            if _active_story_count() >= max_active:
+                msg = f'You can put only {max_active} stories.'
+                try:
+                    form.add_error(None, msg)
+                except Exception:
+                    pass
+
+                if is_htmx and is_modal:
+                    ctx = {
+                        'form': form,
+                        'duration_seconds': int(getattr(Story, 'DURATION_SECONDS', 10)),
+                        'ttl_hours': int(getattr(Story, 'TTL_HOURS', 24)),
+                    }
+                    resp = render(request, 'a_users/partials/story_add_modal.html', ctx)
+                    try:
+                        extra = f"""
+                        <script>
+                          try {{
+                            document.body.dispatchEvent(new CustomEvent('vixo:toast', {{ detail: {{ message: {msg!r}, kind: 'error', durationMs: 3000 }} }}));
+                          }} catch (e) {{}}
+                        </script>
+                        """.strip().encode('utf-8')
+                    except Exception:
+                        extra = b''
+                    return HttpResponse(resp.content + extra)
+
+                messages.error(request, msg)
+                return redirect('profile')
+
             story = form.save(commit=False)
             story.user = request.user
             story.save()
@@ -1106,53 +1332,87 @@ def follow_toggle_view(request, username: str):
         return redirect('profile')
 
     rel = Follow.objects.filter(follower=request.user, following=target)
+    req_qs = FollowRequest.objects.filter(from_user=request.user, to_user=target)
+
     toast_message = None
+    is_private = bool(getattr(getattr(target, 'profile', None), 'is_private_account', False))
+
     if rel.exists():
         rel.delete()
         toast_message = f'Unfollowed @{target.username}'
         if not is_htmx:
             messages.success(request, toast_message)
     else:
-        Follow.objects.create(follower=request.user, following=target)
-        toast_message = f'Following @{target.username}'
-        if not is_htmx:
-            messages.success(request, toast_message)
+        if is_private:
+            # Private account: create/cancel a follow request instead of following immediately.
+            if req_qs.exists():
+                req_qs.delete()
+                toast_message = f'Follow request cancelled for @{target.username}'
+            else:
+                FollowRequest.objects.create(from_user=request.user, to_user=target)
+                toast_message = f'Requested to follow @{target.username}'
 
-        # Optional in-app notification: only if user is offline (best-effort)
-        try:
-            if Notification is not None:
-                from a_rtchat.notifications import should_persist_notification
+            if not is_htmx:
+                messages.success(request, toast_message)
 
-                should_store = should_persist_notification(user_id=target.id)
+            # Realtime badge update for the target user (best-effort)
+            try:
+                from asgiref.sync import async_to_sync
+                from channels.layers import get_channel_layer
 
-                if should_store:
-                    Notification.objects.create(
-                        user=target,
-                        from_user=request.user,
-                        type='follow',
-                        preview=f"@{request.user.username} followed you",
-                        url=f"/profile/u/{request.user.username}/",
-                    )
+                pending_count = FollowRequest.objects.filter(to_user=target).count()
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                    f"notify_user_{target.id}",
+                    {
+                        'type': 'follow_request_notify_handler',
+                        'from_username': request.user.username,
+                        'pending_count': int(pending_count or 0),
+                    },
+                )
+            except Exception:
+                pass
+        else:
+            Follow.objects.create(follower=request.user, following=target)
+            toast_message = f'Following @{target.username}'
+            if not is_htmx:
+                messages.success(request, toast_message)
 
-                    # Realtime toast/badge via per-user notify WS
-                    try:
-                        from asgiref.sync import async_to_sync
-                        from channels.layers import get_channel_layer
+            # Optional in-app notification: only if user is offline (best-effort)
+            try:
+                if Notification is not None:
+                    from a_rtchat.notifications import should_persist_notification
 
-                        channel_layer = get_channel_layer()
-                        async_to_sync(channel_layer.group_send)(
-                            f"notify_user_{target.id}",
-                            {
-                                'type': 'follow_notify_handler',
-                                'from_username': request.user.username,
-                                'url': f"/profile/u/{request.user.username}/",
-                                'preview': f"@{request.user.username} followed you",
-                            },
+                    should_store = should_persist_notification(user_id=target.id)
+
+                    if should_store:
+                        Notification.objects.create(
+                            user=target,
+                            from_user=request.user,
+                            type='follow',
+                            preview=f"@{request.user.username} followed you",
+                            url=f"/profile/u/{request.user.username}/",
                         )
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+
+                        # Realtime toast/badge via per-user notify WS
+                        try:
+                            from asgiref.sync import async_to_sync
+                            from channels.layers import get_channel_layer
+
+                            channel_layer = get_channel_layer()
+                            async_to_sync(channel_layer.group_send)(
+                                f"notify_user_{target.id}",
+                                {
+                                    'type': 'follow_notify_handler',
+                                    'from_username': request.user.username,
+                                    'url': f"/profile/u/{request.user.username}/",
+                                    'preview': f"@{request.user.username} followed you",
+                                },
+                            )
+                        except Exception:
+                            pass
+            except Exception:
+                pass
 
     if is_htmx and request.GET.get('modal') == '1':
         # If the follow action happened inside the profile modal, re-render the modal
@@ -1199,6 +1459,61 @@ def follow_toggle_view(request, username: str):
         return resp
 
     return redirect('profile-user', username=username)
+
+
+@login_required
+def follow_requests_modal_view(request):
+    qs = (
+        FollowRequest.objects
+        .filter(to_user=request.user)
+        .select_related('from_user', 'from_user__profile')
+        .order_by('-created_at')
+    )
+    items = list(qs[:200])
+    pending_count = qs.count()
+    return render(request, 'a_users/partials/follow_requests_modal.html', {
+        'items': items,
+        'pending_count': int(pending_count or 0),
+    })
+
+
+@login_required
+def follow_request_decide_view(request, req_id: int, action: str):
+    if request.method != 'POST':
+        return redirect('home')
+
+    action = (action or '').strip().lower()
+    fr = get_object_or_404(FollowRequest, id=req_id, to_user=request.user)
+
+    toast_message = ''
+    if action == 'accept':
+        Follow.objects.get_or_create(follower=fr.from_user, following=request.user)
+        fr.delete()
+        toast_message = f"Accepted @{fr.from_user.username}"
+    elif action == 'reject':
+        fr.delete()
+        toast_message = f"Rejected @{fr.from_user.username}"
+    else:
+        toast_message = 'Invalid action.'
+
+    pending_count = FollowRequest.objects.filter(to_user=request.user).count()
+
+    # Re-render the modal so the list updates without leaving the page.
+    resp = follow_requests_modal_view(request)
+    try:
+        resp['HX-Trigger'] = json.dumps({
+            'followRequestsChanged': {
+                'pending_count': int(pending_count or 0),
+            },
+            'vixo:toast': {
+                'message': toast_message,
+                'kind': 'success' if action in {'accept', 'reject'} else 'error',
+                'durationMs': 3000,
+            }
+        })
+    except Exception:
+        pass
+    return resp
 
 
 @login_required

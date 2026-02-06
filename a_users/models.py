@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django.db.models import Q
 from django.conf import settings
 from django.utils import timezone
+from django.core.validators import MaxLengthValidator
 
 from datetime import timedelta
 
@@ -14,7 +15,12 @@ class Profile(models.Model):
     image = models.ImageField(upload_to='avatars/', null=True, blank=True)
     cover_image = models.ImageField(upload_to='profile_covers/', null=True, blank=True)
     displayname = models.CharField(max_length=20, null=True, blank=True)
-    info = models.TextField(null=True, blank=True) 
+    info = models.TextField(
+        null=True,
+        blank=True,
+        max_length=200,
+        validators=[MaxLengthValidator(200)],
+    )
     chat_blocked = models.BooleanField(default=False)
     is_private_account = models.BooleanField(default=False)
     is_stealth = models.BooleanField(default=False)
@@ -78,6 +84,24 @@ class Profile(models.Model):
             return None
 
 
+"""Premium/Pro subscription models (disabled for now).
+
+We are intentionally keeping the planned subscription + payment models in the codebase
+as a reference, but the feature is not live yet.
+
+When you want to enable Premium again:
+- Restore the classes below
+- Re-add URLs/views and UI toggles
+"""
+
+# if False:
+#     class ProSubscription(models.Model):
+#         ...
+#
+#     class ProPayment(models.Model):
+#         ...
+
+
 class Story(models.Model):
     """Image-only stories.
 
@@ -121,6 +145,29 @@ class Story(models.Model):
 
     def __str__(self):
         return f"Story({self.id}) u={self.user_id}"
+
+
+class StoryView(models.Model):
+    """Tracks which users have viewed a specific story.
+
+    This enables the story owner to see the list of viewers.
+    """
+
+    story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name='views')
+    viewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='story_views')
+    first_seen = models.DateTimeField(auto_now_add=True, db_index=True)
+    last_seen = models.DateTimeField(auto_now=True, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['story', 'viewer'], name='uniq_story_view'),
+        ]
+        indexes = [
+            models.Index(fields=['story', '-last_seen'], name='storyview_story_lastseen_idx'),
+        ]
+
+    def __str__(self):
+        return f"StoryView(story={self.story_id}, viewer={self.viewer_id})"
 
 
 _DEFAULT_AVATAR_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128' role='img' aria-label='User avatar'>
@@ -195,6 +242,24 @@ class Follow(models.Model):
 
     def __str__(self):
         return f"{self.follower_id} -> {self.following_id}"
+
+
+class FollowRequest(models.Model):
+    from_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='follow_requests_sent')
+    to_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='follow_requests_received')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['from_user', 'to_user'], name='unique_follow_request'),
+        ]
+        indexes = [
+            models.Index(fields=['to_user', '-created_at'], name='followreq_to_created_idx'),
+            models.Index(fields=['from_user', '-created_at'], name='followreq_from_created_idx'),
+        ]
+
+    def __str__(self):
+        return f"FollowRequest({self.from_user_id} -> {self.to_user_id})"
 
 
 class UserReport(models.Model):

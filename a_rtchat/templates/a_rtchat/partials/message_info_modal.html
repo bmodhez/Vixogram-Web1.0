@@ -20,7 +20,7 @@
                             {% for rs in read_states %}
                                 <div class="flex items-center gap-3 rounded-xl border border-gray-800 bg-gray-950/30 px-3 py-2">
                                     <img
-                                        src="{{ rs.user.profile.avatar }}"
+                                        src="{{ rs.user.profile.avatar|default:default_avatar }}"
                                         class="h-9 w-9 rounded-full object-cover border border-white/10"
                                         alt="{{ rs.user.profile.name|default:rs.user.username }}"
                                         loading="lazy"

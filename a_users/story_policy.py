@@ -3,6 +3,17 @@ from __future__ import annotations
 from django.conf import settings
 
 
+def get_story_max_active() -> int:
+    """Maximum number of *active* stories a user can have at once."""
+    try:
+        n = int(getattr(settings, 'STORY_MAX_ACTIVE', 25) or 25)
+    except Exception:
+        n = 25
+    if n < 1:
+        n = 1
+    return n
+
+
 def get_story_upload_requirements() -> tuple[int, int]:
     """Return (required_points, required_verified_invites)."""
     try:
@@ -46,14 +57,14 @@ def get_user_story_progress(user) -> tuple[int, int]:
 
 
 def can_user_add_story(user) -> bool:
+    """Return whether the user can add a story.
+
+    Story upload is now free for all authenticated users.
+    """
     try:
-        if user and getattr(user, 'is_authenticated', False) and (getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False)):
-            return True
+        return bool(user and getattr(user, 'is_authenticated', False))
     except Exception:
-        pass
-    required_points, required_invites = get_story_upload_requirements()
-    points, verified_invites = get_user_story_progress(user)
-    return bool((points >= required_points) or (verified_invites >= required_invites))
+        return False
 
 
 def story_upload_locked_message(user) -> str:

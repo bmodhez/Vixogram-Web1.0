@@ -102,54 +102,45 @@
                         <button
                             type="button"
                             id="user_menu_btn"
-                            class="flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg hover:bg-gray-800 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0"
+                            class="relative flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg hover:bg-gray-800 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0"
                             aria-label="User menu"
                             aria-haspopup="menu"
                             aria-expanded="false"
                         >
                             <img src="{{ user.profile.avatar }}" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover border border-gray-700">
                             <span class="hidden sm:inline text-sm text-gray-200 font-semibold">{{ user.username }}</span>
+                            <span id="nav_followreq_badge" class="hidden absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-red-500 text-[10px] leading-5 text-center font-bold text-white"></span>
                         </button>
-
-                        <div
-                            id="nav_total_users"
-                            class="hidden sm:flex items-center gap-2 rounded-full border border-indigo-500/20 bg-gradient-to-r from-indigo-500/10 via-fuchsia-500/10 to-sky-500/10 px-3 py-1 text-[11px] font-semibold text-indigo-200 whitespace-nowrap"
-                            aria-label="Total users"
-                        >
-                            <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-indigo-500/20 text-indigo-100">👥</span>
-                            <span id="total-users-count" class="font-extrabold">{{ TOTAL_USERS_COUNT|default:0 }}</span>
-                            <span class="text-indigo-100/90">users</span>
-                        </div>
 
                         <div id="user_menu" class="hidden fixed left-1/2 -translate-x-1/2 top-24 w-[min(18rem,calc(100vw-2rem))] sm:absolute sm:left-auto sm:translate-x-0 sm:top-full sm:right-0 sm:mt-2 rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl shadow-black/30 max-h-[calc(100vh-8rem)] overflow-x-hidden overflow-y-auto" role="menu">
                             <a href="{% url 'profile' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
                                 View profile
                             </a>
-                            {% if CAN_ADD_STORY %}
-                                <a
-                                    href="{% url 'story-add' %}"
-                                    hx-get="{% url 'story-add' %}?modal=1"
-                                    hx-target="#global_modal_root"
-                                    hx-swap="innerHTML"
-                                    hx-push-url="false"
-                                    class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0"
-                                >
-                                    Add Story
-                                </a>
-                            {% else %}
-                                <button
-                                    type="button"
-                                    class="w-full text-left px-4 py-3 text-sm text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 transition-all duration-200 ease-out flex items-center justify-between gap-3"
-                                    title="Minimum requirements not met to add a story. Need {{ STORY_REQUIRED_POINTS|default:50 }} points ({{ STORY_REQUIRED_INVITES|default:5 }} verified invites)."
-                                    aria-label="Add Story (locked)"
-                                    onclick="try { document.body.dispatchEvent(new CustomEvent('vixo:toast', { detail: { message: 'Minimum requirements not met to add a story. Need {{ STORY_REQUIRED_POINTS|default:50 }} points ({{ STORY_REQUIRED_INVITES|default:5 }} verified invites). You have {{ STORY_POINTS|default:0 }} points and {{ STORY_VERIFIED_INVITES|default:0 }} invites.', kind: 'error', durationMs: 4500 } })); } catch (e) {}"
-                                >
-                                    <span>Add Story</span>
-                                    <span class="inline-flex items-center gap-1 text-xs font-semibold text-gray-500" aria-hidden="true">
-                                        <span>🔒</span>
-                                    </span>
-                                </button>
-                            {% endif %}
+                            <a
+                                href="{% url 'story-add' %}"
+                                hx-get="{% url 'story-add' %}?modal=1"
+                                hx-target="#global_modal_root"
+                                hx-swap="innerHTML"
+                                hx-push-url="false"
+                                class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0"
+                            >
+                                Add Story
+                            </a>
+
+                            <button
+                                type="button"
+                                id="followreq_btn"
+                                hx-get="{% url 'follow-requests-modal' %}"
+                                hx-target="#global_modal_root"
+                                hx-swap="innerHTML"
+                                hx-push-url="false"
+                                data-user-menu-close="1"
+                                class="w-full text-left px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-between gap-3"
+                                aria-label="Follow requests"
+                            >
+                                <span>Follow requests</span>
+                                <span id="followreq_menu_badge" class="hidden min-w-5 h-5 px-1 rounded-full bg-red-500 text-[10px] leading-5 text-center font-bold text-white"></span>
+                            </button>
                             <a href="{% url 'contact-support' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
                                 Contact Support
                             </a>
@@ -737,7 +728,7 @@
                             <button
                                 type="button"
                                 id="location-allow"
-                                class="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 hover:from-emerald-400 hover:via-teal-400 hover:to-sky-400 px-4 py-2.5 text-sm font-extrabold text-white"
+                                class="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 hover:from-emerald-400 hover:via-teal-400 hover:to-sky-400 px-4 py-2.5 text-sm font-extrabold text-white vixo-keep-white"
                             >
                                 Allow
                             </button>
@@ -752,6 +743,25 @@
         (function () {
             const modal = document.getElementById('location-modal');
             if (!modal) return;
+
+            const getCookieSafe = (name) => {
+                try {
+                    if (typeof getCookie === 'function') return getCookie(name);
+                } catch {}
+                try {
+                    const n = String(name || '');
+                    if (!n) return '';
+                    const cookies = String(document.cookie || '').split(';');
+                    for (let i = 0; i < cookies.length; i++) {
+                        const c = cookies[i].trim();
+                        if (!c) continue;
+                        if (c.startsWith(n + '=')) return decodeURIComponent(c.slice(n.length + 1));
+                    }
+                    return '';
+                } catch {
+                    return '';
+                }
+            };
 
             const statusEl = document.getElementById('location-status');
             const allowBtn = document.getElementById('location-allow');
@@ -810,8 +820,8 @@
                                 if (typeof lat === 'number' && typeof lng === 'number') {
                                     try { window.localStorage.setItem('vixo:last_location', JSON.stringify({ lat: lat, lng: lng, t: Date.now() })); } catch {}
                                     try {
-                                        const csrf = (typeof getCookie === 'function') ? (getCookie('csrftoken') || '') : '';
-                                        fetch('/profile/location/save/', {
+                                        const csrf = getCookieSafe('csrftoken') || '';
+                                        fetch('{% url "profile-location-save" %}', {
                                             method: 'POST',
                                             credentials: 'same-origin',
                                             headers: {
@@ -893,6 +903,7 @@
         "userAuthenticated": {% if user.is_authenticated %}true{% else %}false{% endif %},
         "userIsStaff": {% if user.is_authenticated and user.is_staff %}true{% else %}false{% endif %},
         "navNotifUnread": {{ NAV_NOTIF_UNREAD|default:0 }},
+        "navFollowReqPending": {{ NAV_FOLLOWREQ_PENDING|default:0 }},
         "firebaseEnabled": {% if user.is_authenticated and FIREBASE_ENABLED %}true{% else %}false{% endif %},
         "pushRegisterUrl": "{% url 'push-register' %}",
         "pushConfigUrl": "{% url 'push-config' %}",
@@ -912,13 +923,17 @@
                 "title": "{{ MOBILE_AD_CHAT_LIST.title|default:''|escapejs }}",
                 "body": "{{ MOBILE_AD_CHAT_LIST.body|default:''|escapejs }}",
                 "ctaText": "{{ MOBILE_AD_CHAT_LIST.ctaText|default:''|escapejs }}",
-                "ctaUrl": "{{ MOBILE_AD_CHAT_LIST.ctaUrl|default:''|escapejs }}"
+                "ctaUrl": "{{ MOBILE_AD_CHAT_LIST.ctaUrl|default:''|escapejs }}",
+                "imageUrl": "{{ MOBILE_AD_CHAT_LIST.imageUrl|default:''|escapejs }}",
+                "advertiser": "{{ MOBILE_AD_CHAT_LIST.advertiser|default:''|escapejs }}"
             },
             "chatFeed": {
                 "title": "{{ MOBILE_AD_CHAT_FEED.title|default:''|escapejs }}",
                 "body": "{{ MOBILE_AD_CHAT_FEED.body|default:''|escapejs }}",
                 "ctaText": "{{ MOBILE_AD_CHAT_FEED.ctaText|default:''|escapejs }}",
-                "ctaUrl": "{{ MOBILE_AD_CHAT_FEED.ctaUrl|default:''|escapejs }}"
+                "ctaUrl": "{{ MOBILE_AD_CHAT_FEED.ctaUrl|default:''|escapejs }}",
+                "imageUrl": "{{ MOBILE_AD_CHAT_FEED.imageUrl|default:''|escapejs }}",
+                "advertiser": "{{ MOBILE_AD_CHAT_FEED.advertiser|default:''|escapejs }}"
             }
         }
     }</script>

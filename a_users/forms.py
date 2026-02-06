@@ -10,6 +10,11 @@ from .models import UserReport
 from .models import SupportEnquiry
 import re
 
+from .username_policy import validate_public_username
+
+
+BIO_MAX_LENGTH = 200
+
 
 def mask_bio_text(value: str) -> str:
     """Mask links and social handles in bio with asterisks.
@@ -58,6 +63,7 @@ class ProfileForm(forms.ModelForm):
             'info': forms.Textarea(attrs={
                 'rows': 3,
                 'placeholder': 'Add bio',
+                'maxlength': str(BIO_MAX_LENGTH),
                 'class': 'w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 outline-none focus:border-emerald-500',
             })
         }
@@ -83,7 +89,19 @@ class ProfileForm(forms.ModelForm):
 
     def clean_info(self):
         bio = self.cleaned_data.get('info')
-        return mask_bio_text(bio)
+        if bio is None:
+            return bio
+
+        bio_str = str(bio)
+        # Enforce hard limit on what the user can store.
+        if len(bio_str) > BIO_MAX_LENGTH:
+            raise forms.ValidationError(f'Bio must be {BIO_MAX_LENGTH} characters or less.')
+
+        masked = mask_bio_text(bio_str)
+        if masked is not None and len(masked) > BIO_MAX_LENGTH:
+            raise forms.ValidationError(f'Bio must be {BIO_MAX_LENGTH} characters or less.')
+
+        return masked
 
 
 class ReportUserForm(forms.Form):
@@ -141,7 +159,7 @@ class UsernameChangeForm(forms.Form):
         ),
     )
 
-    USERNAME_RE = re.compile(r'^[a-zA-Z0-9_\.]{3,30}$')
+    USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{3,30}$')
 
     def __init__(self, *args, user=None, profile=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -189,6 +207,9 @@ class UsernameChangeForm(forms.Form):
         # Avoid duplicates (case-insensitive).
         if User.objects.filter(username__iexact=username).exists():
             raise forms.ValidationError('This username is already taken.')
+
+        # Enforce global signup-like rules here too.
+        validate_public_username(username)
 
         return username
 

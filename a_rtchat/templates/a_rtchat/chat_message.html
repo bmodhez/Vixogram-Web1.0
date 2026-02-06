@@ -6,7 +6,11 @@
             <div class="inline-flex items-center gap-2 rounded-full border border-gray-700 bg-gray-800/60 px-3 py-1.5 text-[11px] font-medium text-gray-200/80">
                 <span>{{ message.body|cut:"[CALL] " }}</span>
                 <span class="text-gray-500">•</span>
-                <time class="text-gray-400/70" data-dt="{{ message.created|date:'c' }}"></time>
+                {% if chat_group and not chat_group.is_private and not chat_group.is_code_room %}
+                    {# Public groups: don't show message time #}
+                {% else %}
+                    <time class="text-gray-400/70" data-dt="{{ message.created|date:'c' }}"></time>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -107,7 +111,11 @@
                     {% if message.edited_at %}
                         <span class="opacity-70">edited</span>
                     {% endif %}
-                    <time data-dt="{{ message.created|date:'c' }}"></time>
+                    {% if chat_group and not chat_group.is_private and not chat_group.is_code_room %}
+                        {# Public groups: don't show message time #}
+                    {% else %}
+                        <time data-dt="{{ message.created|date:'c' }}"></time>
+                    {% endif %}
                     {% if message.author == user and chat_group.is_private %}
                         {% with other_read=other_last_read_id|default:0 %}
                             <span class="ml-0.5" data-read-tick data-message-id="{{ message.id }}">

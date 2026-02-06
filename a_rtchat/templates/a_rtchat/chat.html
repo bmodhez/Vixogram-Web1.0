@@ -116,7 +116,7 @@
                                     <ul class="space-y-1">
                                         {% for room in section.rooms %}
                                             <li>
-                                                <a data-chat-list-item href="{% url 'chatroom' room.group_name %}"
+                                                <a data-chat-list-item data-chat-list-scope="group" href="{% url 'chatroom' room.group_name %}"
                                                               class="block pr-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 transition-colors
                                                               {% if chat_group.group_name == room.group_name %}pl-2 border-l-4 border-indigo-500 bg-indigo-500/10 text-emerald-400 font-semibold{% else %}px-3 text-gray-300{% endif %}">
                                                     {{ room.groupchat_name|default:room.group_name|slice:":30" }}
@@ -134,7 +134,7 @@
                             <ul class="space-y-1 mt-3">
                                 {% for room in sidebar_groupchats_remaining %}
                                     <li>
-                                        <a data-chat-list-item href="{% url 'chatroom' room.group_name %}"
+                                        <a data-chat-list-item data-chat-list-scope="group" href="{% url 'chatroom' room.group_name %}"
                                              class="block pr-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 transition-colors
                                              {% if chat_group.group_name == room.group_name %}pl-2 border-l-4 border-indigo-500 bg-indigo-500/10 text-emerald-400 font-semibold{% else %}px-3 text-gray-300{% endif %}">
                                             {{ room.groupchat_name|default:room.group_name|slice:":30" }}
@@ -147,7 +147,7 @@
                         <ul class="space-y-1">
                             {% for room in sidebar_groupchats %}
                                 <li>
-                                    <a data-chat-list-item href="{% url 'chatroom' room.group_name %}"
+                                    <a data-chat-list-item data-chat-list-scope="group" href="{% url 'chatroom' room.group_name %}"
                                                     class="block pr-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 transition-colors
                                                     {% if chat_group.group_name == room.group_name %}pl-2 border-l-4 border-indigo-500 bg-indigo-500/10 text-emerald-400 font-semibold{% else %}px-3 text-gray-300{% endif %}">
                                         {{ room.groupchat_name|default:room.group_name|slice:":30" }}
@@ -166,7 +166,7 @@
                 </div>
             {% else %}
                 <div class="space-y-2 mb-4">
-                    <form method="post" action="{% url 'private-room-create' %}" class="space-y-2">
+                    <form id="vixo-private-room-create-form" method="post" action="{% url 'private-room-create' %}" class="space-y-2" data-ajax="true">
                         {% csrf_token %}
                         {{ private_room_create_form.name }}
                         <button type="submit" class="w-full bg-gray-800 hover:bg-gray-700 text-white rounded-lg px-3 py-2 text-sm transition-colors">
@@ -246,6 +246,7 @@
                             title="Waiting list"
                             data-waiting-list-url="{% url 'code-room-waiting-list' chatroom_name %}"
                             data-waiting-admit-url="{% url 'code-room-waiting-admit' chatroom_name %}"
+                            data-tutorial-target="waiting-list"
                         >
                             <span class="text-base" aria-hidden="true">👥</span>
                             <span
@@ -273,13 +274,13 @@
                 {% endif %}
                 {% endif %}
                 {% if chat_group.is_code_room %}
-                    <span class="ml-3 text-xs text-gray-100 min-w-0 truncate inline-flex items-center gap-1" data-private-room-title-wrap>
+                    <span class="ml-3 hidden sm:inline-flex text-xs text-gray-100 min-w-0 truncate items-center gap-1" data-private-room-title-wrap>
                         <span class="text-gray-300">Room:</span>
                         <span id="vixo_private_room_title" class="font-semibold text-gray-100 truncate">{{ chat_group.code_room_name|default:chat_group.room_code|default:chat_group.group_name }}</span>
                         {% if user == chat_group.admin or user.is_staff %}
                             <button
                                 type="button"
-                                class="ml-1 hidden sm:inline-flex h-6 w-6 items-center justify-center rounded-md bg-gray-800/60 hover:bg-gray-800 text-gray-100"
+                                class="inline-flex h-6 w-6 items-center justify-center rounded-md bg-gray-800/60 hover:bg-gray-800 text-gray-100"
                                 title="Rename room"
                                 aria-label="Rename room"
                                 data-private-room-rename
@@ -290,19 +291,6 @@
                     </span>
                 {% endif %}
 
-                {% if chat_group.is_code_room and chat_group.room_code %}
-                    <span class="ml-3 text-xs text-gray-300 min-w-0 truncate" data-room-code-wrap>
-                        <span class="hidden sm:inline">Room code:</span>
-                        <button
-                            type="button"
-                            class="font-semibold text-emerald-400 hover:text-emerald-300 underline-offset-2 hover:underline cursor-pointer truncate max-w-[7.5rem] align-bottom"
-                            data-room-code-copy="{{ chat_group.room_code }}"
-                            title="Click to copy"
-                            aria-label="Copy room code"
-                        >{{ chat_group.room_code }}</button>
-                        <span data-room-code-copied class="ml-2 inline-block text-[10px] font-semibold text-emerald-300 transition-all duration-200 ease-out opacity-0 -translate-y-0.5 scale-95 invisible">Code copied</span>
-                    </span>
-                {% endif %}
             </div>
 
             <div class="flex items-center gap-2 justify-end shrink-0 flex-nowrap whitespace-nowrap">
@@ -339,27 +327,285 @@
         </div>
 
         {% if chat_group.is_private %}
-            <div class="relative px-4 py-1.5 text-[11px] text-gray-300/90 flex items-center justify-center gap-1 flex-wrap">
-                <span aria-hidden="true">🔒</span>
-                <span class="hidden sm:inline">End-to-End encrypted</span>
-                <span class="sm:hidden">Encrypted</span>
+            <div class="relative px-4 py-1.5 text-[11px] text-gray-300/90">
+                <div class="flex items-center justify-center sm:justify-between gap-1 flex-wrap">
+                    <div class="flex items-center justify-center gap-1 flex-wrap">
+                        <span aria-hidden="true">🔒</span>
+                        <span class="hidden sm:inline">End-to-End encrypted</span>
+                        <span class="sm:hidden">Encrypted</span>
+
+                        <div class="mx-1 text-gray-500">•</div>
+
+                        <div class="relative">
+                        <button
+                            type="button"
+                            id="vixo_members_btn"
+                            class="inline-flex items-center gap-2 rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-1.5 text-[11px] font-semibold text-gray-100 hover:bg-gray-900/55"
+                            aria-haspopup="dialog"
+                            aria-expanded="false"
+                            aria-controls="vixo_members_panel"
+                            title="Members"
+                        >
+                            <span class="text-gray-300">Members</span>
+                            <span class="text-[11px] font-bold text-emerald-300">{{ chat_group_members|length }}</span>
+                        </button>
+
+                        <div
+                            id="vixo_members_panel"
+                            class="hidden absolute right-0 sm:left-0 sm:right-auto mt-2 w-[16rem] max-w-[calc(100vw-1rem)] rounded-2xl border border-gray-800 bg-gray-900/95 backdrop-blur-sm shadow-2xl overflow-hidden z-50"
+                            role="dialog"
+                            aria-label="Members"
+                        >
+                            <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
+                                <div class="text-xs font-semibold text-gray-100">Members</div>
+                                <button type="button" id="vixo_members_close" class="inline-flex h-7 w-7 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60" aria-label="Close">×</button>
+                            </div>
+                            <div class="max-h-[16rem] overflow-y-auto p-2">
+                                {% if chat_group_members %}
+                                    <div class="space-y-1">
+                                        {% for m in chat_group_members %}
+                                            <div class="px-2 py-1.5 rounded-xl border border-gray-800 bg-gray-900/40 text-xs text-gray-100 flex items-center justify-between gap-2" data-member-row data-member-user-id="{{ m.id }}">
+                                                <div class="min-w-0 truncate">{{ m.profile.name|default:m.username }}{% if m == user %} <span class="text-gray-400 font-semibold">(you)</span>{% endif %}</div>
+                                                {% if user == chat_group.admin or user.is_staff %}
+                                                    {% if m != user and m != chat_group.admin %}
+                                                        <button
+                                                            type="button"
+                                                            class="shrink-0 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[11px] font-semibold text-red-200 hover:bg-red-500/15"
+                                                            data-member-remove
+                                                            data-member-remove-url="{% url 'chatroom-member-remove' chatroom_name m.id %}"
+                                                        >Remove</button>
+                                                    {% endif %}
+                                                {% endif %}
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <div class="text-xs text-gray-400 px-2 py-3">No members</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+
+                    {% if chat_group.is_code_room and chat_group.room_code %}
+                        <div class="hidden sm:inline-flex items-center gap-2" data-room-code-wrap>
+                            <span class="text-gray-300">Code:</span>
+                            <button
+                                type="button"
+                                class="font-semibold text-emerald-400 hover:text-emerald-300 underline-offset-2 hover:underline cursor-pointer"
+                                data-room-code-copy="{{ chat_group.room_code }}"
+                                title="Click to copy"
+                                aria-label="Copy room code"
+                                id="vixo_room_code_btn"
+                                data-tutorial-target="room-code"
+                            >{{ chat_group.room_code }}</button>
+                            <span data-room-code-copied class="inline-block text-[10px] font-semibold text-emerald-300 transition-all duration-200 ease-out opacity-0 -translate-y-0.5 scale-95 invisible">Code copied</span>
+                        </div>
+                    {% endif %}
+                </div>
 
                 {% if chat_group.is_code_room and chat_group.room_code %}
-                    <span class="mx-1 text-gray-500 sm:hidden">•</span>
-                    <span class="text-gray-300 sm:hidden">Code:</span>
-                    <span class="inline-flex items-center gap-2 sm:hidden" data-room-code-wrap>
+                    <div class="sm:hidden mt-1 w-full mx-auto flex flex-wrap items-center justify-center gap-2 text-center" data-room-code-wrap>
+                        <span class="text-gray-300">Room:</span>
+                        <span id="vixo_private_room_title_inline" class="font-semibold text-gray-100 whitespace-normal break-words">{{ chat_group.code_room_name|default:chat_group.room_code|default:chat_group.group_name }}</span>
+                        {% if user == chat_group.admin or user.is_staff %}
+                            <button
+                                type="button"
+                                class="inline-flex h-6 w-6 items-center justify-center rounded-md bg-gray-800/60 hover:bg-gray-800 text-gray-100"
+                                title="Rename room"
+                                aria-label="Rename room"
+                                data-private-room-rename
+                                data-private-room-group="{{ chat_group.group_name }}"
+                                data-private-room-rename-url="{% url 'private-room-rename' chatroom_name %}"
+                            >✏️</button>
+                        {% endif %}
+                        <span class="mx-1 text-gray-500">•</span>
+                        <span class="text-gray-300">Code:</span>
                         <button
                             type="button"
                             class="font-semibold text-emerald-400 hover:text-emerald-300 underline-offset-2 hover:underline cursor-pointer"
                             data-room-code-copy="{{ chat_group.room_code }}"
                             title="Click to copy"
                             aria-label="Copy room code"
+                            data-tutorial-target="room-code"
                         >{{ chat_group.room_code }}</button>
                         <span data-room-code-copied class="inline-block text-[10px] font-semibold text-emerald-300 transition-all duration-200 ease-out opacity-0 -translate-y-0.5 scale-95 invisible">Code copied</span>
-                    </span>
+                    </div>
                 {% endif %}
             </div>
         {% endif %}
+
+        <div id="vixo_confirm_modal" class="fixed inset-0 z-[80] hidden" aria-hidden="true" role="dialog" aria-modal="true">
+            <div class="absolute inset-0 bg-black/60 vixo-modal-overlay"></div>
+            <div class="relative min-h-full flex items-center justify-center p-6 pointer-events-none">
+                <div class="w-full max-w-sm pointer-events-auto">
+                    <div class="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl">
+                        <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between gap-3">
+                            <div id="vixo_confirm_title" class="text-sm font-semibold text-white">Confirm</div>
+                            <button type="button" id="vixo_confirm_x" class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60" aria-label="Close">×</button>
+                        </div>
+                        <div id="vixo_confirm_msg" class="px-4 py-4 text-sm text-gray-200"></div>
+                        <div class="px-4 pb-4 flex items-center justify-end gap-2">
+                            <button type="button" id="vixo_confirm_cancel" class="rounded-xl border border-gray-800 bg-gray-900/40 px-4 py-2 text-sm font-semibold text-gray-200 hover:bg-gray-900/55">Cancel</button>
+                            <button type="button" id="vixo_confirm_ok" class="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-extrabold text-red-100 hover:bg-red-500/15">Remove</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            (function () {
+                const btn = document.getElementById('vixo_members_btn');
+                const panel = document.getElementById('vixo_members_panel');
+                const closeBtn = document.getElementById('vixo_members_close');
+                if (!btn || !panel) return;
+
+                const confirmModal = document.getElementById('vixo_confirm_modal');
+                const confirmTitle = document.getElementById('vixo_confirm_title');
+                const confirmMsg = document.getElementById('vixo_confirm_msg');
+                const confirmOk = document.getElementById('vixo_confirm_ok');
+                const confirmCancel = document.getElementById('vixo_confirm_cancel');
+                const confirmX = document.getElementById('vixo_confirm_x');
+
+                let confirmResolve = null;
+                const confirmIsOpen = () => !!(confirmModal && !confirmModal.classList.contains('hidden'));
+                const confirmClose = (value) => {
+                    try {
+                        if (confirmResolve) confirmResolve(!!value);
+                    } catch {}
+                    confirmResolve = null;
+                    try { if (confirmModal) confirmModal.classList.add('hidden'); } catch {}
+                    try { if (confirmModal) confirmModal.setAttribute('aria-hidden', 'true'); } catch {}
+                    try { document.body.classList.remove('overflow-hidden'); } catch {}
+                };
+
+                const vixoConfirm = (message) => {
+                    return new Promise((resolve) => {
+                        confirmResolve = resolve;
+                        try { if (confirmTitle) confirmTitle.textContent = 'Confirm'; } catch {}
+                        try { if (confirmMsg) confirmMsg.textContent = String(message || ''); } catch {}
+                        try { if (confirmModal) confirmModal.classList.remove('hidden'); } catch {}
+                        try { if (confirmModal) confirmModal.setAttribute('aria-hidden', 'false'); } catch {}
+                        try { document.body.classList.add('overflow-hidden'); } catch {}
+                    });
+                };
+
+                try {
+                    if (confirmOk) confirmOk.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} confirmClose(true); });
+                    if (confirmCancel) confirmCancel.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} confirmClose(false); });
+                    if (confirmX) confirmX.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} confirmClose(false); });
+                    if (confirmModal) {
+                        confirmModal.addEventListener('click', (e) => {
+                            try {
+                                const t = e && e.target;
+                                if (!t) return;
+                                if (t.classList && t.classList.contains('vixo-modal-overlay')) confirmClose(false);
+                            } catch {}
+                        });
+                    }
+                    document.addEventListener('keydown', (e) => {
+                        if (e.key === 'Escape') {
+                            if (confirmIsOpen()) confirmClose(false);
+                        }
+                    });
+                } catch {}
+
+                const getCookieSafe = (name) => {
+                    try {
+                        const n = String(name || '');
+                        if (!n) return '';
+                        const cookies = String(document.cookie || '').split(';');
+                        for (let i = 0; i < cookies.length; i++) {
+                            const c = cookies[i].trim();
+                            if (!c) continue;
+                            if (c.startsWith(n + '=')) return decodeURIComponent(c.slice(n.length + 1));
+                        }
+                        return '';
+                    } catch {
+                        return '';
+                    }
+                };
+
+                const isOpen = () => !panel.classList.contains('hidden');
+                const open = () => {
+                    try { panel.classList.remove('hidden'); } catch {}
+                    try { btn.setAttribute('aria-expanded', 'true'); } catch {}
+                };
+                const close = () => {
+                    try { panel.classList.add('hidden'); } catch {}
+                    try { btn.setAttribute('aria-expanded', 'false'); } catch {}
+                };
+                const toggle = () => { if (isOpen()) close(); else open(); };
+
+                btn.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} toggle(); });
+                if (closeBtn) closeBtn.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} close(); });
+
+                document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+                document.addEventListener('click', (e) => {
+                    try {
+                        const t = e && e.target;
+                        if (!t) return;
+                        if (panel.contains(t) || btn.contains(t)) return;
+                        close();
+                    } catch {}
+                }, true);
+
+                const bindRemoveButtons = () => {
+                    try {
+                        const removeButtons = panel.querySelectorAll('[data-member-remove]');
+                        removeButtons.forEach((b) => {
+                            if (b.__vixoBound) return;
+                            b.__vixoBound = true;
+                            b.addEventListener('click', async (e) => {
+                                try { e.preventDefault(); e.stopPropagation(); } catch {}
+                                const url = b.getAttribute('data-member-remove-url') || '';
+                                if (!url) return;
+                                const ok = await vixoConfirm('Are you sure you want to remove this member?');
+                                if (!ok) return;
+
+                                try {
+                                    const csrf = getCookieSafe('csrftoken') || '';
+                                    const resp = await fetch(url, {
+                                        method: 'POST',
+                                        credentials: 'same-origin',
+                                        headers: {
+                                            ...(csrf ? { 'X-CSRFToken': csrf } : {}),
+                                        },
+                                    });
+                                    if (!resp.ok) {
+                                        alert('Could not remove member.');
+                                        return;
+                                    }
+                                    let data = null;
+                                    try { data = await resp.json(); } catch {}
+                                    if (!data || !data.ok) {
+                                        alert('Could not remove member.');
+                                        return;
+                                    }
+
+                                    const row = b.closest('[data-member-row]');
+                                    if (row) row.remove();
+
+                                    // Update count badge in Members button
+                                    try {
+                                        const badge = btn.querySelector('span.text-emerald-300');
+                                        if (badge) {
+                                            const n = parseInt(String(badge.textContent || '').trim(), 10);
+                                            if (!Number.isNaN(n) && n > 0) badge.textContent = String(n - 1);
+                                        }
+                                    } catch {}
+                                } catch {
+                                    alert('Could not remove member.');
+                                }
+                            });
+                        });
+                    } catch {}
+                };
+
+                bindRemoveButtons();
+            })();
+        </script>
 
         {% if chat_group.is_code_room and chat_group.room_code and request.GET.created == '1' %}
             <div id="room_share_hint" class="hidden mx-2 mt-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100 opacity-0 -translate-y-2 transition duration-300">
@@ -378,6 +624,70 @@
             </div>
         {% endif %}
 
+        {% if chat_group.is_code_room and chat_group.room_code and request.GET.created == '1' %}
+            <!-- Room tutorial (shown once on room creation, can be disabled via "Do not show again") -->
+            <div id="vixo_room_tutorial" class="hidden fixed inset-0 z-[80]">
+                <div class="absolute inset-0 bg-black/60 backdrop-blur-[1px]" data-tutorial-backdrop></div>
+
+                <!-- Highlight boxes (positioned by JS) -->
+                <div id="vixo_room_tutorial_hl_waiting" class="hidden fixed border-2 border-red-500 rounded-xl pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0)]"></div>
+                <div id="vixo_room_tutorial_hl_code" class="hidden fixed border-2 border-red-500 rounded-xl pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0)]"></div>
+
+                <!-- Small callout near target (positioned by JS) -->
+                <div id="vixo_room_tutorial_callout" class="hidden fixed z-[81] pointer-events-none">
+                    <div class="rounded-xl border border-red-500/40 bg-gray-900/95 text-white px-3 py-2 text-xs shadow-2xl">
+                        <div class="font-semibold text-red-200">Tip</div>
+                        <div class="mt-0.5 text-gray-200" id="vixo_room_tutorial_callout_text">Use this button</div>
+                    </div>
+                </div>
+
+                <!-- Bottom instruction box -->
+                <div class="absolute left-0 right-0 bottom-0 p-3 sm:p-6">
+                    <div class="mx-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-gray-900/95 backdrop-blur-sm shadow-2xl overflow-hidden">
+                        <div class="px-4 sm:px-6 py-4 border-b border-white/10 flex items-start justify-between gap-3">
+                            <div>
+                                <div class="text-base sm:text-lg font-extrabold text-white">Room tutorial</div>
+                                <div class="mt-1 text-xs sm:text-sm text-gray-300">Quick guide to use this private room.</div>
+                            </div>
+                            <button type="button" class="h-9 w-9 inline-flex items-center justify-center rounded-xl bg-gray-800/60 hover:bg-gray-800 text-gray-200" aria-label="Close tutorial" data-tutorial-close>×</button>
+                        </div>
+
+                        <div class="px-4 sm:px-6 py-4">
+                            <div class="grid sm:grid-cols-2 gap-3">
+                                <div class="rounded-xl border border-gray-800 bg-gray-950/40 p-3">
+                                    <div class="text-sm font-semibold text-gray-100">Invite friends</div>
+                                    <div class="mt-1 text-xs text-gray-300">Tap <span class="font-semibold text-emerald-300">Room code</span> to copy and share.</div>
+                                </div>
+                                <div class="rounded-xl border border-gray-800 bg-gray-950/40 p-3">
+                                    <div class="text-sm font-semibold text-gray-100">Approve requests</div>
+                                    <div class="mt-1 text-xs text-gray-300">Use <span class="font-semibold">👥</span> to view waiting list & admit members (admin only).</div>
+                                </div>
+                                <div class="rounded-xl border border-gray-800 bg-gray-950/40 p-3">
+                                    <div class="text-sm font-semibold text-gray-100">Start chatting</div>
+                                    <div class="mt-1 text-xs text-gray-300">Type in the message box below and hit <span class="font-semibold">Send</span>.</div>
+                                </div>
+                                <div class="rounded-xl border border-gray-800 bg-gray-950/40 p-3">
+                                    <div class="text-sm font-semibold text-gray-100">Calls & games</div>
+                                    <div class="mt-1 text-xs text-gray-300">Try <span class="font-semibold">Challenge</span>, <span class="font-semibold">Voice call</span>, or <span class="font-semibold">Video call</span>.</div>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 flex items-center justify-between gap-3 flex-wrap">
+                                <label class="inline-flex items-center gap-2 text-xs text-gray-300 select-none">
+                                    <input id="vixo_room_tutorial_dont_show" type="checkbox" class="h-4 w-4 rounded border-gray-600 bg-gray-800 text-emerald-500 focus:ring-emerald-500/30" />
+                                    <span>Do not show again</span>
+                                </label>
+
+                                <div class="flex items-center gap-2">
+                                    <button type="button" class="rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-100 px-4 py-2 text-sm font-semibold" data-tutorial-close>Got it</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
         {% if chat_group.pinned_message %}
             <div class="vixo-chat-surface mx-2 mt-2 rounded-xl border border-gray-800 bg-gray-900/50 px-3 py-2">
                 <div class="flex items-center gap-2 text-xs font-semibold text-emerald-300">
@@ -388,7 +698,7 @@
             </div>
         {% endif %}
 
-        <div id='chat_container' class="vixo-chat-bg overflow-y-auto overflow-x-hidden overscroll-x-none grow p-2 sm:p-4 vixo-chat-init-hidden">
+        <div id='chat_container' class="vixo-chat-bg overflow-y-auto overflow-x-hidden overscroll-x-none grow min-h-0 p-2 sm:p-4 vixo-chat-init-hidden">
             <div id="challenge_banner" class="hidden sticky top-0 z-10 mb-3 transition duration-200 ease-out opacity-0 -translate-y-1">
                 <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-50">
                     <div class="flex items-start justify-between gap-3">
@@ -401,6 +711,31 @@
                     </div>
                 </div>
             </div>
+
+            <div
+                id="vixo_public_group_ad_banner"
+                class="hidden sticky top-0 z-10 mb-3 transition duration-200 ease-out opacity-0 -translate-y-1"
+                data-ad-initial-delay-ms="0"
+                {% if chat_group.is_private %}
+                    data-ad-visible-ms="15000"
+                    data-ad-hidden-ms="20000"
+                {% else %}
+                    data-ad-visible-ms="60000"
+                    data-ad-hidden-ms="22000"
+                {% endif %}
+                aria-label="Advertisement"
+            >
+                <div class="rounded-xl border border-gray-800 bg-gray-900/50 px-3 py-2">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="text-[10px] font-extrabold tracking-wide text-gray-400">ADVERTISEMENT</div>
+                            <div class="mt-0.5 text-xs text-gray-200 truncate">Sponsored content</div>
+                        </div>
+                        <div class="shrink-0 rounded-full border border-gray-800 bg-gray-900/60 px-2 py-1 text-[10px] font-bold text-gray-300">Ad</div>
+                    </div>
+                </div>
+            </div>
+
             <div id="chat_load_older_wrap" class="flex justify-center mb-3" {% if not has_older_messages %}style="display:none"{% endif %}>
                 <button
                     type="button"
@@ -464,7 +799,7 @@
             </button>
         {% endif %}
 
-        <div id="chat_composer_bar" class="vixo-chat-surface vixo-chat-composer sticky bottom-0 z-10 p-3 sm:p-4 bg-gray-900/60 border-t border-gray-800 rounded-none sm:rounded-b-2xl">
+        <div id="chat_composer_bar" class="vixo-chat-surface vixo-chat-composer sticky bottom-0 z-10 p-3 sm:px-4 sm:pt-4 sm:pb-0 bg-gray-900/60 border-t border-gray-800 rounded-none sm:rounded-b-2xl">
             <div id="reply_bar" class="hidden mb-2 rounded-xl border border-gray-800 bg-gray-900/80 px-3 py-2">
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
@@ -525,7 +860,7 @@
                                     <button
                                         type="button"
                                         id="gif_btn"
-                                        class="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 inline-flex items-center justify-center rounded-full bg-gray-800/40 text-gray-200 hover:text-white hover:bg-gray-800/70 transition"
+                                        class="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 inline-flex items-center justify-center rounded-full border border-gray-300 bg-gray-200/90 text-gray-800 hover:bg-gray-300/90 transition dark:border-transparent dark:bg-gray-800/40 dark:text-gray-200 dark:hover:text-white dark:hover:bg-gray-800/70"
                                         aria-label="GIF"
                                         title="GIF"
                                     >
@@ -571,7 +906,7 @@
                                 <button
                                     type="button"
                                     id="chat_upload_btn"
-                                    class="h-11 w-11 inline-flex items-center justify-center rounded-full bg-gray-800/50 text-white transition duration-150 ease-out hover:bg-gray-800/70 hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                    class="h-11 w-11 inline-flex items-center justify-center rounded-full border border-gray-300 bg-gray-200/90 text-gray-800 transition duration-150 ease-out hover:bg-gray-300/90 hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-transparent dark:bg-gray-800/50 dark:text-white dark:hover:bg-gray-800/70"
                                     aria-label="Upload"
                                     title="Upload"
                                     {% if uploads_remaining == 0 %}disabled{% endif %}
@@ -587,7 +922,7 @@
                                 <button
                                     type="button"
                                     id="emoji_btn"
-                                    class="h-11 w-11 inline-flex items-center justify-center rounded-full bg-gray-800/50 text-white transition duration-150 ease-out hover:bg-gray-800/70 hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                    class="h-11 w-11 inline-flex items-center justify-center rounded-full border border-gray-300 bg-gray-200/90 text-gray-800 transition duration-150 ease-out hover:bg-gray-300/90 hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-transparent dark:bg-gray-800/50 dark:text-white dark:hover:bg-gray-800/70"
                                     aria-label="Insert emoji"
                                     aria-haspopup="dialog"
                                     aria-expanded="false"
@@ -643,17 +978,17 @@
                     </div>
 
                     {% if uploads_allowed %}
-                        <div class="mt-1">
+                        <div class="mt-1 sm:mt-0">
                             <input id="chat_file_input" name="file" type="file" accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime" class="sr-only" {% if uploads_remaining == 0 %}disabled{% endif %} />
 
                             {% if upload_limit %}
-                                <div id="upload_counter" class="text-xs text-gray-400" data-used="{{ uploads_used }}" data-limit="{{ upload_limit }}">
+                                <div id="upload_counter" class="text-xs text-gray-400 text-center" data-used="{{ uploads_used }}" data-limit="{{ upload_limit }}">
                                     Upload ({{ uploads_used }}/{{ upload_limit }} used)
                                 </div>
                             {% endif %}
 
                             <div id="upload_feedback" class="mt-2"></div>
-                            <div id="upload_limit_reached_msg" class="text-xs text-gray-400 mt-1{% if uploads_remaining != 0 %} hidden{% endif %}">Upload limit reached for this room.</div>
+                            <div id="upload_limit_reached_msg" class="text-xs text-gray-400 text-center mt-1{% if uploads_remaining != 0 %} hidden{% endif %}">Upload limit reached for this room.</div>
                         </div>
                     {% endif %}
                 </form>
@@ -834,13 +1169,13 @@
                     </div>
 
                     <div class="mt-3">
-                        <input
+                        <textarea
                             id="upload_modal_caption"
-                            type="text"
                             maxlength="300"
+                            rows="2"
                             placeholder="Add a caption (optional)…"
-                            class="w-full bg-gray-800/70 text-white border border-gray-700 rounded-lg px-4 py-3 outline-none focus:border-emerald-500 placeholder:text-gray-400"
-                        />
+                            class="w-full bg-gray-800/70 text-white border border-gray-700 rounded-lg px-4 py-3 outline-none focus:border-emerald-500 placeholder:text-gray-400 resize-none"
+                        ></textarea>
                         <div id="upload_modal_hint" class="mt-2 text-[11px] text-gray-400"></div>
                     </div>
                 </div>

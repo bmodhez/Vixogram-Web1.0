@@ -60,8 +60,10 @@
     }
 
     // --- Free call limit ---
-    // Voice: 4 min, Video: 2 min
-    const FREE_LIMIT_SECONDS = (callType === 'video') ? 2 * 60 : 4 * 60;
+    // Voice: 4 min, Video: 2 min (server can override + provides remaining seconds)
+    const DEFAULT_FREE_LIMIT_SECONDS = (callType === 'video') ? 2 * 60 : 4 * 60;
+    let freeLimitSeconds = DEFAULT_FREE_LIMIT_SECONDS;
+    let freeSecondsLeftInitial = DEFAULT_FREE_LIMIT_SECONDS;
     let freeLimitDeadlineMs = null;
     let freeLimitInterval = null;
     let freeLimitStarted = false;
@@ -111,8 +113,9 @@
 
         let warnedTenSeconds = false;
 
-        freeLimitDeadlineMs = Date.now() + (FREE_LIMIT_SECONDS * 1000);
-        setFreeLimitTimer(FREE_LIMIT_SECONDS);
+        const startSeconds = Math.max(0, Math.min(freeLimitSeconds, Number(freeSecondsLeftInitial || 0)));
+        freeLimitDeadlineMs = Date.now() + (startSeconds * 1000);
+        setFreeLimitTimer(startSeconds);
 
         freeLimitInterval = setInterval(() => {
             const remainingMs = Math.max(0, freeLimitDeadlineMs - Date.now());
@@ -127,19 +130,20 @@
 
             if (remainingSeconds <= 0) {
                 stopFreeLimitCountdown();
-                // End call and show upsell modal (no redirect).
+                // End call and show upsell modal + redirect to pricing.
                 showFreeLimitPopup({
-                    title: 'Free limit reached',
-                    body: 'Your call has ended. Upgrade to continue calling.',
+                    title: 'Want to talk more on calls?',
+                    body: 'Buy the premium to continue calling.',
                     showUpgrade: true,
                 });
-                hangupAndExit('Free limit reached', { redirect: false, sendEndEvent: true });
+                const pricingUrl = String(cfg.pricingUrl || '/pricing');
+                hangupAndExit('Free limit reached', { redirectDelayMs: 900, redirectUrl: pricingUrl, sendEndEvent: true });
             }
         }, 250);
     }
 
     // Set initial display so user always sees the limit.
-    setFreeLimitTimer(FREE_LIMIT_SECONDS);
+    setFreeLimitTimer(freeSecondsLeftInitial);
 
     const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
@@ -442,7 +446,19 @@
     }
 
     async function fetchAgoraToken() {
-        const res = await fetch(tokenUrl, { credentials: 'same-origin' });
+        const url = (() => {
+            try {
+                const u = new URL(tokenUrl, window.location.origin);
+                u.searchParams.set('type', callType);
+                return u.toString();
+            } catch {
+                // Fallback if tokenUrl isn't absolute
+                const sep = tokenUrl.includes('?') ? '&' : '?';
+                return `${tokenUrl}${sep}type=${encodeURIComponent(callType)}`;
+            }
+        })();
+
+        const res = await fetch(url, { credentials: 'same-origin' });
 
         if (res.status === 429) {
             const retryAfter = Number(res.headers.get('Retry-After') || '10');
@@ -459,12 +475,35 @@
         }
 
         if (!res.ok || (data && data.error)) {
-            throw new Error((data && data.error) ? String(data.error) : `Token request failed (${res.status}).`);
+            const err = (data && data.error) ? String(data.error) : `Token request failed (${res.status}).`;
+            if (String(err) === 'free_limit_reached') {
+                showFreeLimitPopup({
+                    title: 'Want to talk more on calls?',
+                    body: 'Buy the premium to continue calling.',
+                    showUpgrade: true,
+                });
+                const pricingUrl = String(cfg.pricingUrl || '/pricing');
+                window.setTimeout(() => {
+                    try { window.location.href = pricingUrl; } catch {}
+                }, 900);
+            }
+            throw new Error(err);
+        }
+
+        // Server-provided free timer values.
+        try {
+            const fl = Number(data.free_limit_seconds);
+            const left = Number(data.free_seconds_left);
+            if (Number.isFinite(fl) && fl > 0) freeLimitSeconds = Math.max(0, Math.floor(fl));
+            if (Number.isFinite(left)) freeSecondsLeftInitial = Math.max(0, Math.min(freeLimitSeconds, Math.floor(left)));
+            setFreeLimitTimer(freeSecondsLeftInitial);
+        } catch {
+            // ignore
         }
         return data;
     }
 
-    async function hangupAndExit(reason, { redirectDelayMs = 0, sendEndEvent = false } = {}) {
+    async function hangupAndExit(reason, { redirectDelayMs = 0, redirectUrl = null, sendEndEvent = false } = {}) {
         try {
             if (reason) setStatus(reason);
         } catch {}
@@ -495,12 +534,13 @@
             await client.leave();
         } catch {}
 
+        const targetUrl = redirectUrl ? String(redirectUrl) : (cfg.backUrl || '/');
         if (redirectDelayMs > 0) {
             setTimeout(() => {
-                try { window.location.href = cfg.backUrl || '/'; } catch {}
+                try { window.location.href = targetUrl; } catch {}
             }, redirectDelayMs);
         } else {
-            try { window.location.href = cfg.backUrl || '/'; } catch {}
+            try { window.location.href = targetUrl; } catch {}
         }
     }
 

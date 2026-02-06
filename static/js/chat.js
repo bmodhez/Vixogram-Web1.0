@@ -7,6 +7,70 @@
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
     }
+
+    // --- Private room creation form AJAX handler (no page reload) ---
+    function initPrivateRoomCreateAjax() {
+        const form = document.getElementById('vixo-private-room-create-form');
+        if (!form) return;
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(form);
+            const action = form.getAttribute('action') || '';
+
+            try {
+                const resp = await fetch(action, {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: formData,
+                });
+
+                const data = await resp.json();
+
+                // If verification limit error (403), show toast and don't redirect.
+                if (resp.status === 403 && !data.ok) {
+                    if (window.showToast) {
+                        window.showToast(data.error || 'Please verify your email.');
+                    } else {
+                        alert(data.error || 'Please verify your email.');
+                    }
+                    return;
+                }
+
+                // On success, redirect to the room.
+                if (data.ok && data.redirect_url) {
+                    window.location.href = data.redirect_url;
+                } else if (data.ok) {
+                    // Fallback: reload page to show the new room.
+                    window.location.reload();
+                } else {
+                    // Other error.
+                    if (window.showToast) {
+                        window.showToast(data.error || 'Something went wrong.');
+                    } else {
+                        alert(data.error || 'Something went wrong.');
+                    }
+                }
+            } catch (err) {
+                console.error('Private room create error:', err);
+                if (window.showToast) {
+                    window.showToast('Network error. Please try again.');
+                } else {
+                    alert('Network error. Please try again.');
+                }
+            }
+        });
+    }
+
+    // Init on DOMContentLoaded or immediately if already loaded.
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initPrivateRoomCreateAjax, { once: true });
+    } else {
+        initPrivateRoomCreateAjax();
+    }
+
     // --- Room code click-to-copy ---
     function copyToClipboard(text) {
         const value = String(text || '').trim();
@@ -102,6 +166,13 @@
         const hint = document.getElementById('room_share_hint');
         if (!hint) return;
 
+        // If tutorial is present, prefer that UX and don't also show the transient hint.
+        const tutorialRoot = document.getElementById('vixo_room_tutorial');
+        if (tutorialRoot) {
+            try { hint.remove(); } catch {}
+            return;
+        }
+
         // Template renders this as hidden to avoid reserving space before JS runs.
         hint.classList.remove('hidden');
 
@@ -129,6 +200,227 @@
                 try { hint.remove(); } catch {}
             }, 350);
         }, 4000);
+    }
+
+    function initPublicGroupAdBanner() {
+        const banner = document.getElementById('vixo_public_group_ad_banner');
+        if (!banner) return;
+
+        function readMs(attr, fallback) {
+            try {
+                const v = parseInt(String(banner.getAttribute(attr) || ''), 10);
+                return Number.isFinite(v) && v >= 0 ? v : fallback;
+            } catch {
+                return fallback;
+            }
+        }
+
+        const initialDelayMs = readMs('data-ad-initial-delay-ms', 10000);
+        const visibleMs = readMs('data-ad-visible-ms', 8000);
+        const hiddenMs = readMs('data-ad-hidden-ms', 25000);
+
+        let stopped = false;
+        let t1 = null;
+        let t2 = null;
+
+        function show() {
+            if (stopped) return;
+            try { banner.classList.remove('hidden'); } catch {}
+            // Stage the transition so the browser has a "from" state.
+            try {
+                banner.classList.add('opacity-0', '-translate-y-1');
+                banner.classList.remove('opacity-100', 'translate-y-0');
+            } catch {}
+            try {
+                window.requestAnimationFrame(() => {
+                    if (stopped) return;
+                    try {
+                        banner.classList.remove('opacity-0', '-translate-y-1');
+                        banner.classList.add('opacity-100', 'translate-y-0');
+                    } catch {}
+                });
+            } catch {}
+        }
+
+        function hide() {
+            if (stopped) return;
+            try {
+                banner.classList.add('opacity-0', '-translate-y-1');
+                banner.classList.remove('opacity-100', 'translate-y-0');
+            } catch {}
+            // After transition, fully hide.
+            t2 = window.setTimeout(() => {
+                if (stopped) return;
+                try { banner.classList.add('hidden'); } catch {}
+            }, 220);
+        }
+
+        function cycle() {
+            if (stopped) return;
+            show();
+            t1 = window.setTimeout(() => {
+                hide();
+                t1 = window.setTimeout(cycle, Math.max(0, hiddenMs));
+            }, Math.max(0, visibleMs));
+        }
+
+        // Start hidden; show after a short delay, then repeat.
+        try { banner.classList.add('hidden'); } catch {}
+        t1 = window.setTimeout(cycle, Math.max(0, initialDelayMs));
+
+        // Best-effort cleanup if page gets replaced.
+        try {
+            window.addEventListener('beforeunload', () => {
+                stopped = true;
+                try { if (t1) window.clearTimeout(t1); } catch {}
+                try { if (t2) window.clearTimeout(t2); } catch {}
+            }, { once: true });
+        } catch {}
+    }
+
+    function initRoomTutorial() {
+        const root = document.getElementById('vixo_room_tutorial');
+        if (!root) return;
+
+        // Per-user key so multiple logins on same browser don't conflict.
+        const username = String(cfg.currentUsername || '').trim();
+        const storageKey = `vixo_hide_room_tutorial:${username || 'anon'}`;
+
+        try {
+            if (window.localStorage && window.localStorage.getItem(storageKey) === '1') {
+                root.remove();
+                return;
+            }
+        } catch {
+            // ignore
+        }
+
+        const backdrop = root.querySelector('[data-tutorial-backdrop]');
+        const closeButtons = root.querySelectorAll('[data-tutorial-close]');
+        const dontShow = root.querySelector('#vixo_room_tutorial_dont_show');
+        const hlWaiting = document.getElementById('vixo_room_tutorial_hl_waiting');
+        const hlCode = document.getElementById('vixo_room_tutorial_hl_code');
+        const callout = document.getElementById('vixo_room_tutorial_callout');
+        const calloutText = document.getElementById('vixo_room_tutorial_callout_text');
+
+        function stripCreatedParam() {
+            try {
+                const url = new URL(window.location.href);
+                if (url.searchParams.has('created')) {
+                    url.searchParams.delete('created');
+                    window.history.replaceState({}, '', url.toString());
+                }
+            } catch {
+                // ignore
+            }
+        }
+
+        function setHighlight(el, highlightEl) {
+            if (!el || !highlightEl) return false;
+            const r = el.getBoundingClientRect();
+            if (!r || !(r.width > 0 && r.height > 0)) return false;
+            const pad = 6;
+            highlightEl.style.left = `${Math.max(0, r.left - pad)}px`;
+            highlightEl.style.top = `${Math.max(0, r.top - pad)}px`;
+            highlightEl.style.width = `${Math.max(0, r.width + pad * 2)}px`;
+            highlightEl.style.height = `${Math.max(0, r.height + pad * 2)}px`;
+            highlightEl.classList.remove('hidden');
+            return true;
+        }
+
+        function positionCalloutNear(el, text) {
+            if (!callout || !calloutText) return;
+            if (!el) {
+                callout.classList.add('hidden');
+                return;
+            }
+            const r = el.getBoundingClientRect();
+            if (!r || !(r.width > 0 && r.height > 0)) {
+                callout.classList.add('hidden');
+                return;
+            }
+            calloutText.textContent = String(text || '');
+
+            const top = Math.max(12, r.bottom + 10);
+            // Keep on-screen (roughly)
+            const left = Math.max(12, Math.min(r.left, window.innerWidth - 280));
+            callout.style.left = `${left}px`;
+            callout.style.top = `${top}px`;
+            callout.classList.remove('hidden');
+        }
+
+        function positionHighlights() {
+            const waitingBtn = document.getElementById('code_room_waiting_btn');
+            const codeCandidates = [];
+            try {
+                const byId = document.getElementById('vixo_room_code_btn');
+                if (byId) codeCandidates.push(byId);
+            } catch {}
+            try {
+                document.querySelectorAll('[data-tutorial-target="room-code"]').forEach((el) => codeCandidates.push(el));
+            } catch {}
+
+            const codeBtn = (function pickVisible(items) {
+                for (let i = 0; i < items.length; i++) {
+                    const el = items[i];
+                    if (!(el instanceof HTMLElement)) continue;
+                    const r = el.getBoundingClientRect();
+                    if (r && r.width > 0 && r.height > 0) return el;
+                }
+                return items.length ? items[0] : null;
+            })(codeCandidates);
+
+            const didWaiting = setHighlight(waitingBtn, hlWaiting);
+            const didCode = setHighlight(codeBtn, hlCode);
+
+            // Prefer callout on the waiting list button, else room code.
+            if (didWaiting) {
+                positionCalloutNear(waitingBtn, '👥 Waiting list: admit members (admin only)');
+            } else if (didCode) {
+                positionCalloutNear(codeBtn, 'Tap room code to copy & share');
+            } else {
+                if (callout) callout.classList.add('hidden');
+            }
+        }
+
+        function closeTutorial() {
+            const checked = !!(dontShow && dontShow.checked);
+            if (checked) {
+                try {
+                    if (window.localStorage) window.localStorage.setItem(storageKey, '1');
+                } catch {
+                    // ignore
+                }
+            }
+
+            try { document.body.classList.remove('overflow-hidden'); } catch {}
+            try { root.remove(); } catch {}
+            stripCreatedParam();
+        }
+
+        // Show now.
+        root.classList.remove('hidden');
+        try { document.body.classList.add('overflow-hidden'); } catch {}
+        stripCreatedParam();
+
+        // Suppress the transient share hint if present.
+        try {
+            const hint = document.getElementById('room_share_hint');
+            if (hint) hint.remove();
+        } catch {}
+
+        // Wire close actions.
+        closeButtons.forEach((btn) => {
+            try { btn.addEventListener('click', closeTutorial); } catch {}
+        });
+        if (backdrop) {
+            try { backdrop.addEventListener('click', closeTutorial); } catch {}
+        }
+
+        // Position highlights.
+        positionHighlights();
+        window.addEventListener('resize', positionHighlights, { passive: true });
+        window.addEventListener('scroll', positionHighlights, { passive: true, capture: true });
     }
 
     // --- Message bubble context actions (right-click, swipe, long-press) ---
@@ -367,12 +659,16 @@
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
                 initRoomCodeCopy();
+                initRoomTutorial();
                 initRoomShareHint();
+                initPublicGroupAdBanner();
                 initMaintenanceAdminToggle();
             }, { once: true });
         } else {
             initRoomCodeCopy();
+            initRoomTutorial();
             initRoomShareHint();
+            initPublicGroupAdBanner();
             initMaintenanceAdminToggle();
         }
     } catch {
@@ -683,6 +979,9 @@
         if (group && String(chatroomName || '') === String(group)) {
             const titleEl = document.getElementById('vixo_private_room_title');
             if (titleEl) titleEl.textContent = display;
+
+            const inlineTitleEl = document.getElementById('vixo_private_room_title_inline');
+            if (inlineTitleEl) inlineTitleEl.textContent = display;
         }
 
         // Update sidebar label for this room (if present).
@@ -695,10 +994,11 @@
     }
 
     function initPrivateRoomRename() {
-        const btn = document.querySelector('[data-private-room-rename][data-private-room-rename-url]');
-        if (!btn) return;
+        const buttons = Array.from(document.querySelectorAll('[data-private-room-rename][data-private-room-rename-url]'));
+        if (!buttons.length) return;
 
-        btn.addEventListener('click', async (e) => {
+        buttons.forEach((btn) => {
+            btn.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
 
@@ -707,13 +1007,18 @@
             if (!url) return;
 
             const titleEl = document.getElementById('vixo_private_room_title');
-            const currentTitle = (titleEl && titleEl.textContent ? titleEl.textContent : '').trim();
+            const inlineTitleEl = document.getElementById('vixo_private_room_title_inline');
+            const currentTitle = (
+                (titleEl && titleEl.textContent ? titleEl.textContent : '')
+                || (inlineTitleEl && inlineTitleEl.textContent ? inlineTitleEl.textContent : '')
+            ).trim();
             const next = (typeof window.__vixoPrompt === 'function')
                 ? await window.__vixoPrompt({
                     title: 'Rename room',
-                    message: 'Enter a new name (leave empty to clear).',
+                    message: 'Enter a new name (leave empty to clear). Max char: 35.',
                     defaultValue: currentTitle,
                     placeholder: 'Private room name (optional)',
+                    maxLength: 35,
                     okText: 'Rename',
                     cancelText: 'Cancel',
                 })
@@ -731,6 +1036,7 @@
             } catch {
                 if (typeof __popup === 'function') __popup('Rename failed', 'Network error. Please try again.');
             }
+            });
         });
     }
 
@@ -770,9 +1076,10 @@
                     const next = (typeof window.__vixoPrompt === 'function')
                         ? await window.__vixoPrompt({
                             title: 'Rename room',
-                            message: 'Enter a new name (leave empty to clear).',
+                            message: 'Enter a new name (leave empty to clear). Max char: 35.',
                             defaultValue: current,
                             placeholder: 'Private room name (optional)',
+                            maxLength: 35,
                             okText: 'Rename',
                             cancelText: 'Cancel',
                         })
@@ -1237,11 +1544,13 @@
 
                     const msg = (data && data.reason) ? data.reason : 'Verification not yet done. Please verify your email and try again.';
                     applyVerifyRequiredUI(true, msg);
-                    try { __popup('Verify required', msg); } catch {}
+                    // Call showVerifyRequired instead of __popup directly
+                    // This ensures the modal doesn't flicker if already open
+                    try { showVerifyRequired(msg); } catch {}
                 } catch {
                     const msg = 'Verification not yet done. Please verify your email and try again.';
                     applyVerifyRequiredUI(true, msg);
-                    try { __popup('Verify required', msg); } catch {}
+                    try { showVerifyRequired(msg); } catch {}
                 } finally {
                     refreshBtn.disabled = false;
                     refreshBtn.classList.remove('opacity-70', 'cursor-not-allowed');
@@ -1251,9 +1560,28 @@
         }
     }
 
+    let __verifyModalOpen = false;  // Flag to prevent repeated modal opens
+    
     function showVerifyRequired(reason) {
         applyVerifyRequiredUI(true, reason);
-        try { __popup('Verify required', (reason || 'Verify your email to continue chatting.')); } catch {}
+        
+        // Only open modal if not already open
+        if (!__verifyModalOpen) {
+            __verifyModalOpen = true;
+            try { 
+                if (typeof window.__openConfirm === 'function') {
+                    window.__openConfirm({
+                        title: 'Verify required',
+                        message: (reason || 'Verify your email to continue chatting.'),
+                        showCancel: false,
+                        okText: 'OK',
+                        onConfirm: () => { __verifyModalOpen = false; }
+                    });
+                } else {
+                    __popup('Verify required', (reason || 'Verify your email to continue chatting.'));
+                }
+            } catch {}
+        }
     }
 
     // HTMX trigger from server
@@ -1590,6 +1918,12 @@
         if (typeof window.__syncUploadMode === 'function') {
             window.__syncUploadMode();
         }
+
+        try {
+            if (typeof window.__autoGrowChatInput === 'function') {
+                window.__autoGrowChatInput();
+            }
+        } catch {}
     }
 
     // Successful HTMX sends (covers file uploads and text sends when WS is unavailable).
@@ -1903,6 +2237,22 @@
 
         if (!msgForm || !fileInput) return;
 
+        function __insertNewlineAtCursor(el) {
+            try {
+                if (!el) return;
+                const v = String(el.value ?? '');
+                const start = (typeof el.selectionStart === 'number') ? el.selectionStart : v.length;
+                const end = (typeof el.selectionEnd === 'number') ? el.selectionEnd : v.length;
+                const before = v.slice(0, start);
+                const after = v.slice(end);
+                el.value = before + "\n" + after;
+                const next = start + 1;
+                try { el.setSelectionRange(next, next); } catch {}
+            } catch {
+                // ignore
+            }
+        }
+
         let cropper = null;
         let previewUrl = null;
         let modalOpen = false;
@@ -2064,6 +2414,22 @@
             }
 
             modal.classList.remove('hidden');
+        }
+
+        // Caption box: Shift+Enter should always create a new line.
+        try {
+            if (modalCaption) {
+                modalCaption.addEventListener('keydown', (e) => {
+                    if (!e || e.key !== 'Enter') return;
+                    if (!e.shiftKey) return;
+                    if (e.isComposing) return;
+                    try { e.preventDefault(); } catch {}
+                    try { e.stopPropagation(); } catch {}
+                    __insertNewlineAtCursor(modalCaption);
+                });
+            }
+        } catch {
+            // ignore
         }
 
         function syncUploadMode() {
@@ -2521,10 +2887,55 @@
     // - Shift+Enter: new line
     // Note: when the mention panel is open, Enter is used to select a mention.
     if (form && input) {
+        function __insertNewlineAtCursor(el) {
+            try {
+                if (!el) return;
+                const v = String(el.value ?? '');
+                const start = (typeof el.selectionStart === 'number') ? el.selectionStart : v.length;
+                const end = (typeof el.selectionEnd === 'number') ? el.selectionEnd : v.length;
+                const before = v.slice(0, start);
+                const after = v.slice(end);
+                el.value = before + "\n" + after;
+                const next = start + 1;
+                try { el.setSelectionRange(next, next); } catch {}
+            } catch {
+                // ignore
+            }
+        }
+
+        function autoGrowChatInput() {
+            try {
+                if (!input || input.tagName !== 'TEXTAREA') return;
+                // Reset then grow to fit content; cap height to avoid taking over the screen.
+                input.style.height = 'auto';
+                const maxPx = 180;
+                const next = Math.min(maxPx, Math.max(0, input.scrollHeight || 0));
+                input.style.height = (next > 0 ? next : 0) + 'px';
+                input.style.overflowY = (input.scrollHeight > maxPx) ? 'auto' : 'hidden';
+            } catch (err) {
+                // ignore
+            }
+        }
+
+        // Run once on load (helps when restoring draft / browser autofill).
+        autoGrowChatInput();
+
+        input.addEventListener('input', function () {
+            autoGrowChatInput();
+        });
+
         input.addEventListener('keydown', function (e) {
             if (e.key !== 'Enter') return;
-            if (e.shiftKey) return;
             if (e.isComposing) return;
+
+            // Ensure Shift+Enter always creates a new line (even if another handler prevents default).
+            if (e.shiftKey) {
+                try { e.preventDefault(); } catch {}
+                try { e.stopPropagation(); } catch {}
+                __insertNewlineAtCursor(input);
+                autoGrowChatInput();
+                return;
+            }
 
             const mentionPanel = document.getElementById('mention_panel');
             const mentionOpen = !!(mentionPanel && !mentionPanel.classList.contains('hidden'));
@@ -2541,6 +2952,9 @@
                 // ignore
             }
         });
+
+        // Expose for composer reset after send.
+        try { window.__autoGrowChatInput = autoGrowChatInput; } catch {}
     }
 
     const replyBar = document.getElementById('reply_bar');
@@ -2705,6 +3119,11 @@
 
             cancelEditingMessage();
             if (input) input.value = '';
+            try {
+                if (typeof window.__autoGrowChatInput === 'function') {
+                    window.__autoGrowChatInput();
+                }
+            } catch {}
             if (__chatAutoScrollEnabled) forceScrollToBottomNow();
         }, true);
 
@@ -2782,12 +3201,9 @@
                     }
 
                     // Reset UI after send
-                    if (input) input.value = '';
-                    if (typedMsInput) typedMsInput.value = '';
-                    if (replyToIdInput) replyToIdInput.value = '';
-                    if (replyBar) replyBar.classList.add('hidden');
-                    if (replyBarPreview) replyBarPreview.textContent = '';
-                    if (replyBarAuthor) replyBarAuthor.textContent = '';
+                    if (res.ok) {
+                        resetComposerAfterSend();
+                    }
                 } catch {
                     // ignore
                 } finally {
@@ -2902,12 +3318,7 @@
             } catch {
                 // ignore
             }
-            if (input) input.value = '';
-            if (typedMsInput) typedMsInput.value = '';
-            if (replyToIdInput) replyToIdInput.value = '';
-            if (replyBar) replyBar.classList.add('hidden');
-            if (replyBarPreview) replyBarPreview.textContent = '';
-            if (replyBarAuthor) replyBarAuthor.textContent = '';
+            resetComposerAfterSend();
             // Don't auto-scroll here; we scroll once when the server echoes back.
         }, true);
 

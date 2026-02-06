@@ -36,6 +36,15 @@ def is_links_room(room) -> bool:
     return 'links' in name
 
 
+def is_meme_central_room(room) -> bool:
+    """Return True if this room is the 'Meme Central' group chat.
+
+    Matches by substring to tolerate emoji/prefix variations.
+    """
+    name = _display_name(room).lower()
+    return 'meme central' in name
+
+
 def room_allows_links(room) -> bool:
     # Default policy: links only in private chats + Showcase + Free Promotion.
     return (
@@ -48,8 +57,6 @@ def room_allows_links(room) -> bool:
 
 def room_allows_uploads(room) -> bool:
     # Default policy: uploads only in private code rooms + Showcase Your Work.
-    # Exception: Free Promotion does NOT allow uploads.
-    if is_free_promotion_room(room):
-        return False
+    # Exception: historically Free Promotion disallowed uploads, but now allowed.
     private_code = bool(getattr(room, 'is_private', False)) and bool(getattr(room, 'is_code_room', False))
-    return private_code or is_showcase_room(room)
+    return private_code or is_showcase_room(room) or is_meme_central_room(room)

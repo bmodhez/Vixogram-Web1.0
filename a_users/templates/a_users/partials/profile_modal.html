@@ -55,7 +55,7 @@
 
                     <h1 class="text-2xl font-extrabold text-white inline-flex items-center justify-center gap-2">
                         <span>{{ profile.name }}</span>
-                        {% if is_verified_badge %}
+                            {% if is_verified_badge %}
                             <span
                                 class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-500/20 text-sky-300 text-[11px] leading-none"
                                 title="Verified"
@@ -112,22 +112,15 @@
                     </div>
 
                     {% if not show_follow_lists and follow_lists_locked_reason %}
-                        {% if is_private and not is_owner %}
-                            <div class="mt-6 text-xs text-gray-400">
-                                <span class="text-gray-300 font-semibold" aria-hidden="true">⊘</span>
-                                <span class="ml-2">This acc is private. You cannot view following/followers unless the user makes account public.</span>
-                            </div>
-                        {% else %}
-                            <div class="mt-6 text-sm text-gray-300 bg-gray-900/40 rounded-xl p-4 border border-gray-700">
-                                <div class="text-gray-200 font-semibold">Followers & Following</div>
-                                <div class="text-xs text-gray-400 mt-1">{{ follow_lists_locked_reason }}</div>
-                                {% if user.is_authenticated %}
-                                    <div class="mt-3">
-                                        <a href="{% url 'account_email' %}" class="bg-gray-700 hover:bg-gray-600 text-white rounded-lg px-4 py-2 transition-colors inline-block text-xs">Verify email</a>
-                                    </div>
-                                {% endif %}
-                            </div>
-                        {% endif %}
+                        <div class="mt-6 text-sm text-gray-300 bg-gray-900/40 rounded-xl p-4 border border-gray-700">
+                            <div class="text-gray-200 font-semibold">Followers & Following</div>
+                            <div class="text-xs text-gray-400 mt-1">{{ follow_lists_locked_reason }}</div>
+                            {% if user.is_authenticated and 'Verify your email' in follow_lists_locked_reason %}
+                                <div class="mt-3">
+                                    <a href="{% url 'account_email' %}" class="bg-gray-700 hover:bg-gray-600 text-white rounded-lg px-4 py-2 transition-colors inline-block text-xs">Verify email</a>
+                                </div>
+                            {% endif %}
+                        </div>
                     {% endif %}
 
                     {% if user.is_authenticated and profile_user and user != profile_user %}
@@ -145,7 +138,13 @@
                                 {% csrf_token %}
                                 <button type="submit"
                                         class="w-full bg-gradient-to-r from-purple-500 via-indigo-500 to-sky-500 hover:from-purple-400 hover:via-indigo-400 hover:to-sky-400 text-white font-bold py-2 px-6 rounded-lg transition-colors">
-                                    {% if is_following %}Unfollow{% else %}Follow{% endif %}
+                                    {% if is_following %}
+                                        Unfollow
+                                    {% elif is_private and is_follow_requested %}
+                                        Requested
+                                    {% else %}
+                                        Follow
+                                    {% endif %}
                                 </button>
                             </form>
 

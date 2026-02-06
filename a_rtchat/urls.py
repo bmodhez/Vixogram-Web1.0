@@ -24,6 +24,7 @@ urlpatterns = [
     path('chat/delete/<chatroom_name>', chatroom_delete_view, name="chatroom-delete"),
     path('chat/close/<chatroom_name>', chatroom_close_view, name="chatroom-close"),
     path('chat/leave/<chatroom_name>', chatroom_leave_view, name="chatroom-leave"),
+    path('chat/room/<chatroom_name>/member/remove/<int:user_id>/', chatroom_member_remove_view, name='chatroom-member-remove'),
     path('chat/fileupload/<chatroom_name>', chat_file_upload, name="chat-file-upload"),
     path('chat/call/<chatroom_name>', call_view, name='chat-call'),
     path('chat/call/config/<chatroom_name>', call_config_view, name='call-config'),

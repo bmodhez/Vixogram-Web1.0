@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="mx-auto w-full max-w-2xl">
+  <div class="rounded-2xl border border-gray-800 bg-gray-950/30 p-6 sm:p-8 text-center">
+    <div class="text-3xl sm:text-4xl font-extrabold text-white">✅ Welcome to {{ plan_name }}</div>
+    <div class="mt-2 text-sm text-gray-300">🎉 Your premium access is now active</div>
+
+    <div class="mt-7 flex flex-col sm:flex-row gap-3 justify-center">
+      <a href="{% url 'home' %}" class="inline-flex items-center justify-center rounded-xl bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold px-5 py-3 transition-colors">
+        Go to Dashboard
+      </a>
+      <a href="{% url 'home' %}" class="inline-flex items-center justify-center rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-5 py-3 transition-colors">
+        Start Using AI
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -114,7 +114,17 @@
     return storageGet('vixo_ads_typing') === '1';
   }
 
-  function shouldRenderBase(baseCfg) {
+  function shouldRenderChatList(baseCfg) {
+    if (!baseCfg || !baseCfg.mobileAdsEnabled) return false;
+    if (!isMobileWidth()) return false;
+    if (isKeyboardOpen()) return false;
+    if (isUserTyping()) return false;
+    if (isSlowNetwork()) return false;
+    return true;
+  }
+
+  function shouldRenderChatFeed(baseCfg) {
+    // Keep feed ads extra conservative to avoid distraction.
     if (!baseCfg || !baseCfg.mobileAdsEnabled) return false;
     if (!isMobileWidth()) return false;
     if (!hasScrolledOnce()) return false;
@@ -124,22 +134,24 @@
     return true;
   }
 
-  function makeChatListAdCard(ad) {
+  function makeChatListAdCard(ad, index) {
     const wrap = document.createElement('div');
-    wrap.id = 'vixo_chat_list_ad';
+    wrap.id = `vixo_chat_list_ad_${index}`;
     wrap.setAttribute('data-vixo-ad', 'chat-list');
     wrap.className = 'mt-2 mb-2 rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-3';
 
     const label = document.createElement('div');
     label.className = 'flex items-start justify-between gap-2';
 
+    const advertiser = (ad && ad.advertiser) ? String(ad.advertiser).trim() : '';
+
     const title = document.createElement('div');
     title.className = 'text-sm font-semibold text-gray-200';
-    title.textContent = (ad && ad.title) ? ad.title : 'Sponsored';
+    title.textContent = (ad && ad.title) ? ad.title : (advertiser || 'Sponsored');
 
     const sponsored = document.createElement('div');
     sponsored.className = 'text-[10px] font-semibold text-gray-400/90';
-    sponsored.textContent = 'Sponsored';
+    sponsored.textContent = advertiser ? 'Ad' : 'Sponsored';
 
     label.appendChild(title);
     label.appendChild(sponsored);
@@ -148,20 +160,35 @@
     body.className = 'mt-1 text-xs text-gray-300';
     body.textContent = (ad && ad.body) ? ad.body : '';
 
+    const imageUrl = (ad && ad.imageUrl) ? String(ad.imageUrl).trim() : '';
+    let img = null;
+    if (imageUrl) {
+      img = document.createElement('img');
+      img.src = imageUrl;
+      img.alt = advertiser ? `${advertiser} ad` : 'Advertisement';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.className = 'mt-2 w-full rounded-lg border border-gray-800 bg-gray-950/30';
+    }
+
     const ctaRow = document.createElement('div');
     ctaRow.className = 'mt-2 flex items-center justify-end';
 
-    const btn = document.createElement('a');
-    btn.href = (ad && ad.ctaUrl) ? ad.ctaUrl : '#';
-    btn.className = 'inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-2 transition-colors';
-    btn.textContent = (ad && ad.ctaText) ? ad.ctaText : 'Learn more';
-    btn.setAttribute('rel', 'noopener');
-
-    ctaRow.appendChild(btn);
+    const ctaUrl = (ad && ad.ctaUrl) ? String(ad.ctaUrl).trim() : '';
+    if (ctaUrl) {
+      const btn = document.createElement('a');
+      btn.href = ctaUrl;
+      btn.target = '_blank';
+      btn.className = 'inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-2 transition-colors';
+      btn.textContent = (ad && ad.ctaText) ? ad.ctaText : 'Learn more';
+      btn.setAttribute('rel', 'noopener noreferrer sponsored');
+      ctaRow.appendChild(btn);
+    }
 
     wrap.appendChild(label);
     if (body.textContent) wrap.appendChild(body);
-    wrap.appendChild(ctaRow);
+    if (img) wrap.appendChild(img);
+    if (ctaRow.childNodes.length) wrap.appendChild(ctaRow);
 
     return wrap;
   }
@@ -175,33 +202,50 @@
     const card = document.createElement('div');
     card.className = 'w-full max-w-[90%] sm:max-w-[75%] lg:max-w-[65%] rounded-2xl border border-gray-800 bg-gray-900/40 px-4 py-3 text-center';
 
+    const advertiser = (ad && ad.advertiser) ? String(ad.advertiser).trim() : '';
+
     const label = document.createElement('div');
     label.className = 'text-[11px] font-semibold text-gray-400';
-    label.textContent = 'Sponsored message';
+    label.textContent = advertiser ? `Ad · ${advertiser}` : 'Sponsored message';
 
     const title = document.createElement('div');
     title.className = 'mt-1 text-sm font-semibold text-gray-100';
-    title.textContent = (ad && ad.title) ? ad.title : 'Sponsored';
+    title.textContent = (ad && ad.title) ? ad.title : (advertiser || 'Sponsored');
 
     const body = document.createElement('div');
     body.className = 'mt-1 text-xs text-gray-300';
     body.textContent = (ad && ad.body) ? ad.body : '';
 
+    const imageUrl = (ad && ad.imageUrl) ? String(ad.imageUrl).trim() : '';
+    let img = null;
+    if (imageUrl) {
+      img = document.createElement('img');
+      img.src = imageUrl;
+      img.alt = advertiser ? `${advertiser} ad` : 'Advertisement';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.className = 'mt-3 w-full rounded-xl border border-gray-800 bg-gray-950/30';
+    }
+
     const cta = document.createElement('div');
     cta.className = 'mt-2 flex items-center justify-center';
 
-    const btn = document.createElement('a');
-    btn.href = (ad && ad.ctaUrl) ? ad.ctaUrl : '#';
-    btn.className = 'inline-flex items-center justify-center rounded-lg bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold px-3 py-2 transition-colors';
-    btn.textContent = (ad && ad.ctaText) ? ad.ctaText : 'Open';
-    btn.setAttribute('rel', 'noopener');
-
-    cta.appendChild(btn);
+    const ctaUrl = (ad && ad.ctaUrl) ? String(ad.ctaUrl).trim() : '';
+    if (ctaUrl) {
+      const btn = document.createElement('a');
+      btn.href = ctaUrl;
+      btn.target = '_blank';
+      btn.className = 'inline-flex items-center justify-center rounded-lg bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold px-3 py-2 transition-colors';
+      btn.textContent = (ad && ad.ctaText) ? ad.ctaText : 'Open';
+      btn.setAttribute('rel', 'noopener noreferrer sponsored');
+      cta.appendChild(btn);
+    }
 
     card.appendChild(label);
     card.appendChild(title);
     if (body.textContent) card.appendChild(body);
-    card.appendChild(cta);
+    if (img) card.appendChild(img);
+    if (cta.childNodes.length) card.appendChild(cta);
 
     outer.appendChild(card);
     return outer;
@@ -231,25 +275,54 @@
     storageSet(key, String(nowMs()));
   }
 
-  function injectChatListAd(baseCfg) {
+  function injectChatListAds(baseCfg) {
     try {
       const panel = document.querySelector('[data-chat-list]') || document.getElementById('chat_sidebar_panel');
       if (!panel) return;
-      if (document.getElementById('vixo_chat_list_ad')) return;
+      if (panel.getAttribute('data-vixo-chat-list-ads-injected') === '1') return;
       if (!chatListAllowed()) return;
 
-      const items = Array.from(panel.querySelectorAll('[data-chat-list-item]'))
-        .filter((el) => !el.closest('[data-chat-pinned]'));
-
-      if (items.length < 5) return;
-      const afterEl = items[4];
-      if (!afterEl || !afterEl.parentNode) return;
-
       const ad = (baseCfg.mobileAds && baseCfg.mobileAds.chatList) || {};
-      const card = makeChatListAdCard(ad);
 
-      // Insert after the 5th chat item.
-      afterEl.insertAdjacentElement('afterend', card);
+      // Target group-chat items only (mobile request: after every 3 groups).
+      // Fallback to all chat list items if template markers are missing.
+      let items = Array.from(panel.querySelectorAll('[data-chat-list-item][data-chat-list-scope="group"]'));
+      if (!items.length) {
+        items = Array.from(panel.querySelectorAll('[data-chat-list-item]'))
+          .filter((el) => !el.closest('[data-chat-pinned]'));
+      }
+
+      if (items.length < 3) return;
+
+      const interval = 3;
+      let adIndex = 0;
+      for (let n = interval; n <= items.length; n += interval) {
+        const afterEl = items[n - 1];
+        if (!afterEl) continue;
+
+        const card = makeChatListAdCard(ad, adIndex++);
+
+        // Keep markup valid-ish: if we're inside a UL, insert as a LI.
+        const ul = afterEl.closest('ul');
+        if (ul) {
+          const li = document.createElement('li');
+          li.setAttribute('data-vixo-ad', 'chat-list');
+          li.className = 'list-none';
+          li.appendChild(card);
+
+          const anchorLi = afterEl.closest('li');
+          if (anchorLi && anchorLi.parentNode) {
+            anchorLi.insertAdjacentElement('afterend', li);
+          } else {
+            afterEl.insertAdjacentElement('afterend', li);
+          }
+        } else {
+          const anchorLi = afterEl.closest('li') || afterEl;
+          anchorLi.insertAdjacentElement('afterend', card);
+        }
+      }
+
+      panel.setAttribute('data-vixo-chat-list-ads-injected', '1');
       markChatListShown();
     } catch {
       // silently skip
@@ -297,21 +370,18 @@
 
   function syncVisibility() {
     try {
-      const listAd = document.getElementById('vixo_chat_list_ad');
       const feedAd = document.getElementById('vixo_chat_feed_ad');
       const baseCfg = readJsonScript('vixo-config') || {};
 
-      const ok = shouldRenderBase(baseCfg);
+      const okList = shouldRenderChatList(baseCfg);
+      const okFeed = shouldRenderChatFeed(baseCfg);
 
-      if (listAd) listAd.style.display = ok ? '' : 'none';
-      if (feedAd) feedAd.style.display = ok ? '' : 'none';
+      const listAds = Array.from(document.querySelectorAll('[data-vixo-ad="chat-list"]'));
+      listAds.forEach((el) => { el.style.display = okList ? '' : 'none'; });
+      if (feedAd) feedAd.style.display = okFeed ? '' : 'none';
 
-      if (!ok) return;
-
-      // Priority order: chat list ad first, then chat feed.
-      // If chat list is present/eligible, we still allow chat feed injection but only if it doesn't exist yet.
-      injectChatListAd(baseCfg);
-      injectChatFeedAd(baseCfg);
+      if (okList) injectChatListAds(baseCfg);
+      if (okFeed) injectChatFeedAd(baseCfg);
     } catch {
       // ignore
     }

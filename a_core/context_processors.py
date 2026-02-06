@@ -83,19 +83,16 @@ def welcome_popup(request):
 def location_popup(request):
     """Expose a one-time location permission popup flag.
 
-    Only shown on the home page right after signup.
+    Shown once after signup/login when the session flag is present.
     Reads request.session['show_location_popup'] and clears it after consumption.
     """
     try:
-        # Only on the home route.
+        # Never show this prompt inside the Django admin.
         try:
-            rm = getattr(request, 'resolver_match', None)
-            if not rm or getattr(rm, 'view_name', '') != 'home':
+            if str(getattr(request, 'path', '') or '').startswith('/admin'):
                 return {'SHOW_LOCATION_POPUP': False}
         except Exception:
-            # Fallback: best-effort path check.
-            if str(getattr(request, 'path', '') or '') != '/':
-                return {'SHOW_LOCATION_POPUP': False}
+            pass
 
         sess = getattr(request, 'session', None)
         if not sess:
@@ -103,6 +100,13 @@ def location_popup(request):
 
         show = bool(sess.get('show_location_popup'))
         if show:
+            # Ensure CSRF cookie exists for the JS fetch() POST.
+            try:
+                from django.middleware.csrf import get_token
+
+                get_token(request)
+            except Exception:
+                pass
             sess.pop('show_location_popup', None)
             sess.pop('location_popup_source', None)
         return {'SHOW_LOCATION_POPUP': show}

@@ -1,5 +1,6 @@
 import csv
 import json
+import time
 from datetime import timedelta
 from urllib.parse import urlparse
 
@@ -16,6 +17,7 @@ from django.contrib import messages
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.conf import settings
 from django.urls import reverse
 from django.db import transaction
@@ -36,7 +38,7 @@ from .moderation import moderate_message
 from .channels_utils import chatroom_channel_group_name
 from .mentions import extract_mention_usernames, resolve_mentioned_users
 from a_rtchat.link_policy import contains_link
-from .room_policy import room_allows_links, room_allows_uploads, is_free_promotion_room
+from .room_policy import room_allows_links, room_allows_uploads, is_free_promotion_room, is_meme_central_room
 from .challenges import (
     get_active_challenge,
     check_message as check_challenge_message,
@@ -657,6 +659,54 @@ def chat_view(request, chatroom_name='public-chat'):
                     status=400,
                 )
 
+            # Meme Central: enforce a per-message cooldown.
+            if is_meme_central_room(chat_group):
+                cd = check_rate_limit(
+                    make_key('chat_cd', chat_group.group_name, request.user.id),
+                    limit=1,
+                    period_seconds=3,
+                )
+                if not cd.allowed:
+                    _log_blocked_message_event(
+                        user=request.user,
+                        chat_group=chat_group,
+                        scope='chat_cooldown',
+                        status_code=429,
+                        retry_after=int(cd.retry_after),
+                        text=(caption or ''),
+                        meta={
+                            'cooldown_seconds': 3,
+                            'via': 'upload',
+                        },
+                    )
+                    resp = HttpResponse('<div class="text-xs text-red-400">Please wait 3 seconds between messages.</div>', status=429)
+                    resp.headers['Retry-After'] = str(cd.retry_after)
+                    return resp
+
+            # Free Promotion: enforce a strict 60-second cooldown between sends.
+            if is_free_promotion_room(chat_group):
+                cd = check_rate_limit(
+                    make_key('chat_cd', chat_group.group_name, request.user.id),
+                    limit=1,
+                    period_seconds=60,
+                )
+                if not cd.allowed:
+                    _log_blocked_message_event(
+                        user=request.user,
+                        chat_group=chat_group,
+                        scope='chat_cooldown',
+                        status_code=429,
+                        retry_after=int(cd.retry_after),
+                        text=(caption or ''),
+                        meta={
+                            'cooldown_seconds': 60,
+                            'via': 'upload',
+                        },
+                    )
+                    resp = HttpResponse('<div class="text-xs text-red-400">Please wait 60 seconds between messages.</div>', status=429)
+                    resp.headers['Retry-After'] = str(cd.retry_after)
+                    return resp
+
             message = GroupMessage.objects.create(
                 file=upload,
                 file_caption=caption or None,
@@ -665,18 +715,23 @@ def chat_view(request, chatroom_name='public-chat'):
                 group=chat_group,
             )
 
-            # Retention: keep only the newest messages per room (best-effort)
-            # Apply only to public/group chats, not private chats.
-            if not bool(getattr(chat_group, 'is_private', False)):
-                try:
-                    from a_rtchat.retention import trim_chat_group_messages
+            # Retention: keep only the newest messages per room (best-effort).
+            # Public/group rooms and private rooms can use different caps.
+            try:
+                from a_rtchat.retention import trim_chat_group_messages
 
-                    trim_chat_group_messages(
-                        chat_group_id=chat_group.id,
-                        keep_last=int(getattr(settings, 'CHAT_MAX_MESSAGES_PER_ROOM', 300)),
-                    )
-                except Exception:
-                    pass
+                is_private = bool(getattr(chat_group, 'is_private', False))
+                if is_private:
+                    keep_last = int(getattr(settings, 'PRIVATE_CHAT_MAX_MESSAGES_PER_ROOM', 1000))
+                else:
+                    keep_last = int(getattr(settings, 'CHAT_MAX_MESSAGES_PER_ROOM', 300))
+
+                trim_chat_group_messages(
+                    chat_group_id=chat_group.id,
+                    keep_last=max(1, keep_last),
+                )
+            except Exception:
+                pass
 
             # Recompute counters after saving the upload so the UI can update without refresh.
             uploads_used = _uploads_used_today(chat_group, request.user)
@@ -1306,6 +1361,54 @@ def chat_view(request, chatroom_name='public-chat'):
             message.author = request.user
             message.group = chat_group
 
+            # Meme Central: enforce a per-message cooldown.
+            if is_meme_central_room(chat_group):
+                cd = check_rate_limit(
+                    make_key('chat_cd', chat_group.group_name, request.user.id),
+                    limit=1,
+                    period_seconds=3,
+                )
+                if not cd.allowed:
+                    _log_blocked_message_event(
+                        user=request.user,
+                        chat_group=chat_group,
+                        scope='chat_cooldown',
+                        status_code=429,
+                        retry_after=int(cd.retry_after),
+                        text=(raw_body or ''),
+                        meta={
+                            'cooldown_seconds': 3,
+                            'via': 'message',
+                        },
+                    )
+                    resp = HttpResponse('', status=429)
+                    resp.headers['Retry-After'] = str(cd.retry_after)
+                    return resp
+
+            # Free Promotion: enforce a strict 60-second cooldown between sends.
+            if is_free_promotion_room(chat_group):
+                cd = check_rate_limit(
+                    make_key('chat_cd', chat_group.group_name, request.user.id),
+                    limit=1,
+                    period_seconds=60,
+                )
+                if not cd.allowed:
+                    _log_blocked_message_event(
+                        user=request.user,
+                        chat_group=chat_group,
+                        scope='chat_cooldown',
+                        status_code=429,
+                        retry_after=int(cd.retry_after),
+                        text=(raw_body or ''),
+                        meta={
+                            'cooldown_seconds': 60,
+                            'via': 'message',
+                        },
+                    )
+                    resp = HttpResponse('', status=429)
+                    resp.headers['Retry-After'] = str(cd.retry_after)
+                    return resp
+
             reply_to_id = (request.POST.get('reply_to_id') or '').strip()
             if reply_to_id:
                 try:
@@ -1369,18 +1472,23 @@ def chat_view(request, chatroom_name='public-chat'):
                 resp.headers['Retry-After'] = str(burst_cooldown)
                 return resp
 
-            # Retention: keep only the newest messages per room (best-effort)
-            # Apply only to public/group chats, not private chats.
-            if not bool(getattr(chat_group, 'is_private', False)):
-                try:
-                    from a_rtchat.retention import trim_chat_group_messages
+            # Retention: keep only the newest messages per room (best-effort).
+            # Public/group rooms and private rooms can use different caps.
+            try:
+                from a_rtchat.retention import trim_chat_group_messages
 
-                    trim_chat_group_messages(
-                        chat_group_id=chat_group.id,
-                        keep_last=int(getattr(settings, 'CHAT_MAX_MESSAGES_PER_ROOM', 300)),
-                    )
-                except Exception:
-                    pass
+                is_private = bool(getattr(chat_group, 'is_private', False))
+                if is_private:
+                    keep_last = int(getattr(settings, 'PRIVATE_CHAT_MAX_MESSAGES_PER_ROOM', 1000))
+                else:
+                    keep_last = int(getattr(settings, 'CHAT_MAX_MESSAGES_PER_ROOM', 300))
+
+                trim_chat_group_messages(
+                    chat_group_id=chat_group.id,
+                    keep_last=max(1, keep_last),
+                )
+            except Exception:
+                pass
 
             # Public chat bot (Natasha): reply occasionally, async.
             try:
@@ -1591,6 +1699,7 @@ def chat_view(request, chatroom_name='public-chat'):
         'other_last_read_id': other_last_read_id,
         'chatroom_name' : chatroom_name,
         'chat_group' : chat_group,
+        'chat_group_members': [],
         'verified_user_ids': verified_user_ids,
         'chat_blocked': chat_blocked,
         'chat_muted_seconds': chat_muted_seconds,
@@ -1610,6 +1719,12 @@ def chat_view(request, chatroom_name='public-chat'):
         'uploads_allowed': uploads_allowed,
         'reaction_emojis': CHAT_REACTION_EMOJIS,
     }
+
+    # Members list for UI (prefetch profile to avoid N+1 in templates)
+    try:
+        context['chat_group_members'] = list(chat_group.members.select_related('profile').all())
+    except Exception:
+        context['chat_group_members'] = []
 
     # Waiting list count for admin/staff (code rooms only)
     try:
@@ -1943,17 +2058,50 @@ def create_private_room(request):
         messages.error(request, 'You are blocked from creating private rooms.')
         return redirect('home')
 
+    # Without verified email, allow creating only a small number of private rooms.
+    # This reduces abuse while still letting new users try the feature.
+    try:
+        limit = int(getattr(settings, 'UNVERIFIED_PRIVATE_ROOM_CREATE_LIMIT', 2))
+    except Exception:
+        limit = 2
+
+    if limit > 0 and (not _has_verified_email(request.user)):
+        created_count = ChatGroup.objects.filter(
+            admin=request.user,
+            is_private=True,
+            is_code_room=True,
+        ).count()
+        if created_count >= limit:
+            # Return JSON error for AJAX (no page redirect), or fallback redirect for non-AJAX.
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.GET.get('_ajax') == '1':
+                return JsonResponse({
+                    'ok': False,
+                    'error': f'Please verify your email to create more than {limit} private rooms.'
+                }, status=403)
+            messages.error(request, f'Please verify your email to create more than {limit} private rooms.')
+            return redirect('home')
+
     rl = check_rate_limit(
         make_key('private_room_create', request.user.id, get_client_ip(request)),
         limit=int(getattr(settings, 'PRIVATE_ROOM_CREATE_RATE_LIMIT', 5)),
         period_seconds=int(getattr(settings, 'PRIVATE_ROOM_CREATE_RATE_PERIOD', 300)),
     )
     if not rl.allowed:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.GET.get('_ajax') == '1':
+            return JsonResponse({
+                'ok': False,
+                'error': 'Too many attempts. Please wait and try again.'
+            }, status=429)
         messages.error(request, 'Too many attempts. Please wait and try again.')
         return redirect('home')
 
     form = PrivateRoomCreateForm(request.POST)
     if not form.is_valid():
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.GET.get('_ajax') == '1':
+            return JsonResponse({
+                'ok': False,
+                'error': 'Invalid room details'
+            }, status=400)
         messages.error(request, 'Invalid room details')
         return redirect('home')
 
@@ -1965,6 +2113,15 @@ def create_private_room(request):
         admin=request.user,
     )
     room.members.add(request.user)
+
+    # Return JSON response for AJAX requests (no Django messages), or redirect for regular form submit.
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.GET.get('_ajax') == '1'
+    if is_ajax:
+        return JsonResponse({
+            'ok': True,
+            'redirect_url': f"{reverse('chatroom', args=[room.group_name])}?created=1"
+        })
+
     messages.success(request, f'Private room created. Share code: {room.room_code}')
     return redirect(f"{reverse('chatroom', args=[room.group_name])}?created=1")
 
@@ -2174,9 +2331,10 @@ def private_room_rename(request, chatroom_name):
             name = ''
 
     # Normalize + enforce max length.
+    # UI limits this to 35 chars; keep server-side consistent.
     name = (name or '').strip()
-    if len(name) > 128:
-        name = name[:128]
+    if len(name) > 35:
+        name = name[:35]
 
     chat_group.code_room_name = name or None
     chat_group.save(update_fields=['code_room_name'])
@@ -2294,6 +2452,47 @@ def chatroom_leave_view(request, chatroom_name):
         chat_group.members.remove(request.user)
         messages.success(request, 'You left the Chat')
         return redirect('home')
+
+
+@login_required
+@require_POST
+def chatroom_member_remove_view(request, chatroom_name, user_id):
+    """Remove a member from a private room (admin/staff only)."""
+    chat_group = get_object_or_404(ChatGroup, group_name=chatroom_name)
+
+    # Only private rooms support member management.
+    if not getattr(chat_group, 'is_private', False):
+        raise Http404()
+
+    if request.user != getattr(chat_group, 'admin', None) and not request.user.is_staff:
+        raise Http404()
+
+    try:
+        member = get_user_model().objects.get(id=int(user_id))
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
+
+    # Safety: can't remove yourself via this control.
+    if member == request.user:
+        return JsonResponse({'ok': False, 'error': 'cannot_remove_self'}, status=400)
+
+    # Safety: don't allow removing the room admin.
+    if member == getattr(chat_group, 'admin', None):
+        return JsonResponse({'ok': False, 'error': 'cannot_remove_admin'}, status=400)
+
+    # Must be a current member.
+    try:
+        if member not in chat_group.members.all():
+            return JsonResponse({'ok': False, 'error': 'not_a_member'}, status=400)
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'not_a_member'}, status=400)
+
+    try:
+        chat_group.members.remove(member)
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'remove_failed'}, status=500)
+
+    return JsonResponse({'ok': True, 'removedUserId': int(member.id)})
 
 @login_required
 def chat_file_upload(request, chatroom_name):
@@ -2420,18 +2619,23 @@ def chat_file_upload(request, chatroom_name):
         group=chat_group,
     )
 
-    # Retention: keep only the newest messages per room (best-effort)
-    # Apply only to public/group chats, not private chats.
-    if not bool(getattr(chat_group, 'is_private', False)):
-        try:
-            from a_rtchat.retention import trim_chat_group_messages
+    # Retention: keep only the newest messages per room (best-effort).
+    # Public/group rooms and private rooms can use different caps.
+    try:
+        from a_rtchat.retention import trim_chat_group_messages
 
-            trim_chat_group_messages(
-                chat_group_id=chat_group.id,
-                keep_last=int(getattr(settings, 'CHAT_MAX_MESSAGES_PER_ROOM', 300)),
-            )
-        except Exception:
-            pass
+        is_private = bool(getattr(chat_group, 'is_private', False))
+        if is_private:
+            keep_last = int(getattr(settings, 'PRIVATE_CHAT_MAX_MESSAGES_PER_ROOM', 1000))
+        else:
+            keep_last = int(getattr(settings, 'CHAT_MAX_MESSAGES_PER_ROOM', 300))
+
+        trim_chat_group_messages(
+            chat_group_id=chat_group.id,
+            keep_last=max(1, keep_last),
+        )
+    except Exception:
+        pass
 
     channel_layer = get_channel_layer()
     event = {
@@ -2546,6 +2750,13 @@ def message_info_view(request, message_id: int):
     message = get_object_or_404(GroupMessage.objects.select_related('group', 'author'), pk=message_id)
     chat_group = message.group
 
+    # Default avatar fallback (covers missing profile/image cases)
+    try:
+        from a_users.models import DEFAULT_AVATAR_DATA_URI
+        default_avatar = DEFAULT_AVATAR_DATA_URI
+    except Exception:
+        default_avatar = ''
+
     if not getattr(chat_group, 'is_private', False):
         raise Http404()
     if request.user not in chat_group.members.all():
@@ -2557,6 +2768,7 @@ def message_info_view(request, message_id: int):
     try:
         readers = list(
             ChatReadState.objects.filter(group=chat_group, last_read_message_id__gte=message.id)
+            .exclude(user_id=message.author_id)
             .select_related('user', 'user__profile')
             .order_by('-updated')
         )
@@ -2570,6 +2782,7 @@ def message_info_view(request, message_id: int):
             'message': message,
             'chat_group': chat_group,
             'read_states': readers,
+            'default_avatar': default_avatar,
         },
     )
 
@@ -3618,6 +3831,51 @@ def agora_token_view(request, chatroom_name):
     if request.user not in chat_group.members.all():
         raise Http404()
 
+    call_type = (request.GET.get('type') or 'voice').lower()
+    if call_type not in {'voice', 'video'}:
+        call_type = 'voice'
+
+    # Free minutes: 4 min voice, 2 min video (rolling window per room).
+    default_limit = 2 * 60 if call_type == 'video' else 4 * 60
+    try:
+        free_limit_seconds = int(getattr(settings, 'FREE_CALL_LIMIT_SECONDS_VIDEO' if call_type == 'video' else 'FREE_CALL_LIMIT_SECONDS_VOICE', default_limit) or default_limit)
+    except Exception:
+        free_limit_seconds = default_limit
+    free_limit_seconds = max(0, int(free_limit_seconds or 0))
+
+    try:
+        user_id = int(getattr(request.user, 'id', 0) or 0)
+    except Exception:
+        user_id = 0
+
+    used_key = f"call_free_used:{chat_group.group_name}:{call_type}:{user_id}"
+    join_key = f"call_free_join:{chat_group.group_name}:{call_type}:{user_id}"
+
+    try:
+        used = int(cache.get(used_key) or 0)
+    except Exception:
+        used = 0
+
+    # Include in-flight usage if a join timestamp exists.
+    try:
+        start_ts = cache.get(join_key)
+        if start_ts:
+            used = max(0, used + max(0, int(time.time() - float(start_ts))))
+    except Exception:
+        pass
+
+    free_seconds_left = max(0, int(free_limit_seconds - max(0, used)))
+
+    # If no time left, don't issue tokens.
+    if free_limit_seconds > 0 and free_seconds_left <= 0:
+        return JsonResponse({
+            'error': 'free_limit_reached',
+            'free_limit_seconds': int(free_limit_seconds),
+            'free_seconds_left': 0,
+            'channel': chat_group.group_name,
+            'app_id': getattr(settings, 'AGORA_APP_ID', ''),
+        }, status=403)
+
     try:
         token, uid = build_rtc_token(channel_name=chat_group.group_name)
     except Exception as exc:
@@ -3628,6 +3886,8 @@ def agora_token_view(request, chatroom_name):
         'uid': uid,
         'channel': chat_group.group_name,
         'app_id': getattr(settings, 'AGORA_APP_ID', ''),
+        'free_limit_seconds': int(free_limit_seconds),
+        'free_seconds_left': int(free_seconds_left),
     })
 
 
@@ -3733,10 +3993,46 @@ def call_presence_view(request, chatroom_name):
     if call_type not in {'voice', 'video'}:
         call_type = 'voice'
 
+    # --- Free call usage tracking (per user + room + call type) ---
+    # This prevents users from resetting the free timer by leaving and rejoining.
+    usage_timeout = 6 * 60 * 60  # keep usage within a rolling window
+    try:
+        user_id = int(getattr(request.user, 'id', 0) or 0)
+    except Exception:
+        user_id = 0
+
+    join_key = f"call_free_join:{chat_group.group_name}:{call_type}:{user_id}"
+    used_key = f"call_free_used:{chat_group.group_name}:{call_type}:{user_id}"
+
+    now_ts = time.time()
+
     try:
         uid = int(request.POST.get('uid') or '0')
     except ValueError:
         uid = 0
+
+    if user_id:
+        try:
+            if action == 'join':
+                # Only set if absent so multiple joins don't reset the timer.
+                cache.add(join_key, now_ts, timeout=usage_timeout)
+            else:
+                start_ts = cache.get(join_key)
+                if start_ts:
+                    try:
+                        elapsed = max(0, int(now_ts - float(start_ts)))
+                    except Exception:
+                        elapsed = 0
+
+                    try:
+                        used = int(cache.get(used_key) or 0)
+                    except Exception:
+                        used = 0
+
+                    cache.set(used_key, max(0, used + elapsed), timeout=usage_timeout)
+                cache.delete(join_key)
+        except Exception:
+            pass
 
     channel_layer = get_channel_layer()
     event = {
@@ -3794,7 +4090,9 @@ def call_event_view(request, chatroom_name):
 
     if action == 'start' and is_active:
         return JsonResponse({'ok': True, 'deduped': True})
-    if action == 'end' and not is_active:
+    # If the call never became active but an invite is still pending,
+    # we still want an instant "end" (cancel) to propagate to everyone.
+    if action == 'end' and (not is_active) and (not is_pending_invite):
         return JsonResponse({'ok': True, 'deduped': True})
     if action == 'decline' and not is_pending_invite:
         return JsonResponse({'ok': True, 'deduped': True})
@@ -3812,18 +4110,23 @@ def call_event_view(request, chatroom_name):
         group=chat_group,
     )
 
-    # Retention: keep only the newest messages per room (best-effort)
-    # Apply only to public/group chats, not private chats.
-    if not bool(getattr(chat_group, 'is_private', False)):
-        try:
-            from a_rtchat.retention import trim_chat_group_messages
+    # Retention: keep only the newest messages per room (best-effort).
+    # Public/group rooms and private rooms can use different caps.
+    try:
+        from a_rtchat.retention import trim_chat_group_messages
 
-            trim_chat_group_messages(
-                chat_group_id=chat_group.id,
-                keep_last=int(getattr(settings, 'CHAT_MAX_MESSAGES_PER_ROOM', 300)),
-            )
-        except Exception:
-            pass
+        is_private = bool(getattr(chat_group, 'is_private', False))
+        if is_private:
+            keep_last = int(getattr(settings, 'PRIVATE_CHAT_MAX_MESSAGES_PER_ROOM', 1000))
+        else:
+            keep_last = int(getattr(settings, 'CHAT_MAX_MESSAGES_PER_ROOM', 300))
+
+        trim_chat_group_messages(
+            chat_group_id=chat_group.id,
+            keep_last=max(1, keep_last),
+        )
+    except Exception:
+        pass
 
     # Update call state
     if action == 'start':

@@ -1,3 +1,8 @@
+
+/* Chat: avoid extra blank space under the composer when upload feedback is empty. */
+#upload_feedback:empty {
+  display: none;
+}
 /* Global site tweaks extracted from templates */
 
 /* Smooth scrolling site-wide (anchors/programmatic scroll). */
@@ -114,6 +119,238 @@ body {
   transform: translateY(0);
   filter: none;
   transition: opacity 180ms ease, transform 180ms ease, filter 180ms ease;
+}
+
+/* Auth pages: video background (keeps content layout unchanged). */
+.vixo-auth-bg.vixo-auth-bg--video {
+  background-image: none;
+  background-color: rgb(2 6 23);
+  isolation: isolate;
+}
+
+.vixo-auth-bg-media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.vixo-auth-bg-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vixo-auth-bg-media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    rgba(2, 6, 23, var(--vixo-auth-overlay, 0.78)),
+    rgba(2, 6, 23, var(--vixo-auth-overlay, 0.78))
+  );
+}
+
+/* Auth page watermark (decorative, behind the card) */
+.vixo-auth-watermark {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+  display: block;
+}
+
+.vixo-auth-watermark__pos {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  transform: translate(-50%, -50%);
+  width: min(52rem, 92vw);
+}
+
+/* Place watermark into the left side of the hero (used on login). */
+.vixo-auth-watermark--left .vixo-auth-watermark__pos {
+  left: 1.25rem;
+  top: 66%;
+  transform: translate(0, -50%);
+  width: min(40rem, 92vw);
+}
+
+/* Place watermark into the gap between character and card on md+ */
+@media (min-width: 768px) {
+  .vixo-auth-watermark--between .vixo-auth-watermark__pos {
+    left: 52%;
+    top: 58%;
+    width: min(52rem, 70vw);
+  }
+  .vixo-auth-watermark--between .vixo-auth-watermark__text {
+    transform: rotate(-12deg) translateX(-6%);
+  }
+
+  .vixo-auth-watermark--left .vixo-auth-watermark__pos {
+    left: 3.25%;
+    top: 64%;
+    width: min(44rem, 40vw);
+  }
+  .vixo-auth-watermark--left .vixo-auth-watermark__text {
+    transform: rotate(-12deg);
+    font-size: clamp(1.9rem, 4.7vw, 5.2rem);
+  }
+}
+
+@media (min-width: 1024px) {
+  .vixo-auth-watermark--between .vixo-auth-watermark__pos {
+    left: 53.5%;
+    top: 57%;
+    width: min(58rem, 64vw);
+  }
+
+  .vixo-auth-watermark--left .vixo-auth-watermark__pos {
+    left: 4.25%;
+    top: 64%;
+    width: min(48rem, 38vw);
+  }
+}
+
+@media (min-width: 1280px) {
+  .vixo-auth-watermark--between .vixo-auth-watermark__pos {
+    left: 54.5%;
+    top: 56%;
+    width: min(60rem, 60vw);
+  }
+
+  .vixo-auth-watermark--left .vixo-auth-watermark__pos {
+    left: 5.25%;
+    top: 65%;
+    width: min(52rem, 36vw);
+  }
+}
+
+.vixo-auth-watermark__text {
+  max-width: 100%;
+  text-align: left;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.04;
+  font-size: clamp(2.1rem, 5.2vw, 5.6rem);
+  transform: rotate(-7deg);
+
+  /* Gradient text + glow, kept subtle so it never overpowers the UI */
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0.24) 0%,
+    rgba(253, 224, 71, 0.46) 30%,
+    rgba(250, 204, 21, 0.42) 52%,
+    rgba(142, 45, 226, 0.34) 78%,
+    rgba(255, 255, 255, 0.20) 100%
+  );
+  background-size: 260% 260%;
+  background-position: 0% 50%;
+
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  opacity: 0.45;
+
+  /* Helps readability over the bg image without becoming “loud”. */
+  -webkit-text-stroke: 1px rgba(255, 255, 255, 0.10);
+
+  text-shadow:
+    0 0 28px rgba(255, 255, 255, 0.10),
+    0 0 58px rgba(250, 204, 21, 0.32),
+    0 0 92px rgba(253, 224, 71, 0.22),
+    0 0 120px rgba(142, 45, 226, 0.16);
+
+  filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.22));
+  will-change: transform, background-position, filter, opacity;
+
+  animation:
+    vixoAuthWatermarkFloat 5.2s ease-in-out infinite,
+    vixoAuthWatermarkShimmer 2.8s ease-in-out infinite,
+    vixoAuthWatermarkGlowPulse 1.9s ease-in-out infinite;
+}
+
+.vixo-auth-watermark__nowrap {
+  white-space: nowrap;
+}
+
+/* Auth login card: shake on invalid credentials (non-field errors). */
+.vixo-auth-card--shake {
+  animation: vixoAuthCardShake 420ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  will-change: transform;
+}
+
+/* Auth card: success-leave transition (slide up + fade) before redirect. */
+.vixo-auth-card {
+  transition:
+    transform 240ms ease,
+    opacity 240ms ease,
+    filter 240ms ease;
+}
+
+.vixo-auth-card--success-leave {
+  transform: translateY(-22px) scale(0.99);
+  opacity: 0;
+  filter: blur(1px);
+}
+
+@keyframes vixoAuthCardShake {
+  0% { transform: translate3d(0, 0, 0); }
+  10% { transform: translate3d(-3px, 0, 0); }
+  20% { transform: translate3d(4px, 0, 0); }
+  30% { transform: translate3d(-6px, 0, 0); }
+  40% { transform: translate3d(6px, 0, 0); }
+  50% { transform: translate3d(-5px, 0, 0); }
+  60% { transform: translate3d(5px, 0, 0); }
+  70% { transform: translate3d(-3px, 0, 0); }
+  80% { transform: translate3d(3px, 0, 0); }
+  90% { transform: translate3d(-1px, 0, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
+@keyframes vixoAuthWatermarkFloat {
+  0%, 100% { transform: rotate(-7deg) translateY(0); }
+  50% { transform: rotate(-7deg) translateY(-10px); }
+}
+
+@keyframes vixoAuthWatermarkShimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes vixoAuthWatermarkGlowPulse {
+  0%, 100% {
+    opacity: 0.42;
+    filter:
+      drop-shadow(0 14px 30px rgba(0, 0, 0, 0.22))
+      drop-shadow(0 0 34px rgba(250, 204, 21, 0.10));
+  }
+  50% {
+    opacity: 0.58;
+    filter:
+      drop-shadow(0 18px 44px rgba(0, 0, 0, 0.24))
+      drop-shadow(0 0 64px rgba(253, 224, 71, 0.18))
+      drop-shadow(0 0 86px rgba(142, 45, 226, 0.16));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vixo-auth-watermark__text {
+    animation: none;
+  }
+
+  .vixo-auth-card--shake {
+    animation: none;
+  }
+
+  .vixo-auth-card {
+    transition: none;
+  }
 }
 
 /* Enter starts hidden, then JS removes the class to reveal. */
@@ -504,6 +741,7 @@ html.vixo-chat-page *::-webkit-scrollbar-track {
 .theme-light .bg-gray-900\/95 { background-color: rgb(255 255 255 / 0.95) !important; }
 .theme-light .bg-gray-900\/90 { background-color: rgb(255 255 255 / 0.90) !important; }
 .theme-light .bg-gray-900\/80 { background-color: rgb(255 255 255 / 0.80) !important; }
+.theme-light .bg-gray-900\/70 { background-color: rgb(255 255 255 / 0.92) !important; }
 .theme-light .bg-gray-900\/60 { background-color: rgb(250 250 250 / 0.92) !important; }
 .theme-light .bg-gray-900\/40 { background-color: rgb(255 255 255 / 0.72) !important; }
 .theme-light .bg-gray-900\/50 { background-color: rgb(250 250 250 / 0.85) !important; }
@@ -523,8 +761,12 @@ html.vixo-chat-page *::-webkit-scrollbar-track {
 .theme-light .text-white\/50 { color: rgb(15 23 42 / 0.50) !important; }
 .theme-light .text-gray-200 { color: rgb(30 41 59) !important; }
 .theme-light .text-gray-300 { color: rgb(51 65 85) !important; }
+.theme-light .text-gray-300\/90 { color: rgb(51 65 85 / 0.90) !important; }
 .theme-light .text-gray-400 { color: rgb(71 85 105) !important; }
 .theme-light .text-gray-500 { color: rgb(100 116 139) !important; }
+
+/* Mobile chat sidebar hamburger bars (uses bg-gray-100 spans) */
+.theme-light #chat_sidebar_open .bg-gray-100 { background-color: rgb(15 23 42) !important; }
 
 .theme-light .text-gray-200\/80 { color: rgb(51 65 85 / 0.85) !important; }
 .theme-light .text-gray-200\/70 { color: rgb(51 65 85 / 0.75) !important; }

@@ -150,6 +150,17 @@
             if (e.defaultPrevented) return;
             showAuthProgress();
 
+            // Signup success animation: slide the card up + fade before redirect.
+            // We can't know server success synchronously, so we animate on submit for signup.
+            const isSignup = action.includes('/accounts/signup');
+            if (isSignup) {
+                try {
+                    const card = form.closest('.vixo-auth-card');
+                    if (card) card.classList.add('vixo-auth-card--success-leave');
+                } catch {}
+                try { document.body.classList.add('vixo-page-leave'); } catch {}
+            }
+
             // Give the browser a moment to paint the loader before navigation.
             // Without this, fast POSTs can navigate away before any visual change appears.
             try {
@@ -184,7 +195,7 @@
                     } catch {
                         try { form.submit(); } catch {}
                     }
-                }, 120);
+                }, isSignup ? 260 : 120);
             } catch {
                 // ignore
             }
