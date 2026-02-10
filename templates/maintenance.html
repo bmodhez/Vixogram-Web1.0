@@ -51,38 +51,29 @@
 
     <!-- Maintenance complete modal (shown when maintenance flips OFF) -->
     <div id="vixo-maintenance-complete" class="fixed inset-0 z-[9999] hidden items-center justify-center px-4 py-8">
+        <div class="absolute inset-0 bg-center bg-cover" style="background-image: url('{% static 'welcomebg.jpeg' %}');"></div>
         <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+
         <div class="relative w-full max-w-2xl">
-            <div class="relative overflow-hidden rounded-3xl border border-white/10 bg-gray-900/70 backdrop-blur shadow-2xl">
-                <div class="absolute inset-0 bg-gradient-to-br from-purple-600/25 via-indigo-600/10 to-sky-600/25"></div>
+            <div class="relative overflow-hidden rounded-3xl border border-white/10 bg-gray-900/35 backdrop-blur-xl shadow-2xl">
+                <div class="absolute inset-0 bg-gradient-to-br from-white/10 via-white/0 to-white/5"></div>
 
                 <div class="relative p-7 sm:p-9">
                     <div class="flex items-start justify-between gap-4">
                         <div>
-                            <div class="text-2xl sm:text-3xl font-extrabold">🛠️ Maintenance Complete!</div>
-                            <div class="mt-3 text-sm text-gray-200 leading-relaxed">
-                                Hey! Vixogram is live again 🚀
-                            </div>
-                            <div class="mt-2 text-sm text-gray-300 leading-relaxed">
-                                Thank you for waiting while we improved things for you.
-                            </div>
-                            <div class="mt-2 text-sm text-gray-300 leading-relaxed">
-                                Let's get back to chatting 💬💙
+                            <div class="text-2xl sm:text-3xl font-extrabold">We’re Back Online 🚀</div>
+                            <div class="mt-3 text-sm sm:text-base text-gray-200 leading-relaxed">
+                                Thanks for your patience.<br />
+                                Vixogram is live again — let’s get chatting!
                             </div>
 
-                            <div class="mt-6">
+                            <div class="mt-7">
                                 <a
                                     href="/"
-                                    class="inline-flex items-center justify-center rounded-xl bg-indigo-500/90 hover:bg-indigo-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition"
+                                    class="inline-flex items-center justify-center rounded-xl bg-indigo-500/90 hover:bg-indigo-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-black/20 transition"
                                 >
-                                    Enter Vixogram
+                                    Continue →
                                 </a>
-                            </div>
-                        </div>
-
-                        <div class="hidden sm:block shrink-0">
-                            <div class="h-40 w-40 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-6xl">
-                                🐻
                             </div>
                         </div>
                     </div>

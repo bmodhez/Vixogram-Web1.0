@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.db.models import Q
 from django.conf import settings
@@ -22,16 +22,55 @@ class Profile(models.Model):
         validators=[MaxLengthValidator(200)],
     )
     chat_blocked = models.BooleanField(default=False)
+    chat_banned_until = models.DateTimeField(null=True, blank=True)
     is_private_account = models.BooleanField(default=False)
     is_stealth = models.BooleanField(default=False)
     is_bot = models.BooleanField(default=False)
     is_dnd = models.BooleanField(default=False)
     referral_points = models.PositiveIntegerField(default=0)
 
+    def save(self, *args, **kwargs):
+        old_image_name = None
+        old_cover_name = None
+
+        if self.pk:
+            try:
+                old = Profile.objects.only('image', 'cover_image').get(pk=self.pk)
+                old_image_name = getattr(getattr(old, 'image', None), 'name', None)
+                old_cover_name = getattr(getattr(old, 'cover_image', None), 'name', None)
+            except Exception:
+                old_image_name = None
+                old_cover_name = None
+
+        result = super().save(*args, **kwargs)
+
+        new_image_name = getattr(getattr(self, 'image', None), 'name', None)
+        new_cover_name = getattr(getattr(self, 'cover_image', None), 'name', None)
+
+        def _delete_from_storage(name: str | None):
+            if not name:
+                return
+            try:
+                # Use the field's storage (Cloudinary when enabled).
+                # Delete by name/public_id.
+                self.image.storage.delete(name)
+            except Exception:
+                pass
+
+        if old_image_name and old_image_name != new_image_name:
+            transaction.on_commit(lambda n=old_image_name: _delete_from_storage(n))
+
+        if old_cover_name and old_cover_name != new_cover_name:
+            transaction.on_commit(lambda n=old_cover_name: _delete_from_storage(n))
+
+        return result
+
     # Last known location (best-effort, from optional user permission)
     last_location_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     last_location_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     last_location_at = models.DateTimeField(null=True, blank=True)
+    last_location_city = models.CharField(max_length=80, null=True, blank=True)
+    last_location_country = models.CharField(max_length=80, null=True, blank=True)
 
     # Founder Club (invite rewards)
     is_founder_club = models.BooleanField(default=False)

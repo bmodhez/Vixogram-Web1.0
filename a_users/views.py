@@ -3,6 +3,7 @@ import base64
 import re
 import uuid
 from datetime import timedelta
+from decimal import Decimal
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -12,8 +13,9 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_POST
 from django.db.models import Q
+from django.core.cache import cache
 
-from .models import Profile, Story, StoryView
+from .models import Profile, Story, StoryView, DEFAULT_AVATAR_DATA_URI
 from .forms import ProfileForm
 from .forms import ReportUserForm
 from .forms import ProfilePrivacyForm
@@ -43,6 +45,8 @@ from django.core import signing
 from django.core.files.base import ContentFile
 from urllib.parse import urlencode
 from django.utils.http import url_has_allowed_host_and_scheme
+
+import requests
 
 from a_users.models import Follow, FollowRequest
 from a_users.models import UserReport
@@ -77,12 +81,89 @@ def save_location_view(request):
     if not (-90.0 <= lat <= 90.0 and -180.0 <= lng <= 180.0):
         return JsonResponse({'ok': False, 'error': 'out_of_range'}, status=400)
 
+    def _reverse_geocode_city_country(lat_f: float, lng_f: float) -> tuple[str, str]:
+        """Best-effort reverse geocode.
+
+        Uses OpenStreetMap Nominatim. If it fails (network, rate limit, etc),
+        return empty strings.
+        """
+        try:
+            lat_r = round(float(lat_f), 3)
+            lng_r = round(float(lng_f), 3)
+        except Exception:
+            return ('', '')
+
+        cache_key = f"vixo:revgeo:{lat_r}:{lng_r}"
+        try:
+            cached = cache.get(cache_key)
+            if isinstance(cached, dict):
+                city = str(cached.get('city') or '').strip()
+                country = str(cached.get('country') or '').strip()
+                if city or country:
+                    return (city, country)
+        except Exception:
+            pass
+
+        try:
+            url = "https://nominatim.openstreetmap.org/reverse"
+            params = {
+                "format": "jsonv2",
+                "lat": str(lat_f),
+                "lon": str(lng_f),
+                "zoom": "10",
+                "addressdetails": "1",
+            }
+            contact = (getattr(settings, 'CONTACT_EMAIL', '') or '').strip()
+            ua = "Vixogram/1.0"
+            if contact:
+                ua = f"{ua} ({contact})"
+            resp = requests.get(url, params=params, headers={"User-Agent": ua}, timeout=4)
+            if resp.status_code != 200:
+                return ('', '')
+            data = resp.json() if resp.content else {}
+            address = data.get('address') if isinstance(data, dict) else {}
+            if not isinstance(address, dict):
+                address = {}
+
+            city = (
+                address.get('city')
+                or address.get('town')
+                or address.get('village')
+                or address.get('hamlet')
+                or address.get('county')
+                or address.get('state_district')
+                or address.get('state')
+                or ''
+            )
+            country = address.get('country') or ''
+            city = str(city or '').strip()
+            country = str(country or '').strip()
+
+            try:
+                cache.set(cache_key, {'city': city, 'country': country}, 7 * 24 * 3600)
+            except Exception:
+                pass
+
+            return (city, country)
+        except Exception:
+            return ('', '')
+
     try:
         profile = request.user.profile
-        profile.last_location_lat = lat
-        profile.last_location_lng = lng
+        # Use Decimal to avoid float rounding surprises with DecimalField.
+        profile.last_location_lat = Decimal(str(lat))
+        profile.last_location_lng = Decimal(str(lng))
         profile.last_location_at = timezone.now()
-        profile.save(update_fields=['last_location_lat', 'last_location_lng', 'last_location_at'])
+        city, country = _reverse_geocode_city_country(lat, lng)
+        profile.last_location_city = city or None
+        profile.last_location_country = country or None
+        profile.save(update_fields=[
+            'last_location_lat',
+            'last_location_lng',
+            'last_location_at',
+            'last_location_city',
+            'last_location_country',
+        ])
     except Exception:
         return JsonResponse({'ok': False, 'error': 'save_failed'}, status=500)
 
@@ -1213,8 +1294,26 @@ def profile_edit_view(request):
         else:
             form = ProfileForm(request.POST, request.FILES, instance=profile)
             if form.is_valid():
-                form.save()
-                return redirect('profile')
+                try:
+                    form.save()
+                    return redirect('profile')
+                except Exception as exc:
+                    try:
+                        from cloudinary.exceptions import AuthorizationRequired
+                    except Exception:  # pragma: no cover
+                        AuthorizationRequired = None
+
+                    try:
+                        import logging
+                        logging.getLogger(__name__).exception('Profile update failed (avatar/cover save)')
+                    except Exception:
+                        pass
+
+                    # If Cloudinary account is locked/disabled, show a clearer message.
+                    if AuthorizationRequired is not None and isinstance(exc, AuthorizationRequired):
+                        messages.error(request, 'Image uploads are currently disabled on the media server. Please enable uploads in Cloudinary or use local media storage.')
+                    else:
+                        messages.error(request, 'Could not save your profile image right now. Please try a smaller image or try again later.')
             
     # Cooldown info for template
     can_change, next_at = username_form.can_change_now()

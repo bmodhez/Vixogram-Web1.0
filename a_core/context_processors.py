@@ -69,15 +69,16 @@ def welcome_popup(request):
     try:
         sess = getattr(request, 'session', None)
         if not sess:
-            return {'SHOW_WELCOME_POPUP': False}
+            return {'SHOW_WELCOME_POPUP': False, 'WELCOME_POPUP_SOURCE': ''}
 
         show = bool(sess.get('show_welcome_popup'))
+        source = (sess.get('welcome_popup_source') or '').strip()
         if show:
             sess.pop('show_welcome_popup', None)
             sess.pop('welcome_popup_source', None)
-        return {'SHOW_WELCOME_POPUP': show}
+        return {'SHOW_WELCOME_POPUP': show, 'WELCOME_POPUP_SOURCE': source if show else ''}
     except Exception:
-        return {'SHOW_WELCOME_POPUP': False}
+        return {'SHOW_WELCOME_POPUP': False, 'WELCOME_POPUP_SOURCE': ''}
 
 
 def location_popup(request):
@@ -112,6 +113,40 @@ def location_popup(request):
         return {'SHOW_LOCATION_POPUP': show}
     except Exception:
         return {'SHOW_LOCATION_POPUP': False}
+
+
+def notifications_popup(request):
+    """Expose a one-time notifications permission popup flag.
+
+    Reads request.session['show_notifications_popup'] and clears it after consumption.
+    """
+    try:
+        # Never show this prompt inside the Django admin.
+        try:
+            if str(getattr(request, 'path', '') or '').startswith('/admin'):
+                return {'SHOW_NOTIFICATIONS_POPUP': False}
+        except Exception:
+            pass
+
+        sess = getattr(request, 'session', None)
+        if not sess:
+            return {'SHOW_NOTIFICATIONS_POPUP': False}
+
+        show = bool(sess.get('show_notifications_popup'))
+        if show:
+            # Ensure CSRF cookie exists for JS fetch() POST.
+            try:
+                from django.middleware.csrf import get_token
+
+                get_token(request)
+            except Exception:
+                pass
+            sess.pop('show_notifications_popup', None)
+            sess.pop('notifications_popup_source', None)
+
+        return {'SHOW_NOTIFICATIONS_POPUP': show}
+    except Exception:
+        return {'SHOW_NOTIFICATIONS_POPUP': False}
 
 
 def site_stats(request):

@@ -8,7 +8,7 @@ from django.views.generic import TemplateView
 from django.templatetags.static import static as static_url
 from a_core.firebase_views import firebase_messaging_sw
 from a_core.maintenance_views import maintenance_page_view, maintenance_status_view, maintenance_toggle_view
-from a_users.allauth_views import CooldownEmailView, PRGLoginView
+from a_users.allauth_views import CooldownEmailView, WelcomeLoginView, WelcomeSignupView
 from a_home.views import pricing_view
 
 # Error handlers (must be module-level).
@@ -26,6 +26,7 @@ urlpatterns = [
     # Public footer pages
     path('about/', TemplateView.as_view(template_name='pages/about.html'), name='about'),
     path('contact/', TemplateView.as_view(template_name='pages/contact.html'), name='contact'),
+    path('faq/', TemplateView.as_view(template_name='pages/faq.html'), name='faq'),
     path('help/', TemplateView.as_view(template_name='pages/help_center.html'), name='help-center'),
     path('report-abuse/', TemplateView.as_view(template_name='pages/report_abuse.html'), name='report-abuse'),
     path('community-guidelines/', TemplateView.as_view(template_name='pages/community_guidelines.html'), name='community-guidelines'),
@@ -34,7 +35,8 @@ urlpatterns = [
     path('cookies/', TemplateView.as_view(template_name='legal/cookie_policy.html'), name='cookie-policy'),
 
     path('', include('a_rtchat.urls')),
-    path('accounts/login/', PRGLoginView.as_view(), name='account_login'),
+    path('accounts/login/', WelcomeLoginView.as_view(), name='account_login'),
+    path('accounts/signup/', WelcomeSignupView.as_view(), name='account_signup'),
     path('accounts/email/', CooldownEmailView.as_view(), name='account_email'),
     path('accounts/', include('allauth.urls')),
     path('profile/', include('a_users.urls')),

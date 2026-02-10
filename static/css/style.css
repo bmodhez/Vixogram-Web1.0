@@ -21,6 +21,25 @@ html { scroll-behavior: smooth; }
 /* Hide chat pane until initial snap-to-bottom completes. */
 .vixo-chat-init-hidden { visibility: hidden; }
 
+/* Theme-aware: message action buttons (reply / reaction / 3-dots)
+   - Light theme: keep the existing Tailwind bg/border from templates.
+   - Dark theme: remove the bg/border so buttons don't look like white pills.
+   Note: The site uses html.theme-dark/theme-light (not Tailwind's .dark). */
+html.theme-dark .vixo-msg [data-msg-actions] [data-reply-button],
+html.theme-dark .vixo-msg [data-msg-actions] [data-reaction-toggle],
+html.theme-dark .vixo-msg [data-msg-actions] [data-message-menu-toggle] {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  color: rgb(229 231 235 / 0.9) !important;
+}
+
+html.theme-dark .vixo-msg [data-msg-actions] [data-reply-button]:hover,
+html.theme-dark .vixo-msg [data-msg-actions] [data-reaction-toggle]:hover,
+html.theme-dark .vixo-msg [data-msg-actions] [data-message-menu-toggle]:hover {
+  background-color: rgb(255 255 255 / 0.06) !important;
+  color: rgb(255 255 255 / 0.95) !important;
+}
+
 /* Mobile chat UX: hide per-message action icons (reply/+ / ⋮) unless the message is long-pressed. */
 @media (max-width: 639px) {
   .vixo-msg [data-msg-actions] {
@@ -119,6 +138,62 @@ body {
   transform: translateY(0);
   filter: none;
   transition: opacity 180ms ease, transform 180ms ease, filter 180ms ease;
+}
+
+/* Auth background: allow tuning crop on small screens (e.g. keep left-side artwork visible). */
+@media (max-width: 639px) {
+  .vixo-auth-bg {
+    background-position: var(
+      --vixo-auth-bg-position-mobile,
+      var(--vixo-auth-bg-position, center)
+    );
+    background-size: var(
+      --vixo-auth-bg-size-mobile,
+      var(--vixo-auth-bg-size, cover)
+    );
+  }
+
+  /* On very small screens, a single "cover" crop can hide one side of the artwork.
+     These subtle corner overlays ensure both left-top and right-bottom details remain visible. */
+  .vixo-auth-bg {
+    isolation: isolate;
+  }
+
+  .vixo-auth-bg::before,
+  .vixo-auth-bg::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    user-select: none;
+    background-image: var(--vixo-auth-bg);
+    background-repeat: no-repeat;
+    background-size: var(--vixo-auth-bg-corner-size-mobile, 180% auto);
+    opacity: var(--vixo-auth-bg-corner-opacity-mobile, 0.40);
+  }
+
+  .vixo-auth-bg::before {
+    background-position: left top;
+  }
+
+  .vixo-auth-bg::after {
+    background-position: right bottom;
+  }
+}
+
+/* Full-page emoji particles on auth pages (mounted inside .vixo-auth-bg) */
+.vixo-auth-bg-particles {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.vixo-auth-bg-particles canvas {
+  width: 100% !important;
+  height: 100% !important;
 }
 
 /* Auth pages: video background (keeps content layout unchanged). */
@@ -290,6 +365,30 @@ body {
     transform 240ms ease,
     opacity 240ms ease,
     filter 240ms ease;
+
+  /* Particles mount (emoji floating bg). */
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+/* Keep all card content above the particles layer. */
+.vixo-auth-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.vixo-auth-particles {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.vixo-auth-particles canvas {
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .vixo-auth-card--success-leave {

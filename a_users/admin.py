@@ -18,7 +18,7 @@ except Exception:  # pragma: no cover
 
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
-	list_display = ('user', 'displayname', 'chat_blocked', 'is_private_account', 'last_location_lat', 'last_location_lng', 'last_location_at')
+	list_display = ('user', 'displayname', 'chat_blocked', 'is_private_account', 'last_location_city', 'last_location_country', 'last_location_at')
 	search_fields = ('user__username', 'displayname')
 
 

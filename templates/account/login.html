@@ -6,7 +6,7 @@
 {% block body_class %}vixo-auth-page{% endblock %}
 
 {% block content %}
-<div class="vixo-auth-bg min-h-[calc(100vh-7rem)] relative flex items-center justify-center px-4 py-10 overflow-hidden" style="--vixo-auth-bg: url('{% static 'authbg.jpeg' %}');">
+<div class="vixo-auth-bg min-h-[calc(100vh-7rem)] relative flex items-center justify-center px-4 py-10 overflow-hidden" style="--vixo-auth-bg: url('{% static 'authbg.jpeg' %}'); --vixo-auth-bg-position-mobile: center; --vixo-auth-bg-corner-size-mobile: 190% auto; --vixo-auth-bg-corner-opacity-mobile: 0.45;">
   <div aria-hidden="true" class="pointer-events-none absolute -top-24 -left-24 h-80 w-80 rounded-full bg-[#8E2DE2]/25 blur-3xl"></div>
   <div aria-hidden="true" class="pointer-events-none absolute -bottom-28 -right-28 h-96 w-96 rounded-full bg-[#4A00E0]/20 blur-3xl"></div>
 
@@ -21,11 +21,13 @@
       <img src="{% static 'signin.png' %}" alt="" class="w-full h-auto max-h-[560px] object-contain drop-shadow-2xl" />
     </div>
 
-    <div class="relative w-full max-w-md bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl shadow-black/30 p-6 motion-safe:animate-[fadeInUp_500ms_ease-out]{% if form.non_field_errors %} vixo-auth-card--shake{% endif %}">
+    <div class="relative w-full max-w-md">
       <!-- Mobile character: visually touches the top edge of the card (account for PNG padding) -->
-      <div aria-hidden="true" class="pointer-events-none absolute right-4 top-0 -translate-y-[82%] md:hidden opacity-90">
+      <div aria-hidden="true" class="pointer-events-none absolute right-4 top-0 -translate-y-[82%] md:hidden opacity-90 z-20">
         <img src="{% static 'signin.png' %}" alt="" class="w-[140px] drop-shadow-2xl" />
       </div>
+
+      <div class="relative w-full bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl shadow-black/30 p-6 motion-safe:animate-[fadeInUp_500ms_ease-out] vixo-auth-card{% if form.non_field_errors %} vixo-auth-card--shake{% endif %}">
 
     <div class="flex items-start justify-between gap-4">
       <div>
@@ -96,7 +98,8 @@
         {% blocktrans %}New here? <a class="text-indigo-200 hover:text-indigo-100 font-semibold" href="{{ signup_url }}">Create an account</a>{% endblocktrans %}
       </p>
     </form>
-  </div>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock content %}

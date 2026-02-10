@@ -6,7 +6,7 @@ For UX: click '+' opens the emoji bar.
 <div data-msg-actions class="relative flex items-center gap-1 transition duration-150 ease-out opacity-0 pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto">
     <button
         type="button"
-        class="h-8 w-8 inline-flex items-center justify-center rounded-full border border-gray-300 bg-gray-200/90 text-gray-800 hover:bg-gray-300/90 transition duration-150 ease-out hover:scale-105 active:scale-95 dark:border-transparent dark:bg-gray-800/40 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800/70"
+        class="h-8 w-8 inline-flex items-center justify-center rounded-full border border-gray-300 bg-gray-200/90 text-gray-800 hover:bg-gray-300/90 transition duration-150 ease-out hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-transparent dark:bg-transparent dark:text-gray-300 dark:hover:text-white dark:hover:bg-white/5"
         aria-label="Reply"
         title="Reply"
         data-reply-button
@@ -18,7 +18,7 @@ For UX: click '+' opens the emoji bar.
 
     <button
         type="button"
-        class="h-8 w-8 inline-flex items-center justify-center rounded-full border border-gray-300 bg-gray-200/90 text-gray-800 hover:bg-gray-300/90 transition duration-150 ease-out hover:scale-105 active:scale-95 dark:border-transparent dark:bg-gray-800/40 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800/70"
+        class="h-8 w-8 inline-flex items-center justify-center rounded-full border border-gray-300 bg-gray-200/90 text-gray-800 hover:bg-gray-300/90 transition duration-150 ease-out hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-transparent dark:bg-transparent dark:text-gray-300 dark:hover:text-white dark:hover:bg-white/5"
         aria-label="Add reaction"
         title="Add reaction"
         data-reaction-toggle
@@ -30,7 +30,7 @@ For UX: click '+' opens the emoji bar.
         <div class="relative">
             <button
                 type="button"
-                class="h-8 w-8 inline-flex items-center justify-center rounded-full border border-gray-300 bg-gray-200/90 text-gray-800 hover:bg-gray-300/90 transition duration-150 ease-out hover:scale-105 active:scale-95 dark:border-transparent dark:bg-gray-800/40 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800/70"
+                class="h-8 w-8 inline-flex items-center justify-center rounded-full border border-gray-300 bg-gray-200/90 text-gray-800 hover:bg-gray-300/90 transition duration-150 ease-out hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-transparent dark:bg-transparent dark:text-gray-300 dark:hover:text-white dark:hover:bg-white/5"
                 aria-label="Message actions"
                 title="Actions"
                 aria-haspopup="menu"
@@ -82,7 +82,7 @@ For UX: click '+' opens the emoji bar.
         </div>
     {% endif %}
 
-    <div class="hidden vixo-reaction-picker absolute bottom-full mb-2 left-1/2 -translate-x-1/2 items-center justify-center gap-1 rounded-2xl bg-gray-900/95 px-2 py-1 shadow-lg shadow-black/20 ring-1 ring-white/10 w-[min(18rem,calc(100vw-2rem))] max-w-full overflow-x-auto"
+    <div class="hidden vixo-reaction-picker absolute bottom-full mb-2 left-1/2 -translate-x-1/2 items-center justify-center gap-1 rounded-2xl bg-transparent px-2 py-1 shadow-lg shadow-black/10 ring-1 ring-white/10 w-[min(18rem,calc(100vw-2rem))] max-w-full overflow-x-auto"
          data-reaction-picker
          data-message-id="{{ message.id }}">
         {% for emoji in reaction_emojis %}

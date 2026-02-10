@@ -49,6 +49,11 @@ from .rate_limit import (
     record_abuse_violation,
 )
 
+try:
+    from a_users.location_ip import maybe_set_profile_city_from_ip
+except Exception:  # pragma: no cover
+    maybe_set_profile_city_from_ip = None
+
 from .moderation import moderate_message
 from .channels_utils import chatroom_channel_group_name
 from .mentions import extract_mention_usernames, resolve_mentioned_users
@@ -174,6 +179,52 @@ def _is_chat_blocked(user) -> bool:
             .first()
         )
         return bool(val)
+    except Exception:
+        return False
+
+
+def _get_chat_banned_until(user):
+    """Return ban-until datetime if the user is chat-banned, else None.
+
+    Staff users are never considered chat-banned.
+    IMPORTANT: do not trust `user.profile` in websocket code; always check DB.
+    """
+    try:
+        if getattr(user, 'is_staff', False):
+            return None
+        uid = getattr(user, 'id', None)
+        if not uid:
+            return None
+
+        from a_users.models import Profile
+        return (
+            Profile.objects.filter(user_id=uid)
+            .values_list('chat_banned_until', flat=True)
+            .first()
+        )
+    except Exception:
+        return None
+
+
+def _is_chat_banned(user) -> bool:
+    """Return True if the user is currently chat-banned.
+
+    If the ban has expired, clear it (best-effort) so it auto-unbans.
+    """
+    until = _get_chat_banned_until(user)
+    if not until:
+        return False
+    try:
+        now = timezone.now()
+        if until <= now:
+            try:
+                from a_users.models import Profile
+
+                Profile.objects.filter(user_id=getattr(user, 'id', None)).update(chat_banned_until=None)
+            except Exception:
+                pass
+            return False
+        return True
     except Exception:
         return False
 
@@ -425,6 +476,14 @@ class ChatroomConsumer(WebsocketConsumer):
                 self.close()
             return
 
+        # Chat-ban: block read/write by refusing the websocket connection.
+        if _is_chat_banned(self.user):
+            try:
+                self.close(code=4403)
+            except Exception:
+                self.close()
+            return
+
         # If the room was deleted / invalid URL, don't raise and spam logs.
         try:
             self.chatroom = ChatGroup.objects.get(group_name=self.chatroom_name)
@@ -550,6 +609,14 @@ class ChatroomConsumer(WebsocketConsumer):
             self._touch_room_conn()
         except Exception:
             pass
+
+        # Chat-ban: stop any interaction immediately.
+        if _is_chat_banned(self.user):
+            try:
+                self.close(code=4403)
+            except Exception:
+                self.close()
+            return
 
         # Allow blocked users to connect/read, but never allow them to send any events.
         if _is_chat_blocked(self.user):
@@ -1052,6 +1119,14 @@ class ChatroomConsumer(WebsocketConsumer):
             group = self.chatroom,
             reply_to=reply_to,
         )
+
+        # Best-effort: if user didn't allow GPS location, store approximate city/country from IP
+        # when they send their first message.
+        try:
+            if maybe_set_profile_city_from_ip is not None:
+                maybe_set_profile_city_from_ip(user=self.user, scope=getattr(self, 'scope', None))
+        except Exception:
+            pass
 
         # If the user just hit the unverified message limit, notify the client immediately
         # so it can lock the composer without requiring an extra send attempt.
@@ -1943,6 +2018,22 @@ class NotificationsConsumer(WebsocketConsumer):
         self.send(text_data=json.dumps({
             'type': 'chat_block_status',
             'blocked': bool(event.get('blocked')),
+            'by_username': event.get('by_username') or '',
+        }))
+
+    def chat_ban_status_notify_handler(self, event):
+        try:
+            from a_users.models import Profile
+
+            if Profile.objects.filter(user_id=getattr(self.user, 'id', None), is_dnd=True).exists():
+                return
+        except Exception:
+            pass
+
+        self.send(text_data=json.dumps({
+            'type': 'chat_ban_status',
+            'banned': bool(event.get('banned')),
+            'until': event.get('until') or '',
             'by_username': event.get('by_username') or '',
         }))
 

@@ -42,6 +42,7 @@ urlpatterns = [
     path('chat/admin/users/', admin_users_view, name='admin-users'),
     path('chat/admin/users/export/', admin_users_export_view, name='admin-users-export'),
     path('chat/admin/users/<int:user_id>/toggle-block/', admin_toggle_user_block_view, name='admin-user-toggle-block'),
+    path('chat/admin/users/<int:user_id>/ban/', admin_user_ban_view, name='admin-user-ban'),
     path('chat/admin/beta/', admin_beta_features_view, name='admin-beta-features'),
     path('chat/admin/moderation/', moderation_logs_view, name='moderation-logs'),
     path('chat/admin/reports/', admin_reports_view, name='admin-reports'),

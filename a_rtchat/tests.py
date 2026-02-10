@@ -29,6 +29,27 @@ class AdminToggleUserBlockTests(TestCase):
 		self.assertTrue(target.profile.chat_blocked)
 
 
+class AdminUserBanTests(TestCase):
+	def test_staff_can_ban_and_unban_user(self):
+		staff = User.objects.create_user(username='staff2', password='pass12345', is_staff=True)
+		target = User.objects.create_user(username='target2', password='pass12345')
+		self.client.force_login(staff)
+
+		url = reverse('admin-user-ban', kwargs={'user_id': target.id})
+		resp = self.client.post(url, data={'minutes': '10'})
+		self.assertEqual(resp.status_code, 302)
+
+		target.refresh_from_db()
+		self.assertIsNotNone(target.profile.chat_banned_until)
+		self.assertTrue(target.profile.chat_banned_until > timezone.now())
+
+		resp2 = self.client.post(url, data={'minutes': '0'})
+		self.assertEqual(resp2.status_code, 302)
+
+		target.refresh_from_db()
+		self.assertIsNone(target.profile.chat_banned_until)
+
+
 class PrivateRoomMemberLimitTests(TestCase):
 	def test_join_private_code_room_blocks_after_limit(self):
 		# Create a private code room

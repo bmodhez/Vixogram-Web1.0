@@ -6,6 +6,7 @@ import smtplib
 
 from allauth.account.views import EmailView
 from allauth.account.views import LoginView
+from allauth.account.views import SignupView
 from django.conf import settings
 from django.contrib import messages
 from django.core.cache import cache
@@ -18,6 +19,20 @@ except Exception:  # pragma: no cover
 
 
 logger = logging.getLogger(__name__)
+
+
+def _add_query_param(url: str, key: str, value: str) -> str:
+    try:
+        from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+
+        parts = urlsplit(url)
+        qs = dict(parse_qsl(parts.query, keep_blank_values=True))
+        if key not in qs:
+            qs[key] = value
+        new_query = urlencode(qs)
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
+    except Exception:
+        return url
 
 
 def _email_delivery_hint() -> str | None:
@@ -145,3 +160,47 @@ class PRGLoginView(LoginView):
                 url = self.request.path
 
         return HttpResponseRedirect(url)
+
+
+class WelcomeSignupView(SignupView):
+    """Signup view that schedules the one-time welcome popup."""
+
+    def form_valid(self, form):
+        try:
+            sess = getattr(self.request, 'session', None)
+            if sess is not None:
+                sess['show_welcome_popup'] = True
+                sess['welcome_popup_source'] = 'signup'
+        except Exception:
+            pass
+
+        resp = super().form_valid(form)
+        try:
+            loc = str(resp.get('Location') or '')
+            if loc:
+                resp['Location'] = _add_query_param(loc, 'welcome', 'signup')
+        except Exception:
+            pass
+        return resp
+
+
+class WelcomeLoginView(PRGLoginView):
+    """Login view that schedules the one-time welcome popup."""
+
+    def form_valid(self, form):
+        try:
+            sess = getattr(self.request, 'session', None)
+            if sess is not None:
+                sess['show_welcome_popup'] = True
+                sess['welcome_popup_source'] = 'login'
+        except Exception:
+            pass
+
+        resp = super().form_valid(form)
+        try:
+            loc = str(resp.get('Location') or '')
+            if loc:
+                resp['Location'] = _add_query_param(loc, 'welcome', 'login')
+        except Exception:
+            pass
+        return resp

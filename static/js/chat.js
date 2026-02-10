@@ -1,4 +1,7 @@
 (function () {
+    const PRIVATE_ROOM_CREATE_COOLDOWN_MS = 4 * 60 * 1000;
+    const PRIVATE_ROOM_CREATE_COOLDOWN_KEY = 'vixo_private_room_create_cooldown_until';
+
     function __escapeHtml(s) {
         return String(s ?? '')
             .replace(/&/g, '&amp;')
@@ -8,17 +11,105 @@
             .replace(/'/g, '&#39;');
     }
 
+    function __getPrivateRoomCreateCooldownRemainingMs() {
+        try {
+            const untilRaw = window.localStorage ? window.localStorage.getItem(PRIVATE_ROOM_CREATE_COOLDOWN_KEY) : null;
+            const until = Number(untilRaw || 0);
+            if (!Number.isFinite(until) || until <= 0) return 0;
+            return Math.max(0, until - Date.now());
+        } catch {
+            return 0;
+        }
+    }
+
+    function __setPrivateRoomCreateCooldownUntil(untilMs) {
+        try {
+            if (!window.localStorage) return;
+            window.localStorage.setItem(PRIVATE_ROOM_CREATE_COOLDOWN_KEY, String(Number(untilMs) || 0));
+        } catch {
+            // ignore
+        }
+    }
+
+    function __formatCooldownMmSs(ms) {
+        const totalSec = Math.max(0, Math.ceil(ms / 1000));
+        const m = Math.floor(totalSec / 60);
+        const s = totalSec % 60;
+        const ss = String(s).padStart(2, '0');
+        return `${m}:${ss}`;
+    }
+
+    function initPrivateRoomCreateCooldownUi() {
+        const form = document.getElementById('vixo-private-room-create-form');
+        if (!form) return;
+
+        const btn = form.querySelector('button[type="submit"]');
+        if (!btn) return;
+
+        if (!btn.dataset.originalText) {
+            btn.dataset.originalText = (btn.textContent || 'Create private room').trim();
+        }
+
+        function render() {
+            const remaining = __getPrivateRoomCreateCooldownRemainingMs();
+            if (remaining > 0) {
+                btn.disabled = true;
+                btn.textContent = `Wait ${__formatCooldownMmSs(remaining)}`;
+                btn.classList.add('opacity-60', 'cursor-not-allowed');
+            } else {
+                btn.disabled = false;
+                btn.textContent = btn.dataset.originalText;
+                btn.classList.remove('opacity-60', 'cursor-not-allowed');
+            }
+        }
+
+        // If the user landed on a newly created room via non-AJAX flow, activate cooldown once.
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            if (params.get('created') === '1') {
+                const existingRemaining = __getPrivateRoomCreateCooldownRemainingMs();
+                if (existingRemaining <= 0) {
+                    __setPrivateRoomCreateCooldownUntil(Date.now() + PRIVATE_ROOM_CREATE_COOLDOWN_MS);
+                }
+            }
+        } catch {
+            // ignore
+        }
+
+        render();
+
+        // Update countdown while active.
+        if (btn.dataset.cooldownTimerAttached === '1') return;
+        btn.dataset.cooldownTimerAttached = '1';
+        window.setInterval(render, 1000);
+    }
+
     // --- Private room creation form AJAX handler (no page reload) ---
     function initPrivateRoomCreateAjax() {
         const form = document.getElementById('vixo-private-room-create-form');
         if (!form) return;
 
+        const submitBtn = form.querySelector('button[type="submit"]');
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+
+            const remaining = __getPrivateRoomCreateCooldownRemainingMs();
+            if (remaining > 0) {
+                const msg = `Please wait ${__formatCooldownMmSs(remaining)} before creating another private room.`;
+                if (window.showToast) {
+                    window.showToast(msg);
+                } else {
+                    alert(msg);
+                }
+                return;
+            }
+
             const formData = new FormData(form);
             const action = form.getAttribute('action') || '';
 
             try {
+                if (submitBtn) submitBtn.disabled = true;
                 const resp = await fetch(action, {
                     method: 'POST',
                     headers: {
@@ -41,9 +132,11 @@
 
                 // On success, redirect to the room.
                 if (data.ok && data.redirect_url) {
+                    __setPrivateRoomCreateCooldownUntil(Date.now() + PRIVATE_ROOM_CREATE_COOLDOWN_MS);
                     window.location.href = data.redirect_url;
                 } else if (data.ok) {
                     // Fallback: reload page to show the new room.
+                    __setPrivateRoomCreateCooldownUntil(Date.now() + PRIVATE_ROOM_CREATE_COOLDOWN_MS);
                     window.location.reload();
                 } else {
                     // Other error.
@@ -60,6 +153,8 @@
                 } else {
                     alert('Network error. Please try again.');
                 }
+            } finally {
+                if (submitBtn) submitBtn.disabled = false;
             }
         });
     }
@@ -67,8 +162,10 @@
     // Init on DOMContentLoaded or immediately if already loaded.
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initPrivateRoomCreateAjax, { once: true });
+        document.addEventListener('DOMContentLoaded', initPrivateRoomCreateCooldownUi, { once: true });
     } else {
         initPrivateRoomCreateAjax();
+        initPrivateRoomCreateCooldownUi();
     }
 
     // --- Room code click-to-copy ---
@@ -1604,6 +1701,25 @@
     window.addEventListener('chat:block_status', (e) => {
         const d = e && e.detail ? e.detail : {};
         applyChatBlockedUI(!!d.blocked, { allowPopup: true });
+    });
+
+    // Realtime ban/unban (admin action)
+    window.addEventListener('chat:ban_status', (e) => {
+        const d = e && e.detail ? e.detail : {};
+        const banned = !!d.banned;
+        if (banned) {
+            try {
+                const until = (d.until || '').trim();
+                const msg = until ? `You are banned from chat until ${until}.` : 'You are banned from chat.';
+                __popup('Banned', msg);
+            } catch {}
+        } else {
+            try { __popup('Unbanned', 'You can chat again.'); } catch {}
+        }
+        // Reload so server-side access rules apply immediately.
+        setTimeout(() => {
+            try { window.location.reload(); } catch {}
+        }, 350);
     });
 
     // Initialize from embedded config (if present)
@@ -3708,6 +3824,66 @@
         requestAnimationFrame(run);
     }
 
+    function vixoAnimateRemoveMessage(el) {
+        if (!el) return;
+        try {
+            if (el.dataset && el.dataset.vixoRemoving === '1') {
+                el.remove();
+                return;
+            }
+        } catch {}
+
+        // Respect reduced-motion.
+        try {
+            if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                el.remove();
+                return;
+            }
+        } catch {}
+
+        try {
+            if (el.dataset) el.dataset.vixoRemoving = '1';
+        } catch {}
+
+        // Telegram-like bubble roll-out: rotate + slide + fade + collapse height.
+        let h = 0;
+        try { h = el.offsetHeight || 0; } catch { h = 0; }
+
+        let isMine = false;
+        try {
+            // `.vixo-msg` is a flex row with justify-end for current user's messages.
+            isMine = el.classList && el.classList.contains('justify-end');
+        } catch {
+            isMine = false;
+        }
+
+        const slideX = isMine ? 18 : -18;
+        const rot = isMine ? 10 : -10;
+        try {
+            el.style.overflow = 'hidden';
+            if (h) el.style.maxHeight = h + 'px';
+            el.style.willChange = 'opacity, transform, max-height';
+            el.style.pointerEvents = 'none';
+            el.style.transformOrigin = isMine ? 'right center' : 'left center';
+            el.style.transition = 'max-height 190ms ease, opacity 150ms ease, transform 210ms ease';
+            // Force style flush
+            void el.offsetHeight;
+            el.style.opacity = '0';
+            el.style.transform = `translate(${slideX}px, 8px) rotate(${rot}deg) scale(0.94)`;
+            el.style.maxHeight = '0px';
+        } catch {
+            try { el.remove(); } catch {}
+            return;
+        }
+
+        window.setTimeout(() => {
+            try { el.remove(); } catch {}
+        }, 210);
+    }
+
+    // Expose for any legacy inline scripts.
+    try { window.__vixoAnimateRemoveMessage = vixoAnimateRemoveMessage; } catch {}
+
     function __isMsgEl(el) {
         try {
             return !!(el && el.classList && el.classList.contains('vixo-msg') && el.getAttribute('data-message-id'));
@@ -4069,7 +4245,7 @@
 
             if (payload.type === 'message_delete' && payload.message_id) {
                 const el = document.getElementById(`msg-${payload.message_id}`);
-                if (el) el.remove();
+                if (el) vixoAnimateRemoveMessage(el);
                 return;
             }
 
@@ -4184,14 +4360,25 @@
         }, { passive: true });
     }
 
-    // Ensure correct position on initial render
-    document.addEventListener('DOMContentLoaded', function () {
+    // Ensure correct position on initial render.
+    // chat.js is often injected after DOMContentLoaded (via chat_loader.js),
+    // so we must also run this immediately when DOM is already ready.
+    function __initChatInitialRender() {
+        if (__initChatInitialRender.__didRun) return;
+        __initChatInitialRender.__didRun = true;
+
         updateLastIdFromDom();
         hydrateLocalTimes(document);
         applyConsecutiveHeaderGrouping(messagesEl);
         applyReadTicks(lastOtherReadId);
         safeScrollToBottom();
-    });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', __initChatInitialRender, { once: true });
+    } else {
+        __initChatInitialRender();
+    }
 
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') maybeAckReadIfVisible();
@@ -4451,7 +4638,7 @@
         if (delBtn) {
             const url = messageDeleteUrlTemplate.replace('/0/', `/${messageId}/`);
             try {
-                await fetch(url, {
+                const resp = await fetch(url, {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: {
@@ -4460,6 +4647,12 @@
                     },
                     body: new URLSearchParams(),
                 });
+
+                // Animate immediately on success; WS echo will be a no-op for already-removed elements.
+                if (resp && resp.ok) {
+                    const el = document.getElementById(`msg-${messageId}`);
+                    if (el) vixoAnimateRemoveMessage(el);
+                }
             } catch {
                 // ignore
             }
@@ -5147,6 +5340,30 @@
     }, true);
 
     // Click replied-to snippet to jump to original
+    function __flashReplyTarget(msgEl) {
+        if (!msgEl) return;
+        const bubble = msgEl.querySelector ? (msgEl.querySelector('[data-message-bubble]') || msgEl) : msgEl;
+        if (!bubble || !bubble.classList) return;
+
+        const classes = ['ring-2', 'ring-emerald-400/60', 'animate-pulse'];
+        try {
+            // Clear any previous flash timer.
+            if (bubble.__vixoReplyFlashTimer) {
+                clearTimeout(bubble.__vixoReplyFlashTimer);
+            }
+        } catch {}
+
+        try {
+            classes.forEach((c) => bubble.classList.add(c));
+        } catch {}
+
+        try {
+            bubble.__vixoReplyFlashTimer = setTimeout(() => {
+                try { classes.forEach((c) => bubble.classList.remove(c)); } catch {}
+            }, 1600);
+        } catch {}
+    }
+
     document.addEventListener('click', function (e) {
         const jump = e.target && e.target.closest ? e.target.closest('[data-scroll-to]') : null;
         if (!jump) return;
@@ -5155,6 +5372,8 @@
         const el = document.getElementById(targetId);
         if (!el) return;
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Flash highlight so it's obvious which message was referenced.
+        setTimeout(() => { __flashReplyTarget(el); }, 220);
     }, true);
 
     (function initImageViewer() {

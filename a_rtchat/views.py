@@ -25,6 +25,11 @@ from django.db.models import Q
 from django.db.models import Count
 from django.db.models.functions import TruncDate, TruncHour
 from django.utils.http import url_has_allowed_host_and_scheme
+
+try:
+    from a_users.location_ip import maybe_set_profile_city_from_ip
+except Exception:  # pragma: no cover
+    maybe_set_profile_city_from_ip = None
 from a_users.badges import get_verified_user_ids
 from a_users.models import Profile
 from a_users.models import FCMToken
@@ -49,6 +54,9 @@ from .challenges import (
 )
 from .auto_badges import attach_auto_badges
 from .natasha_bot import trigger_natasha_reply_after_commit, NATASHA_USERNAME
+
+# Use the active user model throughout this module.
+User = get_user_model()
 
 
 def _parse_gif_message(body: str) -> str | None:
@@ -280,6 +288,44 @@ def _is_chat_blocked(user) -> bool:
         return False
 
 
+def _get_chat_banned_until(user):
+    """Return ban-until datetime if the user is chat-banned, else None.
+
+    Chat-banned users cannot read or write chats.
+    Staff users are never considered chat-banned.
+    """
+    try:
+        if getattr(user, 'is_staff', False):
+            return None
+        prof = getattr(user, 'profile', None)
+        if prof is None:
+            return None
+        return getattr(prof, 'chat_banned_until', None)
+    except Exception:
+        return None
+
+
+def _is_chat_banned(user) -> bool:
+    """Return True if user is currently chat-banned.
+
+    If the ban has expired, clear it (best-effort) so it auto-unbans.
+    """
+    until = _get_chat_banned_until(user)
+    if not until:
+        return False
+    try:
+        now = timezone.now()
+        if until <= now:
+            try:
+                Profile.objects.filter(user_id=getattr(user, 'id', None)).update(chat_banned_until=None)
+            except Exception:
+                pass
+            return False
+        return True
+    except Exception:
+        return False
+
+
 def _has_verified_email(user) -> bool:
     """Return True if the user has a verified email (django-allauth).
 
@@ -434,6 +480,9 @@ def mention_user_search(request):
 
 @login_required
 def chat_view(request, chatroom_name='public-chat'):
+    if _is_chat_banned(request.user):
+        return render(request, '403.html', status=403)
+
     # Only auto-create the global public chat. All other rooms must already exist.
     if chatroom_name == 'public-chat':
         chat_group, created = ChatGroup.objects.get_or_create(group_name=chatroom_name)
@@ -474,6 +523,12 @@ def chat_view(request, chatroom_name='public-chat'):
     _attach_reaction_pills(chat_messages, request.user)
     _attach_one_time_view_flags(chat_messages, request.user)
     form = ChatmessageCreateForm()
+    # UX: public/group chats use a more standard placeholder.
+    try:
+        if not getattr(chat_group, 'is_private', False):
+            form.fields['body'].widget.attrs['placeholder'] = 'Type a message…'
+    except Exception:
+        pass
 
     chat_blocked = _is_chat_blocked(request.user)
     chat_muted_seconds = get_muted_seconds(getattr(request.user, 'id', 0))
@@ -714,6 +769,14 @@ def chat_view(request, chatroom_name='public-chat'):
                 author=request.user,
                 group=chat_group,
             )
+
+            # Best-effort: if user didn't allow GPS location, store approximate city/country
+            # based on IP after their first message/send.
+            try:
+                if maybe_set_profile_city_from_ip is not None:
+                    maybe_set_profile_city_from_ip(user=request.user, request=request)
+            except Exception:
+                pass
 
             # Retention: keep only the newest messages per room (best-effort).
             # Public/group rooms and private rooms can use different caps.
@@ -1813,6 +1876,9 @@ def chat_view(request, chatroom_name='public-chat'):
 @login_required
 def chat_config_view(request, chatroom_name):
     """Return JSON config for the chat UI (consumed by static JS)."""
+    if _is_chat_banned(request.user):
+        return JsonResponse({'error': 'banned'}, status=403)
+
     # Only auto-create the global public chat. All other rooms must already exist.
     if chatroom_name == 'public-chat':
         chat_group, _created = ChatGroup.objects.get_or_create(group_name=chatroom_name)
@@ -1918,6 +1984,12 @@ def chat_config_view(request, chatroom_name):
 @login_required
 def chat_older_view(request, chatroom_name):
     """Return older messages before a given id (paged history fetch)."""
+    if _is_chat_banned(request.user):
+        return JsonResponse(
+            {'messages_html': '', 'oldest_id': request.GET.get('before'), 'has_more': False},
+            status=403,
+        )
+
     if chatroom_name == 'public-chat':
         chat_group, _created = ChatGroup.objects.get_or_create(group_name=chatroom_name)
     else:
@@ -2348,13 +2420,22 @@ def private_room_rename(request, chatroom_name):
 
 @login_required
 def get_or_create_chatroom(request, username):
+    if _is_chat_banned(request.user):
+        return render(request, '403.html', status=403)
+
     if _is_chat_blocked(request.user):
         messages.error(request, 'You are blocked from private chats.')
         return redirect('home')
+    username = (username or '').strip()
+    if not username:
+        raise Http404()
     if request.user.username == username:
         return redirect('home')
-    
-    other_user = User.objects.get(username = username)
+
+    try:
+        other_user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        raise Http404()
     my_chatrooms = request.user.chat_groups.filter(is_private=True)
     
     chatroom = None
@@ -2498,6 +2579,9 @@ def chatroom_member_remove_view(request, chatroom_name, user_id):
 def chat_file_upload(request, chatroom_name):
     chat_group = get_object_or_404(ChatGroup, group_name=chatroom_name)
 
+    if _is_chat_banned(request.user):
+        return HttpResponse('<div class="text-xs text-red-400">You are banned from chat.</div>', status=403)
+
     if _is_chat_blocked(request.user):
         return HttpResponse('<div class="text-xs text-red-400">You are blocked from uploading files.</div>', status=403)
 
@@ -2619,6 +2703,13 @@ def chat_file_upload(request, chatroom_name):
         group=chat_group,
     )
 
+    # Best-effort: if user didn't allow GPS location, store approximate city/country from IP.
+    try:
+        if maybe_set_profile_city_from_ip is not None:
+            maybe_set_profile_city_from_ip(user=request.user, request=request)
+    except Exception:
+        pass
+
     # Retention: keep only the newest messages per room (best-effort).
     # Public/group rooms and private rooms can use different caps.
     try:
@@ -2682,6 +2773,9 @@ def message_one_time_open(request, message_id):
     Per-viewer behavior: each viewer can open once (ever). The client handles the
     countdown/hide; server enforces the one-open rule.
     """
+    if _is_chat_banned(request.user):
+        return HttpResponse('', status=403)
+
     if request.method != 'POST':
         raise Http404()
 
@@ -2747,6 +2841,9 @@ def message_one_time_open(request, message_id):
 @login_required
 def message_info_view(request, message_id: int):
     """Show 'Info' (read-by) for a message in private chats."""
+    if _is_chat_banned(request.user):
+        return HttpResponse('', status=403)
+
     message = get_object_or_404(GroupMessage.objects.select_related('group', 'author'), pk=message_id)
     chat_group = message.group
 
@@ -2790,6 +2887,9 @@ def message_info_view(request, message_id: int):
 @login_required
 def chat_poll_view(request, chatroom_name):
     """Return new messages after a given message id (used as a realtime fallback)."""
+    if _is_chat_banned(request.user):
+        return JsonResponse({'messages_html': '', 'last_id': request.GET.get('after')}, status=403)
+
     if chatroom_name == 'public-chat':
         chat_group, created = ChatGroup.objects.get_or_create(group_name=chatroom_name)
     else:
@@ -2877,6 +2977,9 @@ def chat_poll_view(request, chatroom_name):
 
 @login_required
 def message_edit_view(request, message_id: int):
+    if _is_chat_banned(request.user):
+        return HttpResponse('', status=403)
+
     if request.method != 'POST':
         raise Http404()
 
@@ -2947,6 +3050,9 @@ def message_edit_view(request, message_id: int):
 
 @login_required
 def message_delete_view(request, message_id: int):
+    if _is_chat_banned(request.user):
+        return HttpResponse('', status=403)
+
     if request.method != 'POST':
         raise Http404()
 
@@ -2990,6 +3096,9 @@ def message_delete_view(request, message_id: int):
 
 @login_required
 def message_react_toggle(request, message_id: int):
+    if _is_chat_banned(request.user):
+        return HttpResponse('', status=403)
+
     if request.method != 'POST':
         raise Http404()
 
@@ -3084,6 +3193,7 @@ def admin_users_view(request):
         'page_obj': page_obj,
         'paginator': paginator,
         'is_paginated': page_obj.has_other_pages(),
+        'now': timezone.now(),
     })
 
 
@@ -3247,6 +3357,83 @@ def admin_toggle_user_block_view(request, user_id: int):
         require_https=request.is_secure(),
     ):
         return redirect(next_url)
+
+    referer = (request.META.get('HTTP_REFERER') or '').strip()
+    if referer and url_has_allowed_host_and_scheme(
+        url=referer,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(referer)
+
+    return redirect('admin-users')
+
+
+@login_required
+def admin_user_ban_view(request, user_id: int):
+    """Ban/unban a user from reading/writing chats for a duration (minutes).
+
+    POST param: minutes (int). If 0, unban.
+    """
+    if request.method != 'POST':
+        raise Http404()
+    if not request.user.is_staff:
+        raise Http404()
+
+    target = get_object_or_404(User, pk=user_id)
+    if target.is_superuser:
+        messages.error(request, 'Cannot ban a superuser')
+        return redirect('admin-users')
+    if target.id == request.user.id:
+        messages.error(request, 'You cannot ban yourself')
+        return redirect('admin-users')
+
+    profile, _ = Profile.objects.get_or_create(user=target)
+
+    rl = check_rate_limit(
+        make_key('admin_ban_set', request.user.id, get_client_ip(request)),
+        limit=int(getattr(settings, 'ADMIN_BAN_SET_RATE_LIMIT', 60)),
+        period_seconds=int(getattr(settings, 'ADMIN_BAN_SET_RATE_PERIOD', 60)),
+    )
+    if not rl.allowed:
+        messages.error(request, 'Too many actions. Please wait and try again.')
+        return redirect('admin-users')
+
+    raw_minutes = (request.POST.get('minutes') or '').strip()
+    try:
+        minutes = int(raw_minutes)
+    except Exception:
+        minutes = 0
+
+    minutes = max(0, minutes)
+    # Safety cap: 365 days.
+    minutes = min(minutes, 60 * 24 * 365)
+
+    until = None
+    if minutes > 0:
+        until = timezone.now() + timedelta(minutes=minutes)
+        profile.chat_banned_until = until
+        profile.save(update_fields=['chat_banned_until'])
+        messages.success(request, f'Banned {target.username} for {minutes} minutes')
+    else:
+        profile.chat_banned_until = None
+        profile.save(update_fields=['chat_banned_until'])
+        messages.success(request, f'Unbanned {target.username}')
+
+    # Realtime: notify the user (all open tabs) that their ban status changed.
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"notify_user_{target.id}",
+            {
+                'type': 'chat_ban_status_notify_handler',
+                'banned': bool(until),
+                'until': until.isoformat() if until else '',
+                'by_username': getattr(request.user, 'username', '') or '',
+            },
+        )
+    except Exception:
+        pass
 
     referer = (request.META.get('HTTP_REFERER') or '').strip()
     if referer and url_has_allowed_host_and_scheme(
@@ -3775,6 +3962,9 @@ def admin_analytics_view(request):
 @login_required
 def call_view(request, chatroom_name):
     """Agora call UI for private 1:1 chats."""
+    if _is_chat_banned(request.user):
+        return render(request, '403.html', status=403)
+
     chat_group = get_object_or_404(ChatGroup, group_name=chatroom_name)
 
     if _is_chat_blocked(request.user):
@@ -3810,6 +4000,9 @@ def call_view(request, chatroom_name):
 @login_required
 def agora_token_view(request, chatroom_name):
     """Return Agora RTC token for the given chatroom (members only)."""
+    if _is_chat_banned(request.user):
+        return JsonResponse({'error': 'banned'}, status=403)
+
     chat_group = get_object_or_404(ChatGroup, group_name=chatroom_name)
 
     rl = check_rate_limit(
@@ -3894,6 +4087,9 @@ def agora_token_view(request, chatroom_name):
 @login_required
 def call_invite_view(request, chatroom_name):
     """Broadcast an incoming-call invite to the other member(s) in this room."""
+    if _is_chat_banned(request.user):
+        return JsonResponse({'error': 'banned'}, status=403)
+
     if request.method != 'POST':
         raise Http404()
 
@@ -3963,6 +4159,9 @@ def call_invite_view(request, chatroom_name):
 @login_required
 def call_presence_view(request, chatroom_name):
     """Announce a participant joining/leaving a call (UI only)."""
+    if _is_chat_banned(request.user):
+        return JsonResponse({'error': 'banned'}, status=403)
+
     if request.method != 'POST':
         raise Http404()
 
@@ -4049,6 +4248,9 @@ def call_presence_view(request, chatroom_name):
 @login_required
 def call_event_view(request, chatroom_name):
     """Persist call started/ended markers to chat + broadcast."""
+    if _is_chat_banned(request.user):
+        return JsonResponse({'error': 'banned'}, status=403)
+
     if request.method != 'POST':
         raise Http404()
 

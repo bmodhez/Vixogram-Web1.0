@@ -9,6 +9,14 @@ from django.core.exceptions import ImproperlyConfigured
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# --- Internationalization / Time zone ---
+# The project previously relied on Django defaults (UTC). Set an explicit time zone
+# so timestamps like chat bans show the expected local time in templates.
+LANGUAGE_CODE = (os.environ.get('LANGUAGE_CODE') or 'en-us').strip() or 'en-us'
+TIME_ZONE = (os.environ.get('TIME_ZONE') or 'Asia/Kolkata').strip() or 'Asia/Kolkata'
+USE_I18N = True
+USE_TZ = True
+
 # Optional: load local .env (keeps secrets out of code)
 #
 # IMPORTANT:
@@ -126,10 +134,14 @@ RECAPTCHA_REQUIRED = _env_bool(
 )
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    "SECRET_KEY",
-    "django-insecure-change-me-in-env",
-)
+SECRET_KEY = (os.environ.get("SECRET_KEY") or "").strip() or "django-insecure-change-me-in-env"
+
+# In production, refuse to start if a real SECRET_KEY isn't configured.
+if ENVIRONMENT == "production" and SECRET_KEY == "django-insecure-change-me-in-env":
+    raise ImproperlyConfigured(
+        "SECRET_KEY is required when ENVIRONMENT=production. "
+        "Set a strong random value in your hosting platform environment vars."
+    )
 
 # DEBUG:
 # - In production, default is False.
@@ -164,7 +176,7 @@ _static_backend = (
 STORAGES = {
     'default': {
         'BACKEND': (
-            'cloudinary_storage.storage.MediaCloudinaryStorage'
+            'a_core.storage.ModeratedMediaCloudinaryStorage'
             if _use_cloudinary_media
             else 'django.core.files.storage.FileSystemStorage'
         ),
@@ -174,6 +186,15 @@ STORAGES = {
     },
 }
 
+# Cloudinary upload moderation provider
+# - Default: AWS Rekognition (aws_rek)
+# - Override via env: CLOUDINARY_UPLOAD_MODERATION
+CLOUDINARY_UPLOAD_MODERATION = (os.environ.get('CLOUDINARY_UPLOAD_MODERATION') or 'aws_rek').strip() or 'aws_rek'
+
+# If True, block saving media when moderation returns pending.
+# This gives "before save" semantics (user must retry later).
+CLOUDINARY_UPLOAD_BLOCK_PENDING = _env_bool('CLOUDINARY_UPLOAD_BLOCK_PENDING', default=True)
+
 # In production, prefer stability over strictness: serve static files using
 # Django's staticfiles finders as a fallback. This prevents runtime 500/404s
 # if collectstatic output is missing/stale on a deploy.
@@ -182,15 +203,34 @@ if ENVIRONMENT == 'production':
 
 
 
-ALLOWED_HOSTS = [
-    "localhost",
-    "127.0.0.1",
-    ".onrender.com",
-    'vixogram-connect.onrender.com',
-    ".devtunnels.ms",
-    '5nwjdjnl-8080.inc1.devtunnels.ms',
-    
-]
+ALLOWED_HOSTS: list[str] = []
+
+# Dev-friendly defaults.
+if ENVIRONMENT != "production":
+    ALLOWED_HOSTS.extend(
+        [
+            "localhost",
+            "127.0.0.1",
+            ".onrender.com",
+        ]
+    )
+
+    # VS Code Dev Tunnels (opt-in; keep off by default for safety).
+    if _env_bool("DEVTUNNEL_ENABLED", default=False):
+        ALLOWED_HOSTS.extend(
+            [
+                ".devtunnels.ms",
+                ".inc1.devtunnels.ms",
+            ]
+        )
+
+# Known production hosts (add your custom domain via env ALLOWED_HOSTS).
+ALLOWED_HOSTS.extend(
+    [
+        "vixogram-connect.onrender.com",
+        "vixogram.onrender.com",
+    ]
+)
 
 # Render exposes the external URL for the service; use it to auto-trust the correct host.
 RENDER_EXTERNAL_URL = (os.environ.get("RENDER_EXTERNAL_URL") or "").strip()
@@ -207,26 +247,35 @@ _extra_allowed_hosts = os.environ.get("ALLOWED_HOSTS", "").strip()
 if _extra_allowed_hosts:
     ALLOWED_HOSTS.extend([h.strip() for h in _extra_allowed_hosts.split(",") if h.strip()])
 
-CSRF_TRUSTED_ORIGINS = [
-    # Local development
-    "http://localhost",
-    "http://127.0.0.1",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
+CSRF_TRUSTED_ORIGINS: list[str] = []
 
-    # VS Code Port Forwarding / Dev Tunnels
-    "https://*.devtunnels.ms",
-    "http://*.devtunnels.ms",
-    "https://*.inc1.devtunnels.ms",
-    "http://*.inc1.devtunnels.ms",
+# Dev-only origins
+if ENVIRONMENT != "production":
+    CSRF_TRUSTED_ORIGINS.extend(
+        [
+            "http://localhost",
+            "http://127.0.0.1",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+        ]
+    )
+    if _env_bool("DEVTUNNEL_ENABLED", default=False):
+        CSRF_TRUSTED_ORIGINS.extend(
+            [
+                "https://*.devtunnels.ms",
+                "http://*.devtunnels.ms",
+                "https://*.inc1.devtunnels.ms",
+                "http://*.inc1.devtunnels.ms",
+            ]
+        )
 
-    # Render
-    'https://vixogram-connect.onrender.com',
-    'https://vixogram.onrender.com',
-]
-
-# Always allow Render subdomains (covers Blueprint/Dashboard setups).
-CSRF_TRUSTED_ORIGINS.append("https://*.onrender.com")
+# Production/service origins
+CSRF_TRUSTED_ORIGINS.extend(
+    [
+        "https://vixogram-connect.onrender.com",
+        "https://vixogram.onrender.com",
+    ]
+)
 
 if _render_origin and _render_origin not in CSRF_TRUSTED_ORIGINS:
     CSRF_TRUSTED_ORIGINS.append(_render_origin)
@@ -250,6 +299,20 @@ if ENVIRONMENT == "production" or (_render_origin and _render_origin.startswith(
     USE_X_FORWARDED_HOST = True
     CSRF_COOKIE_SECURE = True
     SESSION_COOKIE_SECURE = True
+
+    # SecurityMiddleware hardening (safe defaults; override via env if needed).
+    SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", default=(ENVIRONMENT == "production"))
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = (os.environ.get("SECURE_REFERRER_POLICY") or "same-origin").strip() or "same-origin"
+
+    # Start with a conservative HSTS default (1 hour). Increase once you confirm
+    # HTTPS is stable for your domain.
+    try:
+        SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS") or "3600")
+    except Exception:
+        SECURE_HSTS_SECONDS = 3600
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False)
+    SECURE_HSTS_PRELOAD = _env_bool("SECURE_HSTS_PRELOAD", default=False)
 
 # VS Code Port Forwarding / Dev Tunnels typically terminates TLS at the proxy.
 # IMPORTANT: Do NOT auto-enable this just because ALLOWED_HOSTS contains
@@ -359,6 +422,7 @@ TEMPLATES = [
                 'a_core.context_processors.recaptcha_config',
                 'a_core.context_processors.welcome_popup',
                 'a_core.context_processors.location_popup',
+                'a_core.context_processors.notifications_popup',
                 'a_core.context_processors.site_stats',
                 'a_users.context_processors.notifications_badge',
                 'a_users.context_processors.follow_requests_badge',

@@ -45,7 +45,7 @@ def ensure_profile(sender, instance, created, **kwargs):
 
 if user_signed_up is not None:
     @receiver(user_signed_up)
-    def queue_welcome_email(request, user, **kwargs):
+    def queue_welcome_email(sender, request, user, **kwargs):
         # Send in background (Celery). In dev, may run eagerly depending on settings.
         try:
             env_broker = (os.environ.get('CELERY_BROKER_URL') or '').strip()
@@ -62,7 +62,7 @@ REFERRAL_POINTS_PER_INVITE = 10
 
 if user_signed_up is not None:
     @receiver(user_signed_up)
-    def track_signup_referral(request, user, **kwargs):
+    def track_signup_referral(sender, request, user, **kwargs):
         """If signup had a valid invite token, store Referral (pending)."""
         if request is None or signing is None:
             return
@@ -106,7 +106,7 @@ if user_signed_up is not None:
 
 if email_confirmed is not None:
     @receiver(email_confirmed)
-    def award_referral_points_on_email_verified(request, email_address, **kwargs):
+    def award_referral_points_on_email_verified(sender, request, email_address, **kwargs):
         """Award points to referrer once the referred user's email is verified."""
         try:
             user = getattr(email_address, 'user', None)
@@ -143,7 +143,7 @@ if email_confirmed is not None:
 
 if user_signed_up is not None:
     @receiver(user_signed_up)
-    def show_welcome_popup_on_signup(request, user, **kwargs):
+    def show_welcome_popup_on_signup(sender, request, user, **kwargs):
         try:
             if request is None:
                 return
@@ -158,7 +158,7 @@ if user_signed_up is not None:
 
 if user_signed_up is not None:
     @receiver(user_signed_up)
-    def show_location_popup_on_signup(request, user, **kwargs):
+    def show_location_popup_on_signup(sender, request, user, **kwargs):
         """Ask for location permission once after signup (shown on home page)."""
         try:
             if request is None:
@@ -172,9 +172,30 @@ if user_signed_up is not None:
             pass
 
 
+if user_signed_up is not None:
+    @receiver(user_signed_up)
+    def show_notifications_popup_on_signup(sender, request, user, **kwargs):
+        """Ask for notifications permission once after signup (when push is enabled)."""
+        try:
+            if request is None:
+                return
+            if not bool(getattr(settings, 'FIREBASE_ENABLED', False)):
+                return
+            if not getattr(user, 'is_authenticated', False):
+                return
+
+            # Only once per signup session.
+            if request.session.get('show_notifications_popup'):
+                return
+            request.session['show_notifications_popup'] = True
+            request.session['notifications_popup_source'] = 'signup'
+        except Exception:
+            pass
+
+
 if django_user_logged_in is not None:
     @receiver(django_user_logged_in)
-    def show_welcome_popup_on_login(request, user, **kwargs):
+    def show_welcome_popup_on_login(sender, request, user, **kwargs):
         try:
             if request is None:
                 return
@@ -189,7 +210,7 @@ if django_user_logged_in is not None:
 
 if django_user_logged_in is not None:
     @receiver(django_user_logged_in)
-    def show_location_popup_on_login(request, user, **kwargs):
+    def show_location_popup_on_login(sender, request, user, **kwargs):
         """Ask for location permission for existing users too.
 
         We only prompt when the user's profile has never recorded a location.
@@ -216,5 +237,39 @@ if django_user_logged_in is not None:
 
             request.session['show_location_popup'] = True
             request.session['location_popup_source'] = 'login'
+        except Exception:
+            pass
+
+
+if django_user_logged_in is not None:
+    @receiver(django_user_logged_in)
+    def show_notifications_popup_on_login(sender, request, user, **kwargs):
+        """Ask for notifications permission for existing users too.
+
+        We only prompt when push is enabled and the user has never registered an FCM token.
+        """
+        try:
+            if request is None:
+                return
+            if not bool(getattr(settings, 'FIREBASE_ENABLED', False)):
+                return
+            if not getattr(user, 'is_authenticated', False):
+                return
+
+            # Don't schedule twice in the same session.
+            if request.session.get('show_notifications_popup'):
+                return
+
+            try:
+                from a_users.models import FCMToken
+
+                if FCMToken.objects.filter(user=user).exists():
+                    return
+            except Exception:
+                # Best-effort: if DB check fails, don't nag.
+                return
+
+            request.session['show_notifications_popup'] = True
+            request.session['notifications_popup_source'] = 'login'
         except Exception:
             pass

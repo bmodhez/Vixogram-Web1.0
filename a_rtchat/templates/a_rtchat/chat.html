@@ -860,7 +860,7 @@
                                     <button
                                         type="button"
                                         id="gif_btn"
-                                        class="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 inline-flex items-center justify-center rounded-full border border-gray-300 bg-gray-200/90 text-gray-800 hover:bg-gray-300/90 transition dark:border-transparent dark:bg-gray-800/40 dark:text-gray-200 dark:hover:text-white dark:hover:bg-gray-800/70"
+                                        class="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-gray-300 hover:text-gray-100 hover:bg-white/5 transition focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                                         aria-label="GIF"
                                         title="GIF"
                                     >
@@ -922,7 +922,7 @@
                                 <button
                                     type="button"
                                     id="emoji_btn"
-                                    class="h-11 w-11 inline-flex items-center justify-center rounded-full border border-gray-300 bg-gray-200/90 text-gray-800 transition duration-150 ease-out hover:bg-gray-300/90 hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-transparent dark:bg-gray-800/50 dark:text-white dark:hover:bg-gray-800/70"
+                                    class="h-11 w-11 inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-gray-200 transition duration-150 ease-out hover:bg-white/5 hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                                     aria-label="Insert emoji"
                                     aria-haspopup="dialog"
                                     aria-expanded="false"
@@ -1970,7 +1970,10 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
 
                 if (payload.type === 'message_delete' && payload.message_id) {
                     const el = document.getElementById(`msg-${payload.message_id}`);
-                    if (el) el.remove();
+                    if (el) {
+                        if (typeof window.__vixoAnimateRemoveMessage === 'function') window.__vixoAnimateRemoveMessage(el);
+                        else el.remove();
+                    }
                     return;
                 }
 

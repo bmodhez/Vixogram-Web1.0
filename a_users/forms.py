@@ -51,6 +51,7 @@ class ProfileForm(forms.ModelForm):
         widgets = {
             'image': forms.FileInput(attrs={
                 'class': 'w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-gray-700 file:text-white hover:file:bg-gray-600',
+                'accept': 'image/*',
             }),
             'cover_image': forms.FileInput(attrs={
                 'class': 'w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-gray-700 file:text-white hover:file:bg-gray-600',
@@ -67,6 +68,27 @@ class ProfileForm(forms.ModelForm):
                 'class': 'w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 outline-none focus:border-emerald-500',
             })
         }
+
+    def clean_image(self):
+        f = self.cleaned_data.get('image')
+        if not f:
+            return f
+
+        # Enforce a small upload limit for avatar as well.
+        try:
+            if hasattr(f, 'size') and int(f.size) > 2 * 1024 * 1024:
+                raise forms.ValidationError('Avatar image must be under 2MB.')
+        except forms.ValidationError:
+            raise
+        except Exception:
+            pass
+
+        # Basic content-type check.
+        ct = getattr(f, 'content_type', '') or ''
+        if ct and not str(ct).lower().startswith('image/'):
+            raise forms.ValidationError('Please upload a valid image file.')
+
+        return f
 
     def clean_cover_image(self):
         f = self.cleaned_data.get('cover_image')

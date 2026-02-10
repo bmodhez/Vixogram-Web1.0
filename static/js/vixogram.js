@@ -1910,6 +1910,9 @@
         if (payload.type === 'chat_block_status') {
           try { window.dispatchEvent(new CustomEvent('chat:block_status', { detail: payload })); } catch {}
         }
+        if (payload.type === 'chat_ban_status') {
+          try { window.dispatchEvent(new CustomEvent('chat:ban_status', { detail: payload })); } catch {}
+        }
         if (payload.type === 'reply') {
           showMention({
             from_username: payload.from_username,
@@ -2027,6 +2030,16 @@
         const cfgUrl = (baseCfg.pushConfigUrl || '').trim();
         if (!cfgUrl) return;
 
+        // Expose a callable hook for the one-time permission popup.
+        // It will be replaced with a real implementation after init() completes.
+        try {
+          if (typeof window.__vixoEnableWebPush !== 'function') {
+            window.__vixoEnableWebPush = async () => false;
+          }
+        } catch {
+          // ignore
+        }
+
         let vapidKey = '';
         let cfg = {};
 
@@ -2128,6 +2141,17 @@
             } catch {
               return false;
             }
+          }
+
+          // Allow explicit enable from a button click.
+          try {
+            window.__vixoEnableWebPush = async () => {
+              const ok = await ensurePermissionViaGesture();
+              if (ok) await setupTokenOnce();
+              return ok;
+            };
+          } catch {
+            // ignore
           }
 
           if (Notification.permission === 'granted') {

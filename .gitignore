@@ -23,6 +23,11 @@ ENV/
 /media/
 /staticfiles/
 
+# Local DB backups / dumps
+/backups/
+*.dump
+*.backup
+
 # Logs
 *.log
 

@@ -144,6 +144,9 @@
                             <a href="{% url 'contact-support' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
                                 Contact Support
                             </a>
+                            <a href="{% url 'faq' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
+                                FAQ
+                            </a>
                             <button type="button" id="theme_toggle_menu" class="w-full text-left px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-between gap-3" aria-label="Toggle theme">
                                 <span class="inline-flex items-center gap-2">
                                     <span aria-hidden="true" data-theme-icon>🌙</span>
@@ -200,7 +203,7 @@
         <div id="toast-container" class="fixed top-16 right-3 sm:top-20 sm:right-6 z-50 w-[min(24rem,calc(100vw-3rem))] space-y-3 pointer-events-none">
             {% for message in messages %}
                 {% with msg_text=message|stringformat:"s" %}
-                    {% if "confirmation email sent" not in msg_text|lower %}
+                    {% if "confirmation email sent" not in msg_text|lower and "successfully signed in" not in msg_text|lower %}
                         {% with tags=message.tags %}
                             <div
                                 class="toast pointer-events-auto flex items-start gap-3 rounded-xl border border-gray-800 bg-gray-900/90 px-4 py-3 text-sm text-gray-100 shadow-lg shadow-black/20 transition duration-200 ease-out"
@@ -316,7 +319,6 @@
                         <div>
                             <div class="flex items-center gap-3">
                                 <img src="{% static 'vixologo.png' %}" alt="Vixogram" class="h-10 w-auto object-contain" />
-                                <div class="text-lg font-extrabold tracking-wide text-white">Vixogram</div>
                             </div>
                             <div class="mt-3 text-sm font-semibold text-white">Chat. Call. Connect.</div>
                             <p class="mt-2 text-sm text-gray-300 leading-6">
@@ -607,49 +609,86 @@
         </div>
     </div>
 
-    {% if SHOW_WELCOME_POPUP %}
-    <div id="welcome-modal" class="fixed inset-0 z-[70]" aria-hidden="false" role="dialog" aria-modal="true">
-        <div class="absolute inset-0 bg-black/60 vixo-modal-overlay"></div>
-        <div class="relative min-h-full flex items-center justify-center p-6 pointer-events-none">
-            <div class="w-full max-w-md pointer-events-auto vixo-modal-card">
-                <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-gray-900/70 backdrop-blur shadow-2xl">
-                    <div class="absolute inset-0 bg-gradient-to-br from-purple-600/25 via-indigo-600/15 to-sky-600/25"></div>
-                    <div class="relative p-6">
-                        <div class="flex items-start justify-between gap-4">
-                            <div>
-                                <div class="text-xl font-extrabold text-white">Yo! Welcome to Vixogram 🔥</div>
-                                <div class="mt-2 text-sm text-gray-200/90">Be cool. 😎 No spamming. No toxic stuff.</div>
-                                <div class="mt-1 text-sm text-gray-200/90">Let’s keep this place fun for everyone 🤝</div>
-                            </div>
-                            <a
-                                href="{{ request.get_full_path }}"
-                                id="welcome-close"
-                                class="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/20 text-base text-gray-100 hover:bg-white/25 transition-colors"
-                                aria-label="Close welcome"
-                                role="button"
-                            >
-                                ×
-                            </a>
-                        </div>
+    {% if SHOW_WELCOME_POPUP or request.GET.welcome %}
+    <div id="welcome-modal" class="fixed inset-0 z-[70] flex items-center justify-center p-5 sm:p-8" aria-hidden="false" role="dialog" aria-modal="true">
+        <div class="absolute inset-0 bg-center bg-cover" style="background-image: url('{% static 'welcomebg.jpeg' %}');"></div>
+        <div id="welcome-overlay" class="absolute inset-0 bg-black/70 backdrop-blur-sm opacity-0 transition-opacity duration-200 ease-out"></div>
 
-                        <ul class="mt-4 space-y-2 text-sm text-gray-100/90">
-                            <li>✅ No spam</li>
-                            <li>✅ No abusive language</li>
-                            <li>✅ No NSFW</li>
-                            <li>✅ Respect all users</li>
-                        </ul>
+        <div class="relative w-full max-w-2xl pointer-events-auto">
+            <div id="welcome-card" class="relative overflow-hidden rounded-3xl border border-white/10 bg-gray-900/35 backdrop-blur-xl shadow-2xl transform-gpu scale-95 opacity-0 transition-[transform,opacity] duration-200 ease-out">
+                <div class="absolute inset-0 bg-gradient-to-br from-white/10 via-white/0 to-white/5"></div>
 
-                        <div class="mt-5">
-                            <a
-                                href="{{ request.get_full_path }}"
-                                id="welcome-go"
-                                class="w-full inline-flex items-center justify-center bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 hover:from-emerald-400 hover:via-teal-400 hover:to-sky-400 text-white font-bold py-2.5 px-6 rounded-full transition-colors"
-                                role="button"
-                            >
-                                Let’s Go 🚀
-                            </a>
-                            <div class="mt-2 text-[11px] text-gray-400 text-center">Violation may lead to a permanent ban.</div>
+                <div class="relative p-6 sm:p-9">
+                    <div class="flex items-start justify-between gap-4">
+                        <div>
+                            {% if user.is_authenticated and user.profile.is_founder_club %}
+                                <div class="text-2xl sm:text-3xl font-extrabold text-white">👑 Welcome, Founder</div>
+                                <div class="mt-3 text-sm sm:text-base text-gray-200 leading-relaxed">
+                                    Your premium access is active.<br />
+                                    Enjoy priority features and an ad-free experience.
+                                </div>
+                            {% elif WELCOME_POPUP_SOURCE == 'signup' or request.GET.welcome == 'signup' %}
+                                <div class="text-2xl sm:text-3xl font-extrabold text-white">Welcome to Vixogram 🎉</div>
+                                <div class="mt-3 text-sm sm:text-base text-gray-200 leading-relaxed">
+                                    Chat. Call. Connect.<br />
+                                    Your account is ready — start exploring public rooms and conversations.
+                                </div>
+                            {% elif WELCOME_POPUP_SOURCE == 'maintenance' or request.GET.welcome == 'maintenance' %}
+                                <div class="text-2xl sm:text-3xl font-extrabold text-white">We’re Back Online 🚀</div>
+                                <div class="mt-3 text-sm sm:text-base text-gray-200 leading-relaxed">
+                                    Thanks for your patience.<br />
+                                    Vixogram is live again — let’s get chatting!
+                                </div>
+                            {% else %}
+                                <div class="text-2xl sm:text-3xl font-extrabold text-white">Welcome Back, {% if user.is_authenticated %}{{ user.profile.name|default:user.username }}{% else %}Friend{% endif %} 👋</div>
+                                <div class="mt-3 text-sm sm:text-base text-gray-200 leading-relaxed">
+                                    You’re now connected to Vixogram.<br />
+                                    Jump back into chats and stay connected with your people.
+                                </div>
+                            {% endif %}
                         </div>
+                    </div>
+
+                    <div class="mt-7 flex flex-col sm:flex-row gap-3">
+                        {% if user.is_authenticated and user.profile.is_founder_club %}
+                            <a
+                                href="{% url 'pricing' %}"
+                                id="welcome-primary"
+                                class="inline-flex items-center justify-center rounded-xl bg-amber-500/90 hover:bg-amber-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-black/20 transition"
+                            >
+                                Explore Premium →
+                            </a>
+                        {% elif WELCOME_POPUP_SOURCE == 'signup' or request.GET.welcome == 'signup' %}
+                            <button
+                                type="button"
+                                id="welcome-primary"
+                                class="inline-flex items-center justify-center rounded-xl bg-indigo-500/90 hover:bg-indigo-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-black/20 transition"
+                            >
+                                Start Chatting →
+                            </button>
+                            <a
+                                href="{% url 'invite-friends' %}"
+                                class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/10 hover:bg-white/15 px-6 py-3 text-sm font-semibold text-gray-100 transition"
+                            >
+                                Invite Friends
+                            </a>
+                        {% elif WELCOME_POPUP_SOURCE == 'maintenance' or request.GET.welcome == 'maintenance' %}
+                            <button
+                                type="button"
+                                id="welcome-primary"
+                                class="inline-flex items-center justify-center rounded-xl bg-indigo-500/90 hover:bg-indigo-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-black/20 transition"
+                            >
+                                Continue →
+                            </button>
+                        {% else %}
+                            <button
+                                type="button"
+                                id="welcome-primary"
+                                class="inline-flex items-center justify-center rounded-xl bg-indigo-500/90 hover:bg-indigo-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-black/20 transition"
+                            >
+                                Enter Vixogram →
+                            </button>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -660,33 +699,63 @@
         (function () {
             const modal = document.getElementById('welcome-modal');
             if (!modal) return;
-            const closeBtn = document.getElementById('welcome-close');
-            const goBtn = document.getElementById('welcome-go');
-            let timer = null;
+            const primaryBtn = document.getElementById('welcome-primary');
+            const overlay = document.getElementById('welcome-overlay');
+            const card = document.getElementById('welcome-card');
+            let closing = false;
 
             const close = () => {
-                try { document.body.classList.remove('overflow-hidden'); } catch {}
-                try { modal.remove(); } catch { try { modal.style.display = 'none'; } catch {} }
+                if (closing) return;
+                closing = true;
+
+                try { if (overlay) overlay.classList.add('opacity-0'); } catch {}
+                try {
+                    if (card) {
+                        card.classList.remove('scale-100', 'opacity-100');
+                        card.classList.add('scale-95', 'opacity-0');
+                    }
+                } catch {}
+
+                window.setTimeout(() => {
+                    try { document.body.classList.remove('overflow-hidden'); } catch {}
+                    try { modal.remove(); } catch { try { modal.style.display = 'none'; } catch {} }
+                }, 210);
             };
 
             try { document.body.classList.add('overflow-hidden'); } catch {}
 
-            const onUserClose = (e) => {
+            // Animate in.
+            try {
+                window.requestAnimationFrame(() => {
+                    try { if (overlay) overlay.classList.remove('opacity-0'); } catch {}
+                    try { if (overlay) overlay.classList.add('opacity-100'); } catch {}
+                    try {
+                        if (card) {
+                            card.classList.remove('scale-95', 'opacity-0');
+                            card.classList.add('scale-100', 'opacity-100');
+                        }
+                    } catch {}
+                });
+            } catch {}
+
+            // If popup was triggered by ?welcome=..., remove it so refresh doesn't re-open.
+            try {
+                const url = new URL(window.location.href);
+                if (url.searchParams.has('welcome')) {
+                    url.searchParams.delete('welcome');
+                    window.history.replaceState({}, '', url.toString());
+                }
+            } catch {}
+
+            const onClose = (e) => {
                 try { if (e) e.preventDefault(); } catch {}
-                try { if (timer) clearTimeout(timer); } catch {}
-                timer = null;
                 close();
             };
-
-            if (closeBtn) closeBtn.addEventListener('click', onUserClose);
-            if (goBtn) goBtn.addEventListener('click', onUserClose);
+            if (primaryBtn && primaryBtn.tagName === 'BUTTON') primaryBtn.addEventListener('click', onClose);
 
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') close();
             });
-
-            // Auto close after 10 seconds
-            timer = setTimeout(close, 10000);
         })();
     </script>
     {% endif %}
@@ -829,7 +898,16 @@
                                                 ...(csrf ? { 'X-CSRFToken': csrf } : {}),
                                             },
                                             body: JSON.stringify({ lat: lat, lng: lng }),
-                                        }).catch(() => {});
+                                        }).then(async (resp) => {
+                                            try {
+                                                const data = await resp.json().catch(() => null);
+                                                if (!resp.ok || !data || data.ok !== true) {
+                                                    toast('Could not save location.', 'error');
+                                                }
+                                            } catch {}
+                                        }).catch(() => {
+                                            try { toast('Could not save location.', 'error'); } catch {}
+                                        });
                                     } catch {}
                                 }
                             } catch {}
@@ -897,6 +975,165 @@
     </script>
     {% endif %}
 
+    {% if SHOW_NOTIFICATIONS_POPUP %}
+    <div id="notifications-modal" class="fixed inset-0 z-[69] hidden" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="absolute inset-0 bg-black/60 vixo-modal-overlay"></div>
+        <div class="relative min-h-full flex items-center justify-center p-6 pointer-events-none">
+            <div class="w-full max-w-md pointer-events-auto vixo-modal-card">
+                <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-gray-900/70 backdrop-blur shadow-2xl">
+                    <div class="absolute inset-0 bg-gradient-to-br from-emerald-600/20 via-teal-600/10 to-sky-600/20"></div>
+                    <div class="relative p-6">
+                        <div class="flex items-start justify-between gap-4">
+                            <div>
+                                <div class="text-xl font-extrabold text-white">Enable notifications?</div>
+                                <div class="mt-2 text-sm text-gray-200/90">Get alerts for mentions, replies, and important updates.</div>
+                                <div class="mt-1 text-xs text-gray-300/80">You can change this anytime in browser settings.</div>
+                            </div>
+                            <button
+                                type="button"
+                                id="notifications-skip-x"
+                                class="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/20 text-base text-gray-100 hover:bg-white/25 transition-colors"
+                                aria-label="Close notifications prompt"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div id="notifications-status" class="mt-4 text-xs text-gray-300/90 hidden"></div>
+
+                        <div class="mt-5 grid grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                id="notifications-skip"
+                                class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/10"
+                            >
+                                Not now
+                            </button>
+                            <button
+                                type="button"
+                                id="notifications-allow"
+                                class="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 hover:from-emerald-400 hover:via-teal-400 hover:to-sky-400 px-4 py-2.5 text-sm font-extrabold text-white vixo-keep-white"
+                            >
+                                Enable
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const modal = document.getElementById('notifications-modal');
+            if (!modal) return;
+
+            const statusEl = document.getElementById('notifications-status');
+            const allowBtn = document.getElementById('notifications-allow');
+            const skipBtn = document.getElementById('notifications-skip');
+            const skipX = document.getElementById('notifications-skip-x');
+
+            const toast = (message, kind) => {
+                try {
+                    document.body.dispatchEvent(new CustomEvent('vixo:toast', { detail: {
+                        message: String(message || ''),
+                        kind: kind || 'info',
+                        durationMs: 2600,
+                    }}));
+                } catch {}
+            };
+
+            const setStatus = (msg) => {
+                try {
+                    if (!statusEl) return;
+                    statusEl.textContent = String(msg || '');
+                    statusEl.classList.remove('hidden');
+                } catch {}
+            };
+
+            const open = () => {
+                try { modal.classList.remove('hidden'); modal.setAttribute('aria-hidden', 'false'); } catch {}
+                try { document.body.classList.add('overflow-hidden'); } catch {}
+
+                // If permission is already denied, don't trap the user.
+                try {
+                    if (window.Notification && Notification.permission === 'denied') {
+                        toast('Notifications are blocked in your browser settings.', 'error');
+                        close();
+                    }
+                } catch {}
+            };
+
+            const close = () => {
+                try { modal.classList.add('hidden'); modal.setAttribute('aria-hidden', 'true'); } catch {}
+                try { document.body.classList.remove('overflow-hidden'); } catch {}
+            };
+
+            const requestNotifications = async () => {
+                setStatus('Requesting permission…');
+                try {
+                    if (typeof window.__vixoEnableWebPush !== 'function') {
+                        toast('Notifications are not available right now.', 'error');
+                        close();
+                        return;
+                    }
+
+                    const ok = await window.__vixoEnableWebPush();
+                    if (ok) {
+                        toast('Notifications enabled.', 'success');
+                    } else {
+                        // Not an error if user chose "Not now" in browser prompt.
+                        toast('Notifications not enabled.', 'info');
+                    }
+                } catch {
+                    toast('Could not enable notifications.', 'error');
+                }
+                close();
+            };
+
+            const bind = () => {
+                if (allowBtn) allowBtn.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} requestNotifications(); });
+                if (skipBtn) skipBtn.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} close(); });
+                if (skipX) skipX.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} close(); });
+                document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+            };
+
+            bind();
+
+            // Sequence with existing modals: wait for welcome, then location.
+            const waitForGone = (id, onDone) => {
+                const el = document.getElementById(id);
+                if (!el) { onDone(); return; }
+                try {
+                    const mo = new MutationObserver(() => {
+                        const cur = document.getElementById(id);
+                        if (!cur) { try { mo.disconnect(); } catch {} onDone(); }
+                    });
+                    mo.observe(document.body, { childList: true, subtree: true });
+
+                    // Fallback if it gets hidden instead of removed.
+                    window.setTimeout(() => {
+                        try {
+                            const cur2 = document.getElementById(id);
+                            if (!cur2) return;
+                            const hidden = cur2.getAttribute('aria-hidden') === 'true' || cur2.classList.contains('hidden') || cur2.style.display === 'none';
+                            if (hidden) { try { mo.disconnect(); } catch {} onDone(); }
+                        } catch {}
+                    }, 11000);
+                } catch {
+                    onDone();
+                }
+            };
+
+            waitForGone('welcome-modal', () => {
+                waitForGone('location-modal', () => {
+                    open();
+                });
+            });
+        })();
+    </script>
+    {% endif %}
+
     <!-- Footer removed (Contact lives in navbar) -->
 
     <script id="vixo-config" type="application/json">{
@@ -937,6 +1174,11 @@
             }
         }
     }</script>
+
+    {% if request.resolver_match and request.resolver_match.url_name|default:''|slice:':8' == 'account_' %}
+        <script src="https://cdn.jsdelivr.net/npm/tsparticles@2/tsparticles.bundle.min.js" defer></script>
+        <script src="{% static 'js/auth_particles.js' %}" defer></script>
+    {% endif %}
 
 {% block extra_body %}{% endblock %}
 </body>

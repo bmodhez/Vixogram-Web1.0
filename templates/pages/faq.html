@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+  <div class="rounded-2xl border border-gray-800 bg-gray-900/60 backdrop-blur p-6 sm:p-8 shadow-2xl shadow-black/20">
+    <h1 class="text-2xl sm:text-3xl font-extrabold text-white">FAQ</h1>
+    <p class="mt-2 text-gray-300 leading-6">Quick answers to common questions.</p>
+
+    <div id="faq_list" class="mt-6 space-y-4">
+      <div data-faq-item class="rounded-xl border border-gray-800 bg-gray-950/30 p-4">
+        <div class="text-sm font-semibold text-white">Is chat history saved?</div>
+        <p class="mt-1 text-sm text-gray-300">Yes. Your chat history is securely stored and available when you rejoin the room, unless messages are deleted manually.</p>
+      </div>
+
+      <div data-faq-item class="rounded-xl border border-gray-800 bg-gray-950/30 p-4">
+        <div class="text-sm font-semibold text-white">Can I use Vixogram on mobile and desktop?</div>
+        <p class="mt-1 text-sm text-gray-300">Yes. Vixogram works smoothly on mobile, tablet, and desktop browsers without installing any app.</p>
+      </div>
+
+      <div data-faq-item class="rounded-xl border border-gray-800 bg-gray-950/30 p-4">
+        <div class="text-sm font-semibold text-white">Are voice and video calls recorded?</div>
+        <p class="mt-1 text-sm text-gray-300">No. Voice and video calls are not recorded to protect user privacy.</p>
+      </div>
+
+      <div data-faq-item class="rounded-xl border border-gray-800 bg-gray-950/30 p-4">
+        <div class="text-sm font-semibold text-white">Can I upload images or files in chat?</div>
+        <p class="mt-1 text-sm text-gray-300">Yes. You can upload images and supported files directly inside chat rooms (limits may apply).</p>
+      </div>
+
+      <div data-faq-item class="rounded-xl border border-gray-800 bg-gray-950/30 p-4">
+        <div class="text-sm font-semibold text-white">What happens if I close the room?</div>
+        <p class="mt-1 text-sm text-gray-300">When a room is closed, all active calls end, and members are removed from the room.</p>
+      </div>
+
+      <div data-faq-item class="rounded-xl border border-gray-800 bg-gray-950/30 p-4">
+        <div class="text-sm font-semibold text-white">Can someone join my room without permission?</div>
+        <p class="mt-1 text-sm text-gray-300">No. Only users with a valid room code or invite link can join.</p>
+      </div>
+
+      <div data-faq-item class="rounded-xl border border-gray-800 bg-gray-950/30 p-4">
+        <div class="text-sm font-semibold text-white">Why can’t I send messages?</div>
+        <p class="mt-1 text-sm text-gray-300">This can happen if:</p>
+        <ul class="mt-2 text-sm text-gray-300 list-disc pl-5 space-y-1">
+          <li>The room is closed</li>
+          <li>You were blocked by the host</li>
+          <li>Your internet connection is unstable</li>
+        </ul>
+      </div>
+
+      <div data-faq-item class="rounded-xl border border-gray-800 bg-gray-950/30 p-4">
+        <div class="text-sm font-semibold text-white">Does Vixogram show online status?</div>
+        <p class="mt-1 text-sm text-gray-300">Yes. You can see when users are online or active in a room.</p>
+      </div>
+
+      <div data-faq-item class="rounded-xl border border-gray-800 bg-gray-950/30 p-4">
+        <div class="text-sm font-semibold text-white">Can I mute notifications?</div>
+        <p class="mt-1 text-sm text-gray-300">Yes. You can manage notification settings from Profile → Settings.</p>
+      </div>
+
+      <div data-faq-item class="rounded-xl border border-gray-800 bg-gray-950/30 p-4">
+        <div class="text-sm font-semibold text-white">Is there any age restriction?</div>
+        <p class="mt-1 text-sm text-gray-300">Yes. Users must be 13 years or older to use Vixogram.</p>
+      </div>
+
+      <div data-faq-item class="rounded-xl border border-gray-800 bg-gray-950/30 p-4">
+        <div class="text-sm font-semibold text-white">What if my call audio or video is not working?</div>
+        <p class="mt-1 text-sm text-gray-300">Check:</p>
+        <ul class="mt-2 text-sm text-gray-300 list-disc pl-5 space-y-1">
+          <li>Microphone / camera permissions</li>
+          <li>Internet connection</li>
+          <li>Browser settings</li>
+        </ul>
+        <p class="mt-2 text-sm text-gray-300">Refreshing the page usually fixes it.</p>
+      </div>
+
+      <div data-faq-item class="rounded-xl border border-gray-800 bg-gray-950/30 p-4">
+        <div class="text-sm font-semibold text-white">Does Vixogram use a lot of data?</div>
+        <p class="mt-1 text-sm text-gray-300">Chat uses very little data. Voice and video calls depend on call duration and network quality.</p>
+      </div>
+
+      <div data-faq-item class="rounded-xl border border-gray-800 bg-gray-950/30 p-4">
+        <div class="text-sm font-semibold text-white">Can I leave a room anytime?</div>
+        <p class="mt-1 text-sm text-gray-300">Yes. You can leave a room anytime without notifying others.</p>
+      </div>
+
+      <div data-faq-item class="rounded-xl border border-gray-800 bg-gray-950/30 p-4">
+        <div class="text-sm font-semibold text-white">Need more help?</div>
+        <p class="mt-1 text-sm text-gray-300">If your issue is account-specific, contact support from your profile menu.</p>
+        <div class="mt-2 flex flex-wrap gap-3">
+          <a class="inline-block text-sm text-indigo-200 hover:text-indigo-100" href="{% url 'help-center' %}">Help Center</a>
+          <a class="inline-block text-sm text-indigo-200 hover:text-indigo-100" href="{% url 'contact' %}">Contact Us</a>
+          <a class="inline-block text-sm text-indigo-200 hover:text-indigo-100" href="{% url 'contact-support' %}">Contact Support</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="faq_load_more_wrap" class="mt-6 flex justify-center">
+      <button
+        type="button"
+        id="faq_load_more_btn"
+        class="bg-gray-800 hover:bg-gray-700 text-white rounded-xl px-4 py-2 transition"
+        aria-controls="faq_list"
+      >
+        Load more
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_body %}
+<script>
+  (function () {
+    var BATCH_SIZE = 8;
+    var list = document.getElementById('faq_list');
+    var wrap = document.getElementById('faq_load_more_wrap');
+    var button = document.getElementById('faq_load_more_btn');
+    if (!list || !wrap || !button) return;
+
+    var items = Array.prototype.slice.call(list.querySelectorAll('[data-faq-item]'));
+    if (!items.length) return;
+
+    var visibleCount = Math.min(BATCH_SIZE, items.length);
+
+    function render() {
+      for (var i = 0; i < items.length; i++) {
+        if (i < visibleCount) {
+          items[i].classList.remove('hidden');
+        } else {
+          items[i].classList.add('hidden');
+        }
+      }
+
+      if (visibleCount >= items.length) {
+        wrap.classList.add('hidden');
+      } else {
+        wrap.classList.remove('hidden');
+      }
+    }
+
+    button.addEventListener('click', function () {
+      visibleCount = Math.min(visibleCount + BATCH_SIZE, items.length);
+      render();
+    });
+
+    render();
+  })();
+</script>
+{% endblock %}

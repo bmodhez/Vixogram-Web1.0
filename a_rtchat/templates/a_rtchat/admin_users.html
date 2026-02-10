@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load tz %}
 
 {% block content %}
 <div class="min-h-[calc(100vh-7rem)] py-6">
@@ -43,6 +44,7 @@
             <th class="px-4 py-3">Devices</th>
             <th class="px-4 py-3">Role</th>
             <th class="px-4 py-3">Chat</th>
+            <th class="px-4 py-3">Ban</th>
             <th class="px-4 py-3">Action</th>
           </tr>
         </thead>
@@ -57,7 +59,7 @@
                     {% for d in u.recent_devices %}
                       <div class="text-xs text-gray-300" title="{{ d.user_agent|default:'' }}">
                         <span class="font-semibold text-gray-200">{{ d.device_label|default:'Unknown device' }}</span>
-                        <span class="text-gray-500">• {{ d.last_seen|date:"Y-m-d H:i" }}</span>
+                        <span class="text-gray-500">• {{ d.last_seen|localtime|date:"Y-m-d H:i T" }}</span>
                       </div>
                     {% endfor %}
                   </div>
@@ -87,6 +89,41 @@
                 {% elif u.id == user.id %}
                   <span class="text-xs text-gray-400">You</span>
                 {% else %}
+                  {% if u.profile.chat_banned_until and u.profile.chat_banned_until > now %}
+                    <div class="text-xs">
+                      <div class="text-red-300 font-semibold">Banned</div>
+                      <div class="text-gray-400">Until {{ u.profile.chat_banned_until|localtime|date:"Y-m-d H:i T" }}</div>
+                    </div>
+                    <form method="post" action="{% url 'admin-user-ban' u.id %}" class="inline">
+                      {% csrf_token %}
+                      <input type="hidden" name="minutes" value="0" />
+                      <button type="submit" class="mt-2 text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg transition-colors">
+                        Unban
+                      </button>
+                    </form>
+                  {% else %}
+                    <form method="post" action="{% url 'admin-user-ban' u.id %}" class="flex items-center gap-2">
+                      {% csrf_token %}
+                      <select name="minutes" class="bg-gray-800/60 border border-gray-700 text-gray-100 rounded-lg px-2 py-2 text-xs">
+                        <option value="10">10 min</option>
+                        <option value="60">1 hour</option>
+                        <option value="1440">1 day</option>
+                        <option value="10080">7 days</option>
+                        <option value="43200">30 days</option>
+                      </select>
+                      <button type="submit" class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg transition-colors">
+                        Ban
+                      </button>
+                    </form>
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td class="px-4 py-3">
+                {% if u.is_superuser %}
+                  <span class="text-xs text-gray-400">Protected</span>
+                {% elif u.id == user.id %}
+                  <span class="text-xs text-gray-400">You</span>
+                {% else %}
                   <form method="post" action="{% url 'admin-user-toggle-block' u.id %}" class="inline">
                     {% csrf_token %}
                     {% if not u.profile.chat_blocked %}
@@ -104,7 +141,7 @@
             </tr>
           {% empty %}
             <tr class="bg-gray-900/40 text-gray-300">
-              <td class="px-4 py-6" colspan="6">No users found.</td>
+              <td class="px-4 py-6" colspan="7">No users found.</td>
             </tr>
           {% endfor %}
         </tbody>
