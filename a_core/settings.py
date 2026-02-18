@@ -384,6 +384,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'a_users.middleware.UserDeviceTrackingMiddleware',
+    'a_core.middleware.VpnProxyEnforcementMiddleware',
     'a_core.middleware.MaintenanceModeMiddleware',
     'a_users.middleware.ActiveUserRequiredMiddleware',
     'a_users.middleware.FounderClubEnforcementMiddleware',
@@ -423,6 +424,8 @@ TEMPLATES = [
                 'a_core.context_processors.welcome_popup',
                 'a_core.context_processors.location_popup',
                 'a_core.context_processors.notifications_popup',
+                'a_core.context_processors.email_verify_popup',
+                'a_core.context_processors.vpn_proxy_popup',
                 'a_core.context_processors.site_stats',
                 'a_users.context_processors.notifications_badge',
                 'a_users.context_processors.follow_requests_badge',
@@ -714,6 +717,12 @@ CALL_PRESENCE_RATE_PERIOD = int(os.environ.get('CALL_PRESENCE_RATE_PERIOD', '60'
 CALL_EVENT_RATE_LIMIT = int(os.environ.get('CALL_EVENT_RATE_LIMIT', '30'))
 CALL_EVENT_RATE_PERIOD = int(os.environ.get('CALL_EVENT_RATE_PERIOD', '60'))
 
+# VPN/proxy guard
+VPN_PROXY_GUARD_ENABLED = _env_bool('VPN_PROXY_GUARD_ENABLED', default=True)
+VPN_PROXY_BYPASS_ADMIN = _env_bool('VPN_PROXY_BYPASS_ADMIN', default=False)
+VPN_PROXY_STATUS_CACHE_SECONDS = int(os.environ.get('VPN_PROXY_STATUS_CACHE_SECONDS', '120'))
+VPN_PROXY_CHECK_INTERVAL_SECONDS = int(os.environ.get('VPN_PROXY_CHECK_INTERVAL_SECONDS', '5'))
+
 AGORA_TOKEN_RATE_LIMIT = int(os.environ.get('AGORA_TOKEN_RATE_LIMIT', '30'))
 AGORA_TOKEN_RATE_PERIOD = int(os.environ.get('AGORA_TOKEN_RATE_PERIOD', '300'))
 
@@ -782,7 +791,8 @@ if EMAIL_BACKEND == 'django.core.mail.backends.filebased.EmailBackend':
 
 # django-allauth (v65+) settings
 # Allow login using either email or username.
-ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
+# Product onboarding: username is chosen after the welcome popup (Step 1).
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
 ACCOUNT_LOGIN_METHODS = {'email', 'username'}
 
 # Remember-me behavior:

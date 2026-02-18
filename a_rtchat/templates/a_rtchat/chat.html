@@ -9,10 +9,9 @@
     <div class="flex flex-col lg:flex-row lg:items-stretch gap-0 sm:gap-4 lg:gap-6 min-w-0 max-w-full">
 
         <aside id="chat_sidebar" class="hidden lg:block w-full lg:w-72 shrink-0">
-            <div id="chat_sidebar_panel" data-chat-list class="vixo-chat-surface w-full max-w-md lg:max-w-none lg:w-72 h-[calc(100dvh-6rem)] sm:h-[calc(100dvh-6.5rem)] min-h-0 bg-gray-800/70 border border-gray-800 rounded-2xl shadow-2xl p-4 overflow-y-auto">
+            <div id="chat_sidebar_panel" data-chat-list class="vixo-chat-surface w-full max-w-none lg:max-w-none lg:w-72 h-[100dvh] lg:h-[calc(100dvh-6rem)] min-h-0 bg-gray-800/70 border-0 lg:border border-gray-800 rounded-none lg:rounded-2xl shadow-2xl p-3 lg:p-4 overflow-y-auto">
                 <div class="flex items-center justify-between gap-2 mb-3">
-                    <div class="text-sm font-semibold text-gray-200">Chats</div>
-                    <button type="button" id="chat_sidebar_close" class="lg:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-200 hover:bg-gray-800/60" aria-label="Close chats">×</button>
+                    <div class="text-base font-semibold text-gray-200">Chats</div>
                 </div>
 
             {% if user.is_staff %}
@@ -86,21 +85,25 @@
 
             <div class="mb-4">
                 <a data-chat-list-item href="{% url 'chatroom' 'public-chat' %}"
-                         class="block pr-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 transition-colors
-                         {% if chat_group.group_name == 'public-chat' %}pl-2 border-l-4 border-indigo-500 bg-indigo-500/10 text-emerald-400 font-semibold{% else %}px-3 text-gray-300{% endif %}">
-                    Public chat
+                         class="vixo-chat-room-link group flex items-center gap-3 rounded-xl border transition-colors
+                         {% if chat_group.group_name == 'public-chat' %}vixo-chat-room-link-active{% else %}vixo-chat-room-link-idle{% endif %}">
+                    <span class="vixo-chat-room-avatar">P</span>
+                    <span class="min-w-0 flex-1">
+                        <span class="vixo-chat-room-title">Public chat</span>
+                        <span class="vixo-chat-room-subtitle">Everyone can chat</span>
+                    </span>
                 </a>
             </div>
 
             {% if sidebar_groupchats %}
-                <div class="text-xs font-semibold text-gray-400 mb-2">Group chats</div>
+                <div class="text-sm font-semibold text-gray-400 mb-2">Group chats</div>
                 <div class="mb-4">
                     {% if sidebar_groupchat_sections %}
                         {% for section in sidebar_groupchat_sections %}
                             <div class="mt-3 mb-1">
                                 <button
                                     type="button"
-                                    class="w-full flex items-center justify-between gap-2 text-[11px] font-semibold text-gray-400 hover:text-gray-200 transition-colors"
+                                    class="w-full flex items-center justify-between gap-2 text-xs font-semibold text-gray-400 hover:text-gray-200 transition-colors"
                                     data-vixo-collapse-toggle
                                     data-vixo-collapse-key="group-section-{{ forloop.counter }}"
                                     aria-expanded="true"
@@ -117,9 +120,13 @@
                                         {% for room in section.rooms %}
                                             <li>
                                                 <a data-chat-list-item data-chat-list-scope="group" href="{% url 'chatroom' room.group_name %}"
-                                                              class="block pr-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 transition-colors
-                                                              {% if chat_group.group_name == room.group_name %}pl-2 border-l-4 border-indigo-500 bg-indigo-500/10 text-emerald-400 font-semibold{% else %}px-3 text-gray-300{% endif %}">
-                                                    {{ room.groupchat_name|default:room.group_name|slice:":30" }}
+                                                              class="vixo-groupchat-link vixo-chat-room-link group flex items-center gap-3 rounded-xl border transition-colors
+                                                              {% if chat_group.group_name == room.group_name %}vixo-chat-room-link-active{% else %}vixo-chat-room-link-idle{% endif %}">
+                                                    <span class="vixo-chat-room-avatar">{{ room.groupchat_name|default:room.group_name|first|upper }}</span>
+                                                    <span class="min-w-0 flex-1">
+                                                        <span class="vixo-chat-room-title">{{ room.groupchat_name|default:room.group_name|slice:":30" }}</span>
+                                                        <span class="vixo-chat-room-subtitle">Group chat</span>
+                                                    </span>
                                                 </a>
                                             </li>
                                         {% endfor %}
@@ -135,9 +142,13 @@
                                 {% for room in sidebar_groupchats_remaining %}
                                     <li>
                                         <a data-chat-list-item data-chat-list-scope="group" href="{% url 'chatroom' room.group_name %}"
-                                             class="block pr-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 transition-colors
-                                             {% if chat_group.group_name == room.group_name %}pl-2 border-l-4 border-indigo-500 bg-indigo-500/10 text-emerald-400 font-semibold{% else %}px-3 text-gray-300{% endif %}">
-                                            {{ room.groupchat_name|default:room.group_name|slice:":30" }}
+                                            class="vixo-groupchat-link vixo-chat-room-link group flex items-center gap-3 rounded-xl border transition-colors
+                                             {% if chat_group.group_name == room.group_name %}vixo-chat-room-link-active{% else %}vixo-chat-room-link-idle{% endif %}">
+                                            <span class="vixo-chat-room-avatar">{{ room.groupchat_name|default:room.group_name|first|upper }}</span>
+                                            <span class="min-w-0 flex-1">
+                                                <span class="vixo-chat-room-title">{{ room.groupchat_name|default:room.group_name|slice:":30" }}</span>
+                                                <span class="vixo-chat-room-subtitle">Group chat</span>
+                                            </span>
                                         </a>
                                     </li>
                                 {% endfor %}
@@ -148,9 +159,13 @@
                             {% for room in sidebar_groupchats %}
                                 <li>
                                     <a data-chat-list-item data-chat-list-scope="group" href="{% url 'chatroom' room.group_name %}"
-                                                    class="block pr-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 transition-colors
-                                                    {% if chat_group.group_name == room.group_name %}pl-2 border-l-4 border-indigo-500 bg-indigo-500/10 text-emerald-400 font-semibold{% else %}px-3 text-gray-300{% endif %}">
-                                        {{ room.groupchat_name|default:room.group_name|slice:":30" }}
+                                                    class="vixo-groupchat-link vixo-chat-room-link group flex items-center gap-3 rounded-xl border transition-colors
+                                                    {% if chat_group.group_name == room.group_name %}vixo-chat-room-link-active{% else %}vixo-chat-room-link-idle{% endif %}">
+                                        <span class="vixo-chat-room-avatar">{{ room.groupchat_name|default:room.group_name|first|upper }}</span>
+                                        <span class="min-w-0 flex-1">
+                                            <span class="vixo-chat-room-title">{{ room.groupchat_name|default:room.group_name|slice:":30" }}</span>
+                                            <span class="vixo-chat-room-subtitle">Group chat</span>
+                                        </span>
                                     </a>
                                 </li>
                             {% endfor %}
@@ -159,60 +174,94 @@
                 </div>
             {% endif %}
 
-            <div class="text-xs font-semibold text-gray-400 mb-2">Private rooms</div>
-            {% if chat_blocked %}
-                <div class="bg-gray-900/40 border border-gray-800 rounded-xl p-3 text-xs text-gray-300 mb-4">
-                    Private chats are disabled for your account.
-                </div>
-            {% else %}
-                <div class="space-y-2 mb-4">
-                    <form id="vixo-private-room-create-form" method="post" action="{% url 'private-room-create' %}" class="space-y-2" data-ajax="true">
-                        {% csrf_token %}
-                        {{ private_room_create_form.name }}
-                        <button type="submit" class="w-full bg-gray-800 hover:bg-gray-700 text-white rounded-lg px-3 py-2 text-sm transition-colors">
-                            Create private room
-                        </button>
-                    </form>
+            <div class="mt-3 mb-1">
+                <button
+                    type="button"
+                    class="w-full flex items-center justify-between gap-2 text-sm font-semibold text-gray-400 hover:text-gray-200 transition-colors"
+                    data-vixo-collapse-toggle
+                    data-vixo-collapse-key="private-rooms"
+                    aria-expanded="true"
+                >
+                    <span class="truncate">Private rooms</span>
+                    <svg class="w-3.5 h-3.5 shrink-0 transition-transform duration-200" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-vixo-collapse-chevron>
+                        <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.24 4.38a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+            </div>
+            <div data-vixo-collapse-body data-vixo-collapse-key="private-rooms" class="mt-2">
+                {% if chat_blocked %}
+                    <div class="bg-gray-900/40 border border-gray-800 rounded-xl p-3 text-xs text-gray-300 mb-4">
+                        Private chats are disabled for your account.
+                    </div>
+                {% else %}
+                    <div class="space-y-2 mb-4">
+                        <form id="vixo-private-room-create-form" method="post" action="{% url 'private-room-create' %}" class="space-y-2" data-ajax="true">
+                            {% csrf_token %}
+                            {{ private_room_create_form.name }}
+                            <button type="submit" class="w-full bg-gray-800 hover:bg-gray-700 text-white rounded-lg px-3 py-2 text-[15px] transition-colors">
+                                Create private room
+                            </button>
+                        </form>
 
-                    <form method="post" action="{% url 'private-room-join' %}" class="space-y-2">
-                        {% csrf_token %}
-                        {{ room_code_join_form.code }}
-                        <button type="submit" class="w-full bg-gray-800 hover:bg-gray-700 text-white rounded-lg px-3 py-2 text-sm transition-colors">
-                            Enter room code
-                        </button>
-                    </form>
-                </div>
-            {% endif %}
+                        <form id="vixo-private-room-join-form" method="post" action="{% url 'private-room-join' %}" class="space-y-2" novalidate>
+                            {% csrf_token %}
+                            {{ room_code_join_form.code }}
+                            <p data-room-code-error class="hidden px-1 text-xs text-rose-300"></p>
+                            <button type="submit" class="w-full bg-gray-800 hover:bg-gray-700 text-white rounded-lg px-3 py-2 text-[15px] transition-colors">
+                                Enter room code
+                            </button>
+                        </form>
+                    </div>
+                {% endif %}
 
-            {% if sidebar_code_rooms %}
-                <div class="text-xs font-semibold text-gray-400 mb-2">Your private rooms</div>
-                <ul class="space-y-1 mb-4">
-                    {% for room in sidebar_code_rooms %}
-                        <li>
-                            <a data-chat-list-item href="{% url 'chatroom' room.group_name %}"
-                                         data-private-room-item
-                                         data-private-room-group="{{ room.group_name }}"
-                                         {% if user == room.admin or user.is_staff %}data-private-room-rename-url="{% url 'private-room-rename' room.group_name %}"{% endif %}
-                                         class="block pr-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 transition-colors
-                                         {% if chat_group.group_name == room.group_name %}pl-2 border-l-4 border-indigo-500 bg-indigo-500/10 text-emerald-400 font-semibold{% else %}px-3 text-gray-300{% endif %}">
-                                <span data-private-room-title-for="{{ room.group_name }}">{{ room.code_room_name|default:room.room_code|slice:":30" }}</span>
-                            </a>
-                        </li>
-                    {% endfor %}
-                </ul>
-            {% endif %}
+                {% if sidebar_code_rooms %}
+                    <div class="text-sm font-semibold text-gray-400 mb-2">Your private rooms</div>
+                    <ul class="space-y-1 mb-4">
+                        {% for room in sidebar_code_rooms %}
+                            <li>
+                                <a data-chat-list-item href="{% url 'chatroom' room.group_name %}"
+                                             data-private-room-item
+                                             data-private-room-group="{{ room.group_name }}"
+                                             {% if user == room.admin or user.is_staff %}data-private-room-rename-url="{% url 'private-room-rename' room.group_name %}"{% endif %}
+                                             class="vixo-chat-room-link group flex items-center gap-3 rounded-xl border transition-colors
+                                             {% if chat_group.group_name == room.group_name %}vixo-chat-room-link-active{% else %}vixo-chat-room-link-idle{% endif %}">
+                                    <span class="flex items-center gap-3 min-w-0 w-full">
+                                        <span class="relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-700/80 bg-gray-800/70 text-xs font-bold text-gray-100 overflow-hidden">
+                                            {% if room.room_avatar %}
+                                                <img data-private-room-avatar-img-for="{{ room.group_name }}" src="{{ room.room_avatar.url }}" alt="{{ room.code_room_name|default:room.room_code|default:room.group_name }}" class="h-full w-full object-cover" />
+                                                <span data-private-room-avatar-fallback-for="{{ room.group_name }}" class="hidden"></span>
+                                            {% else %}
+                                                <img data-private-room-avatar-img-for="{{ room.group_name }}" src="" alt="{{ room.code_room_name|default:room.room_code|default:room.group_name }}" class="hidden h-full w-full object-cover" />
+                                                <span data-private-room-avatar-fallback-for="{{ room.group_name }}">{{ room.code_room_name|default:room.room_code|default:room.group_name|first|upper }}</span>
+                                            {% endif %}
+                                        </span>
+                                        <span class="flex min-w-0 flex-col">
+                                            <span class="vixo-chat-room-title truncate" data-private-room-title-for="{{ room.group_name }}">{{ room.code_room_name|default:room.room_code|slice:":30" }}</span>
+                                            <span class="vixo-chat-room-subtitle" data-private-room-subtitle-for="{{ room.group_name }}">{{ room.room_description|default:'Private room'|truncatechars:60 }}</span>
+                                        </span>
+                                    </span>
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
 
             {% if sidebar_privatechats %}
-                <div class="text-xs font-semibold text-gray-400 mb-2">Direct</div>
+                <div class="text-sm font-semibold text-gray-400 mb-2">Direct</div>
                 <ul class="space-y-1">
                     {% for room in sidebar_privatechats %}
                         <li>
-                            <a data-chat-list-item href="{% url 'chatroom' room.group_name %}"
-                               class="block pr-3 py-2 rounded-lg text-sm hover:bg-gray-800/60 transition-colors
-                               {% if chat_group.group_name == room.group_name %}pl-2 border-l-4 border-indigo-500 bg-indigo-500/10 text-emerald-400 font-semibold{% else %}px-3 text-gray-300{% endif %}">
+                                     <a data-chat-list-item href="{% url 'chatroom' room.group_name %}"
+                                         class="vixo-chat-room-link group flex items-center gap-3 rounded-xl border transition-colors
+                               {% if chat_group.group_name == room.group_name %}vixo-chat-room-link-active{% else %}vixo-chat-room-link-idle{% endif %}">
                                 {% for member in room.members.all %}
                                     {% if member != user %}
-                                        {{ member.profile.name|default:member.username|slice:":30" }}
+                                        <span class="vixo-chat-room-avatar">{{ member.profile.name|default:member.username|first|upper }}</span>
+                                        <span class="min-w-0 flex-1">
+                                            <span class="vixo-chat-room-title">{{ member.profile.name|default:member.username|slice:":30" }}</span>
+                                            <span class="vixo-chat-room-subtitle">Direct message</span>
+                                        </span>
                                     {% endif %}
                                 {% endfor %}
                             </a>
@@ -227,16 +276,8 @@
         
         <div id="chat_topbar" class="vixo-chat-surface flex items-center justify-between gap-2 text-emerald-400 bg-gray-900/60 p-2 sticky top-0 z-10 border-b border-gray-800 rounded-none sm:rounded-t-2xl">
             <div class="flex items-center min-w-0 flex-1">
-                <button type="button" id="chat_sidebar_open" class="lg:hidden mr-2 inline-flex h-9 w-9 items-center justify-center rounded-lg bg-gray-800/60 hover:bg-gray-800 text-gray-100" aria-label="Open chats">
-                    <span class="block w-5">
-                        <span class="block h-0.5 w-5 bg-gray-100 rounded"></span>
-                        <span class="block h-0.5 w-5 bg-gray-100 rounded mt-1"></span>
-                        <span class="block h-0.5 w-5 bg-gray-100 rounded mt-1"></span>
-                    </span>
-                </button>
-
                 {% if chat_group.is_code_room %}
-                {% if user == chat_group.admin or user.is_staff %}
+                {% if is_room_admin %}
                     <div class="relative mr-2">
                         <button
                             type="button"
@@ -274,20 +315,18 @@
                 {% endif %}
                 {% endif %}
                 {% if chat_group.is_code_room %}
-                    <span class="ml-3 hidden sm:inline-flex text-xs text-gray-100 min-w-0 truncate items-center gap-1" data-private-room-title-wrap>
+                    <span class="ml-3 hidden sm:inline-flex text-xs text-gray-100 min-w-0 truncate items-center gap-2" data-private-room-title-wrap>
+                        <span class="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-700/80 bg-gray-800/70 text-[11px] font-bold text-gray-100 overflow-hidden" title="Room profile">
+                            {% if chat_group.room_avatar %}
+                                <img id="vixo_top_room_avatar" src="{{ chat_group.room_avatar.url }}" alt="{{ chat_group.code_room_name|default:chat_group.room_code|default:chat_group.group_name }}" class="h-full w-full object-cover" />
+                                <span id="vixo_top_room_avatar_fallback" class="hidden"></span>
+                            {% else %}
+                                <img id="vixo_top_room_avatar" src="" alt="{{ chat_group.code_room_name|default:chat_group.room_code|default:chat_group.group_name }}" class="hidden h-full w-full object-cover" />
+                                <span id="vixo_top_room_avatar_fallback">{{ chat_group.code_room_name|default:chat_group.room_code|default:chat_group.group_name|first|upper }}</span>
+                            {% endif %}
+                        </span>
                         <span class="text-gray-300">Room:</span>
                         <span id="vixo_private_room_title" class="font-semibold text-gray-100 truncate">{{ chat_group.code_room_name|default:chat_group.room_code|default:chat_group.group_name }}</span>
-                        {% if user == chat_group.admin or user.is_staff %}
-                            <button
-                                type="button"
-                                class="inline-flex h-6 w-6 items-center justify-center rounded-md bg-gray-800/60 hover:bg-gray-800 text-gray-100"
-                                title="Rename room"
-                                aria-label="Rename room"
-                                data-private-room-rename
-                                data-private-room-group="{{ chat_group.group_name }}"
-                                data-private-room-rename-url="{% url 'private-room-rename' chatroom_name %}"
-                            >✏️</button>
-                        {% endif %}
                     </span>
                 {% endif %}
 
@@ -295,8 +334,17 @@
 
             <div class="flex items-center gap-2 justify-end shrink-0 flex-nowrap whitespace-nowrap">
                 {% if chat_group.is_private and not chat_blocked %}
+                    <button
+                        type="button"
+                        id="vixo_private_settings_btn"
+                        class="h-8 w-8 inline-flex items-center justify-center rounded-lg bg-gray-800 hover:bg-gray-700 text-white transition-colors"
+                        title="Group settings"
+                        aria-label="Group settings"
+                    >
+                        <span aria-hidden="true" class="vixo-settings-gear inline-block">⚙️</span>
+                    </button>
                     <button type="button" id="challenge_drawer_open" class="h-8 text-[11px] sm:text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 sm:px-3 rounded-lg transition-colors whitespace-nowrap">
-                        🎮 <span class="hidden sm:inline">Challenge</span>
+                        <span aria-hidden="true" class="vixo-challenge-icon inline-block">🎮</span> <span class="hidden sm:inline">Challenge</span>
                     </button>
                     <button type="button" id="challenge_cancel_btn" class="h-8 text-[11px] sm:text-xs bg-gray-800 hover:bg-gray-700 text-white px-2.5 sm:px-3 rounded-lg transition-colors hidden whitespace-nowrap">
                         <span class="sm:hidden">End</span><span class="hidden sm:inline">End</span>
@@ -313,16 +361,6 @@
                     </div>
                 {% endif %}
 
-                {% if chat_group.admin and user == chat_group.admin or user.is_staff %}
-                    <form method="post" action="{% url 'chatroom-close' chatroom_name %}"
-                          data-confirm="Close this room? This will delete the room and all messages/uploads."
-                          data-confirm-title="Close room">
-                        {% csrf_token %}
-                        <button type="submit" class="text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
-                            Close room
-                        </button>
-                    </form>
-                {% endif %}
             </div>
         </div>
 
@@ -347,43 +385,200 @@
                             title="Members"
                         >
                             <span class="text-gray-300">Members</span>
-                            <span class="text-[11px] font-bold text-emerald-300">{{ chat_group_members|length }}</span>
+                            <span id="vixo_members_count" class="text-[11px] font-bold text-emerald-300">{{ chat_group_members|length }}</span>
                         </button>
 
                         <div
                             id="vixo_members_panel"
-                            class="hidden absolute right-0 sm:left-0 sm:right-auto mt-2 w-[16rem] max-w-[calc(100vw-1rem)] rounded-2xl border border-gray-800 bg-gray-900/95 backdrop-blur-sm shadow-2xl overflow-hidden z-50"
+                            class="hidden opacity-0 scale-95 fixed inset-x-2 top-[7.4rem] sm:absolute sm:inset-x-auto sm:top-auto right-0 sm:left-0 sm:right-auto mt-0 sm:mt-2 w-auto sm:w-[22rem] max-w-[calc(100vw-1rem)] rounded-2xl border border-gray-800 bg-gray-900/95 backdrop-blur-sm shadow-2xl overflow-hidden z-50 transition duration-200 ease-out origin-top-center sm:origin-top-left"
                             role="dialog"
-                            aria-label="Members"
+                            aria-label="Group settings"
+                            data-settings-url="{{ private_settings_url }}"
                         >
-                            <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
-                                <div class="text-xs font-semibold text-gray-100">Members</div>
-                                <button type="button" id="vixo_members_close" class="inline-flex h-7 w-7 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60" aria-label="Close">×</button>
+                            <div class="px-2.5 sm:px-3 py-2 border-b border-gray-800 flex items-center justify-between gap-2">
+                                <div class="inline-flex items-center gap-1 rounded-xl bg-gray-900/60 p-1">
+                                    <button type="button" id="vixo_panel_tab_members" class="vixo-panel-tab active rounded-lg px-2 py-1 text-[10px] sm:text-[11px] font-semibold text-gray-100 bg-gray-800/80">Members</button>
+                                    <button type="button" id="vixo_panel_tab_settings" class="vixo-panel-tab rounded-lg px-2 py-1 text-[10px] sm:text-[11px] font-semibold text-gray-300 hover:text-gray-100">Settings</button>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button type="button" id="vixo_member_invite_toggle" class="inline-flex items-center gap-1 rounded-lg bg-gray-800/60 hover:bg-gray-800 text-gray-100 px-2 py-1 text-[10px] sm:text-[11px] font-semibold{% if not_member %} hidden{% endif %}{% if not is_room_admin_ui and not chat_group.allow_members_invite_others %} opacity-40 cursor-not-allowed{% endif %}" aria-label="Add member" {% if not is_room_admin_ui and not chat_group.allow_members_invite_others %}disabled{% endif %}>Add</button>
+                                    <button type="button" id="vixo_members_close" class="inline-flex h-7 w-7 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60" aria-label="Close">×</button>
+                                </div>
                             </div>
-                            <div class="max-h-[16rem] overflow-y-auto p-2">
+
+                            <div id="vixo_panel_members" class="max-h-[calc(72dvh-3.6rem)] sm:max-h-[20rem] overflow-y-auto p-2 transition duration-200 ease-out">
                                 {% if chat_group_members %}
-                                    <div class="space-y-1">
+                                    <div class="space-y-1" id="vixo_members_list">
                                         {% for m in chat_group_members %}
-                                            <div class="px-2 py-1.5 rounded-xl border border-gray-800 bg-gray-900/40 text-xs text-gray-100 flex items-center justify-between gap-2" data-member-row data-member-user-id="{{ m.id }}">
-                                                <div class="min-w-0 truncate">{{ m.profile.name|default:m.username }}{% if m == user %} <span class="text-gray-400 font-semibold">(you)</span>{% endif %}</div>
-                                                {% if user == chat_group.admin or user.is_staff %}
+                                            <div
+                                                class="px-2 py-2 rounded-xl border border-gray-800 bg-gray-900/40 text-sm text-gray-100 flex items-center justify-between gap-2 select-none
+                                                {% if is_room_admin_ui %}{% if m != user and m != chat_group.admin %}cursor-pointer hover:bg-gray-900/55{% endif %}{% endif %}"
+                                                data-member-row
+                                                data-member-user-id="{{ m.id }}"
+                                                {% if is_room_admin_ui %}
                                                     {% if m != user and m != chat_group.admin %}
-                                                        <button
-                                                            type="button"
-                                                            class="shrink-0 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[11px] font-semibold text-red-200 hover:bg-red-500/15"
-                                                            data-member-remove
-                                                            data-member-remove-url="{% url 'chatroom-member-remove' chatroom_name m.id %}"
-                                                        >Remove</button>
+                                                        data-member-actionable="1"
+                                                        data-member-name="{{ m.profile.name|default:m.username|escape }}"
+                                                        data-member-remove-url="{% url 'chatroom-member-remove' chatroom_name m.id %}"
+                                                        data-member-make-admin-url="{% url 'chatroom-member-make-admin' chatroom_name m.id %}"
+                                                        data-member-remove-admin-url="{% url 'chatroom-member-remove-admin' chatroom_name m.id %}"
+                                                        {% if m.id in room_admin_ids %}data-member-is-admin="1"{% else %}data-member-is-admin="0"{% endif %}
+                                                        data-member-mute-url="{% url 'chatroom-member-mute' chatroom_name m.id %}"
                                                     {% endif %}
                                                 {% endif %}
+                                            >
+                                                <div class="min-w-0 flex items-center gap-2.5">
+                                                    <span class="h-8 w-8 shrink-0 rounded-full border border-gray-700 bg-gray-800 overflow-hidden">
+                                                        <img src="{{ m.profile.avatar }}" alt="@{{ m.username }}" class="h-full w-full object-cover" />
+                                                    </span>
+                                                    <div class="min-w-0 truncate">{{ m.profile.name|default:m.username }}{% if m == user %} <span class="text-gray-400 font-semibold">(you)</span>{% endif %}</div>
+                                                </div>
+                                                <div class="shrink-0 flex items-center gap-2">
+                                                    {% if m.id in room_admin_ids %}
+                                                        <span class="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] font-extrabold text-emerald-200" data-admin-badge>Admin</span>
+                                                    {% endif %}
+                                                </div>
                                             </div>
                                         {% endfor %}
                                     </div>
                                 {% else %}
-                                    <div class="text-xs text-gray-400 px-2 py-3">No members</div>
+                                    <div class="text-xs text-gray-400 px-2 py-3" id="vixo_members_empty">No members</div>
+                                {% endif %}
+                            </div>
+
+                            <div id="vixo_panel_settings" class="vixo-settings-pane hidden max-h-[calc(72dvh-3.6rem)] sm:max-h-[20rem] overflow-y-auto p-2.5 sm:p-3 transition duration-200 ease-out opacity-0 -translate-y-1">
+                                {% if is_room_admin_ui %}
+                                    <div class="vixo-settings-card">
+                                        <div class="vixo-settings-title">Settings</div>
+
+                                        <div class="vixo-settings-field-row">
+                                            <span class="vixo-settings-field-icon" aria-hidden="true">✎</span>
+                                            <input id="vixo_settings_room_name" type="text" maxlength="35" value="{{ chat_group.code_room_name|default:chat_group.groupchat_name|default:'' }}" class="vixo-settings-input" placeholder="Change Room Name" />
+                                        </div>
+
+                                        <div class="vixo-settings-field-row items-start">
+                                            <span class="vixo-settings-field-icon mt-1" aria-hidden="true">📝</span>
+                                            <textarea id="vixo_settings_room_description" rows="2" maxlength="300" class="vixo-settings-input min-h-[4rem] resize-y" placeholder="Group bio">{{ chat_group.room_description|default:'' }}</textarea>
+                                        </div>
+
+                                        <label class="vixo-settings-toggle-row">
+                                            <span class="vixo-settings-row-label">🛡️ Only admins can message</span>
+                                            <span class="relative inline-flex items-center cursor-pointer select-none">
+                                                <input id="vixo_settings_admin_only" type="checkbox" class="sr-only peer" {% if chat_group.only_admins_can_send %}checked{% endif %} />
+                                                <span class="h-6 w-11 rounded-full bg-gray-700 transition-all duration-300 peer-checked:bg-gradient-to-r peer-checked:from-purple-500 peer-checked:via-indigo-500 peer-checked:to-teal-400"></span>
+                                                <span class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-300 peer-checked:translate-x-5"></span>
+                                            </span>
+                                        </label>
+
+                                        <label class="vixo-settings-toggle-row">
+                                            <span class="vixo-settings-row-label">🖼️ Allow Photos/Videos</span>
+                                            <span class="relative inline-flex items-center cursor-pointer select-none">
+                                                <input id="vixo_settings_media_allowed" type="checkbox" class="sr-only peer" {% if chat_group.allow_media_uploads %}checked{% endif %} />
+                                                <span class="h-6 w-11 rounded-full bg-gray-700 transition-all duration-300 peer-checked:bg-gradient-to-r peer-checked:from-purple-500 peer-checked:via-indigo-500 peer-checked:to-teal-400"></span>
+                                                <span class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-300 peer-checked:translate-x-5"></span>
+                                            </span>
+                                        </label>
+
+                                        <label class="vixo-settings-toggle-row">
+                                            <span class="vixo-settings-row-label">👥 Allow members to invite others</span>
+                                            <span class="relative inline-flex items-center cursor-pointer select-none">
+                                                <input id="vixo_settings_members_invite_allowed" type="checkbox" class="sr-only peer" {% if chat_group.allow_members_invite_others %}checked{% endif %} />
+                                                <span class="h-6 w-11 rounded-full bg-gray-700 transition-all duration-300 peer-checked:bg-gradient-to-r peer-checked:from-purple-500 peer-checked:via-indigo-500 peer-checked:to-teal-400"></span>
+                                                <span class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-300 peer-checked:translate-x-5"></span>
+                                            </span>
+                                        </label>
+
+                                        <div class="vixo-settings-social-wrap">
+                                            <div class="vixo-settings-social-title">Social Invite Link</div>
+                                            <div class="vixo-settings-social-row">
+                                                <div class="vixo-settings-slow-chips" role="group" aria-label="Social Invite Link timer">
+                                                    <button type="button" class="vixo-settings-slow-chip" data-slow-option="0">Off</button>
+                                                    <button type="button" class="vixo-settings-slow-chip" data-slow-option="10">10s</button>
+                                                    <button type="button" class="vixo-settings-slow-chip" data-slow-option="20">20s</button>
+                                                    <button type="button" class="vixo-settings-slow-chip" data-slow-option="30">30s</button>
+                                                </div>
+                                                <button type="button" id="vixo_settings_reset_invite" class="vixo-settings-link-reset" title="Reset invite link" aria-label="Reset invite link">🔒</button>
+                                            </div>
+                                            <select id="vixo_settings_slow_mode" class="hidden">
+                                                <option value="0" {% if chat_group.slow_mode_seconds|default:0 == 0 %}selected{% endif %}>Off</option>
+                                                <option value="10" {% if chat_group.slow_mode_seconds|default:0 == 10 %}selected{% endif %}>10s</option>
+                                                <option value="20" {% if chat_group.slow_mode_seconds|default:0 == 20 %}selected{% endif %}>20s</option>
+                                                <option value="30" {% if chat_group.slow_mode_seconds|default:0 == 30 %}selected{% endif %}>30s</option>
+                                            </select>
+                                        </div>
+
+                                        <button type="button" id="vixo_settings_save" class="vixo-settings-save-btn">Save Changes</button>
+                                        <div id="vixo_settings_status" class="hidden text-[11px] text-emerald-300"></div>
+                                    </div>
+
+                                    <input id="vixo_settings_room_avatar" type="file" accept="image/*" class="hidden" />
+                                    {% if chat_group.room_avatar %}
+                                        <img id="vixo_settings_room_avatar_preview" src="{{ chat_group.room_avatar.url }}" alt="Room avatar" class="hidden h-10 w-10 rounded-xl border border-gray-800 object-cover" />
+                                    {% else %}
+                                        <img id="vixo_settings_room_avatar_preview" src="" alt="Room avatar" class="hidden h-10 w-10 rounded-xl border border-gray-800 object-cover" />
+                                    {% endif %}
+
+                                    <form method="post" action="{% url 'chatroom-close' chatroom_name %}"
+                                          data-confirm="Close this room? This will delete the room and all messages/uploads."
+                                          data-confirm-title="Close room"
+                                          class="mt-2">
+                                        {% csrf_token %}
+                                        <button type="submit" class="w-full inline-flex items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] font-extrabold text-red-100 hover:bg-red-500/15 transition-colors">
+                                            Close room
+                                        </button>
+                                    </form>
+                                {% else %}
+                                    <div class="text-xs text-gray-400">Only room admins can edit settings.</div>
+                                    {% if not not_member %}
+                                        <form method="post" action="{% url 'chatroom-leave' chatroom_name %}"
+                                              data-confirm="Leave this room?"
+                                              data-confirm-title="Leave room"
+                                              class="mt-2">
+                                            {% csrf_token %}
+                                            <button type="submit" class="w-full inline-flex items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] font-extrabold text-amber-100 hover:bg-amber-500/15 transition-colors">
+                                                Leave room
+                                            </button>
+                                        </form>
+                                    {% endif %}
                                 {% endif %}
                             </div>
                         </div>
+
+                        {% if not not_member %}
+                            <div id="vixo_member_invite_modal" class="fixed inset-0 z-[960] hidden" aria-hidden="true" role="dialog" aria-label="Invite member">
+                                <div class="absolute inset-0 bg-black/60" id="vixo_member_invite_overlay"></div>
+                                <div class="relative min-h-full flex items-center justify-center p-4 pointer-events-none">
+                                    <div class="w-full max-w-sm pointer-events-auto">
+                                        <div class="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900/95 backdrop-blur-sm shadow-2xl">
+                                            <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
+                                                <div class="text-xs font-semibold text-gray-100">Invite member</div>
+                                                <button type="button" id="vixo_member_invite_close" class="inline-flex h-7 w-7 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60" aria-label="Close">×</button>
+                                            </div>
+                                            <div class="px-3 py-3 border-b border-gray-800 bg-gray-900/60">
+                                                <input
+                                                    id="vixo_member_invite_input"
+                                                    type="text"
+                                                    autocomplete="off"
+                                                    placeholder="Search username…"
+                                                    class="w-full rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-xs text-gray-100 placeholder:text-gray-500 outline-none focus:border-emerald-500/40"
+                                                />
+                                                <div class="mt-2 text-[11px] text-gray-400">Select a user to send invite.</div>
+                                            </div>
+                                            <div id="vixo_member_invite_results" class="p-2 space-y-1 min-h-[11rem]"></div>
+                                            <div class="px-3 pb-3 flex items-center justify-end">
+                                                <button
+                                                    type="button"
+                                                    id="vixo_member_invite_next"
+                                                    class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-800 bg-gray-900/40 text-gray-100 hover:bg-gray-900/55 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                    aria-label="Next 4 users"
+                                                    title="Next 4 users"
+                                                >→</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endif %}
                         </div>
                     </div>
 
@@ -408,17 +603,6 @@
                     <div class="sm:hidden mt-1 w-full mx-auto flex flex-wrap items-center justify-center gap-2 text-center" data-room-code-wrap>
                         <span class="text-gray-300">Room:</span>
                         <span id="vixo_private_room_title_inline" class="font-semibold text-gray-100 whitespace-normal break-words">{{ chat_group.code_room_name|default:chat_group.room_code|default:chat_group.group_name }}</span>
-                        {% if user == chat_group.admin or user.is_staff %}
-                            <button
-                                type="button"
-                                class="inline-flex h-6 w-6 items-center justify-center rounded-md bg-gray-800/60 hover:bg-gray-800 text-gray-100"
-                                title="Rename room"
-                                aria-label="Rename room"
-                                data-private-room-rename
-                                data-private-room-group="{{ chat_group.group_name }}"
-                                data-private-room-rename-url="{% url 'private-room-rename' chatroom_name %}"
-                            >✏️</button>
-                        {% endif %}
                         <span class="mx-1 text-gray-500">•</span>
                         <span class="text-gray-300">Code:</span>
                         <button
@@ -432,10 +616,11 @@
                         <span data-room-code-copied class="inline-block text-[10px] font-semibold text-emerald-300 transition-all duration-200 ease-out opacity-0 -translate-y-0.5 scale-95 invisible">Code copied</span>
                     </div>
                 {% endif %}
+
             </div>
         {% endif %}
 
-        <div id="vixo_confirm_modal" class="fixed inset-0 z-[80] hidden" aria-hidden="true" role="dialog" aria-modal="true">
+        <div id="vixo_confirm_modal" class="fixed inset-0 z-[1002] hidden" aria-hidden="true" role="dialog" aria-modal="true">
             <div class="absolute inset-0 bg-black/60 vixo-modal-overlay"></div>
             <div class="relative min-h-full flex items-center justify-center p-6 pointer-events-none">
                 <div class="w-full max-w-sm pointer-events-auto">
@@ -454,12 +639,75 @@
             </div>
         </div>
 
+        <div id="vixo_member_actions_menu" class="hidden fixed z-[90] w-[15rem] max-w-[calc(100vw-1rem)]">
+            <div class="rounded-2xl border border-gray-800 bg-gray-900/95 backdrop-blur-sm shadow-2xl overflow-visible">
+                <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
+                    <div class="text-xs font-semibold text-gray-100" id="vixo_member_actions_title">Member</div>
+                    <button type="button" id="vixo_member_actions_close" class="inline-flex h-7 w-7 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60" aria-label="Close">×</button>
+                </div>
+                <div class="p-2 space-y-1">
+                    <button type="button" id="vixo_member_action_admin_toggle" data-member-action="make_admin" class="w-full text-left rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-xs font-semibold text-gray-100 hover:bg-gray-900/55">Make admin</button>
+                    <button type="button" data-member-action="remove" class="w-full text-left rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-extrabold text-red-100 hover:bg-red-500/15">Remove from group</button>
+
+                    <button type="button" id="vixo_member_action_mute_toggle" data-member-action="mute_toggle" class="w-full text-left rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-xs font-semibold text-gray-100 hover:bg-gray-900/55">Mute user</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="vixo_member_mute_options" class="hidden fixed z-[91] w-[12rem] max-w-[calc(100vw-1rem)]">
+            <div class="rounded-2xl border border-gray-800 bg-gray-900/95 backdrop-blur-sm shadow-2xl overflow-hidden p-2 space-y-1">
+                <button type="button" data-member-action="mute" data-mute-seconds="300" class="w-full text-left rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-xs font-semibold text-gray-100 hover:bg-gray-900/55">Mute 5 min</button>
+                <button type="button" data-member-action="mute" data-mute-seconds="1800" class="w-full text-left rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-xs font-semibold text-gray-100 hover:bg-gray-900/55">Mute 30 min</button>
+                <button type="button" data-member-action="mute" data-mute-seconds="3600" class="w-full text-left rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-xs font-semibold text-gray-100 hover:bg-gray-900/55">Mute 1 hour</button>
+                <button type="button" data-member-action="unmute" class="w-full text-left rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-2 text-xs font-semibold text-gray-100 hover:bg-gray-900/55">Unmute user</button>
+            </div>
+        </div>
+
         <script>
             (function () {
                 const btn = document.getElementById('vixo_members_btn');
+                const settingsBtn = document.getElementById('vixo_private_settings_btn');
                 const panel = document.getElementById('vixo_members_panel');
                 const closeBtn = document.getElementById('vixo_members_close');
                 if (!btn || !panel) return;
+
+                const tabMembersBtn = document.getElementById('vixo_panel_tab_members');
+                const tabSettingsBtn = document.getElementById('vixo_panel_tab_settings');
+                const panelMembers = document.getElementById('vixo_panel_members');
+                const panelSettings = document.getElementById('vixo_panel_settings');
+                const settingsUrl = panel.getAttribute('data-settings-url') || '';
+
+                const settingsName = document.getElementById('vixo_settings_room_name');
+                const settingsAvatarInput = document.getElementById('vixo_settings_room_avatar');
+                const settingsAvatarPreview = document.getElementById('vixo_settings_room_avatar_preview');
+                const settingsDescription = document.getElementById('vixo_settings_room_description');
+                const settingsAdminOnly = document.getElementById('vixo_settings_admin_only');
+                const settingsMediaAllowed = document.getElementById('vixo_settings_media_allowed');
+                const settingsMembersInviteAllowed = document.getElementById('vixo_settings_members_invite_allowed');
+                const settingsSlowMode = document.getElementById('vixo_settings_slow_mode');
+                const settingsSlowOptions = Array.from(document.querySelectorAll('[data-slow-option]'));
+                const settingsResetInvite = document.getElementById('vixo_settings_reset_invite');
+                const settingsSave = document.getElementById('vixo_settings_save');
+                const settingsStatus = document.getElementById('vixo_settings_status');
+
+                const pinnedBanner = document.getElementById('vixo_pinned_banner');
+                const pinnedBannerText = document.getElementById('vixo_pinned_banner_text');
+                const topRoomTitle = document.getElementById('vixo_private_room_title');
+                const topRoomInlineTitle = document.getElementById('vixo_private_room_title_inline');
+                const publicRoomDescriptionWrap = document.getElementById('vixo_public_room_description_wrap');
+                const publicRoomDescription = document.getElementById('vixo_public_room_description');
+                const topRoomAvatar = document.getElementById('vixo_top_room_avatar');
+                const topRoomAvatarFallback = document.getElementById('vixo_top_room_avatar_fallback');
+                const roomCodeButtons = Array.from(document.querySelectorAll('[data-room-code-copy]'));
+                const currentRoomGroup = '{{ chat_group.group_name|escapejs }}';
+                const viewerIsRoomAdmin = {% if is_room_admin %}true{% else %}false{% endif %};
+                const viewerCanManageRoom = {% if is_room_admin_ui %}true{% else %}false{% endif %};
+                const viewerIsMember = {% if not_member %}false{% else %}true{% endif %};
+
+                let panelTab = 'members';
+                let currentRoomSettings = (() => {
+                    try { return JSON.parse('{{ room_settings_json|escapejs }}') || {}; } catch { return {}; }
+                })();
 
                 const confirmModal = document.getElementById('vixo_confirm_modal');
                 const confirmTitle = document.getElementById('vixo_confirm_title');
@@ -475,16 +723,37 @@
                         if (confirmResolve) confirmResolve(!!value);
                     } catch {}
                     confirmResolve = null;
+                    // Always restore confirm UI (alerts may hide some controls).
+                    try { if (confirmCancel) confirmCancel.classList.remove('hidden'); } catch {}
+                    try { if (confirmX) confirmX.classList.remove('hidden'); } catch {}
                     try { if (confirmModal) confirmModal.classList.add('hidden'); } catch {}
                     try { if (confirmModal) confirmModal.setAttribute('aria-hidden', 'true'); } catch {}
                     try { document.body.classList.remove('overflow-hidden'); } catch {}
                 };
 
-                const vixoConfirm = (message) => {
+                const vixoConfirm = (message, okLabel) => {
                     return new Promise((resolve) => {
                         confirmResolve = resolve;
                         try { if (confirmTitle) confirmTitle.textContent = 'Confirm'; } catch {}
                         try { if (confirmMsg) confirmMsg.textContent = String(message || ''); } catch {}
+                        try { if (confirmOk) confirmOk.textContent = String(okLabel || 'OK'); } catch {}
+                        try { if (confirmCancel) confirmCancel.classList.remove('hidden'); } catch {}
+                        try { if (confirmX) confirmX.classList.remove('hidden'); } catch {}
+                        try { if (confirmModal) confirmModal.classList.remove('hidden'); } catch {}
+                        try { if (confirmModal) confirmModal.setAttribute('aria-hidden', 'false'); } catch {}
+                        try { document.body.classList.add('overflow-hidden'); } catch {}
+                    });
+                };
+
+                const vixoAlert = (message, title) => {
+                    return new Promise((resolve) => {
+                        confirmResolve = resolve;
+                        try { if (confirmTitle) confirmTitle.textContent = String(title || 'Notice'); } catch {}
+                        try { if (confirmMsg) confirmMsg.textContent = String(message || ''); } catch {}
+                        try { if (confirmOk) confirmOk.textContent = 'OK'; } catch {}
+                        // Alert: OK only
+                        try { if (confirmCancel) confirmCancel.classList.add('hidden'); } catch {}
+                        try { if (confirmX) confirmX.classList.add('hidden'); } catch {}
                         try { if (confirmModal) confirmModal.classList.remove('hidden'); } catch {}
                         try { if (confirmModal) confirmModal.setAttribute('aria-hidden', 'false'); } catch {}
                         try { document.body.classList.add('overflow-hidden'); } catch {}
@@ -527,18 +796,66 @@
                     }
                 };
 
+                const setActiveTab = (tabName) => {
+                    panelTab = (tabName === 'settings') ? 'settings' : 'members';
+                    try {
+                        if (tabMembersBtn) tabMembersBtn.classList.toggle('bg-gray-800/80', panelTab === 'members');
+                        if (tabMembersBtn) tabMembersBtn.classList.toggle('text-gray-100', panelTab === 'members');
+                        if (tabMembersBtn) tabMembersBtn.classList.toggle('text-gray-300', panelTab !== 'members');
+                        if (tabSettingsBtn) tabSettingsBtn.classList.toggle('bg-gray-800/80', panelTab === 'settings');
+                        if (tabSettingsBtn) tabSettingsBtn.classList.toggle('text-gray-100', panelTab === 'settings');
+                        if (tabSettingsBtn) tabSettingsBtn.classList.toggle('text-gray-300', panelTab !== 'settings');
+                    } catch {}
+
+                    try {
+                        if (panelMembers) panelMembers.classList.toggle('hidden', panelTab !== 'members');
+                        if (panelSettings) panelSettings.classList.toggle('hidden', panelTab !== 'settings');
+                        if (panelSettings) panelSettings.classList.toggle('opacity-0', panelTab !== 'settings');
+                        if (panelSettings) panelSettings.classList.toggle('-translate-y-1', panelTab !== 'settings');
+                        if (panelSettings) panelSettings.classList.toggle('opacity-100', panelTab === 'settings');
+                        if (panelSettings) panelSettings.classList.toggle('translate-y-0', panelTab === 'settings');
+                    } catch {}
+                };
+
                 const isOpen = () => !panel.classList.contains('hidden');
-                const open = () => {
+                const open = (tabName) => {
+                    setActiveTab(tabName || panelTab);
                     try { panel.classList.remove('hidden'); } catch {}
+                    requestAnimationFrame(() => {
+                        try { panel.classList.remove('opacity-0', 'scale-95'); } catch {}
+                    });
                     try { btn.setAttribute('aria-expanded', 'true'); } catch {}
+                    try {
+                        if (window.matchMedia && window.matchMedia('(max-width: 639px)').matches) {
+                            document.body.classList.add('overflow-hidden');
+                        }
+                    } catch {}
                 };
                 const close = () => {
-                    try { panel.classList.add('hidden'); } catch {}
+                    try { panel.classList.add('opacity-0', 'scale-95'); } catch {}
+                    window.setTimeout(() => {
+                        try { panel.classList.add('hidden'); } catch {}
+                    }, 170);
                     try { btn.setAttribute('aria-expanded', 'false'); } catch {}
+                    try { document.body.classList.remove('overflow-hidden'); } catch {}
                 };
-                const toggle = () => { if (isOpen()) close(); else open(); };
+                const toggle = (tabName) => {
+                    if (isOpen()) close();
+                    else open(tabName || 'members');
+                };
 
-                btn.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} toggle(); });
+                btn.addEventListener('click', (e) => {
+                    try { e.preventDefault(); } catch {}
+                    try { e.stopPropagation(); } catch {}
+                });
+                if (tabMembersBtn) tabMembersBtn.addEventListener('click', () => setActiveTab('members'));
+                if (tabSettingsBtn) tabSettingsBtn.addEventListener('click', () => setActiveTab('settings'));
+                if (settingsBtn) {
+                    settingsBtn.addEventListener('click', (e) => {
+                        try { e.preventDefault(); } catch {}
+                        open('settings');
+                    });
+                }
                 if (closeBtn) closeBtn.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} close(); });
 
                 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
@@ -546,24 +863,918 @@
                     try {
                         const t = e && e.target;
                         if (!t) return;
-                        if (panel.contains(t) || btn.contains(t)) return;
+                        if (panel.contains(t) || btn.contains(t) || (settingsBtn && settingsBtn.contains(t))) return;
                         close();
                     } catch {}
                 }, true);
 
-                const bindRemoveButtons = () => {
-                    try {
-                        const removeButtons = panel.querySelectorAll('[data-member-remove]');
-                        removeButtons.forEach((b) => {
-                            if (b.__vixoBound) return;
-                            b.__vixoBound = true;
-                            b.addEventListener('click', async (e) => {
-                                try { e.preventDefault(); e.stopPropagation(); } catch {}
-                                const url = b.getAttribute('data-member-remove-url') || '';
-                                if (!url) return;
-                                const ok = await vixoConfirm('Are you sure you want to remove this member?');
-                                if (!ok) return;
+                const setSettingsStatus = (message, isError) => {
+                    if (!settingsStatus) return;
+                    settingsStatus.textContent = String(message || '');
+                    settingsStatus.classList.remove('hidden', 'text-rose-300', 'text-emerald-300');
+                    settingsStatus.classList.add(isError ? 'text-rose-300' : 'text-emerald-300');
+                    if (!message) settingsStatus.classList.add('hidden');
+                };
 
+                const setSlowModeChipState = (value) => {
+                    const selected = String(value || '0');
+                    settingsSlowOptions.forEach((chip) => {
+                        const chipValue = String(chip.getAttribute('data-slow-option') || '');
+                        const isActive = chipValue === selected;
+                        chip.classList.toggle('is-active', isActive);
+                        chip.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                    });
+                };
+
+                const applyRoomSettings = (payload) => {
+                    if (!payload || typeof payload !== 'object') return;
+                    currentRoomSettings = { ...(currentRoomSettings || {}), ...payload };
+
+                    try {
+                        const roomDisplay = String(currentRoomSettings.room_display_name || '').trim();
+                        const roomDescriptionText = String(currentRoomSettings.room_description || '').trim();
+                        if (roomDisplay) {
+                            if (topRoomTitle) topRoomTitle.textContent = roomDisplay;
+                            if (topRoomInlineTitle) topRoomInlineTitle.textContent = roomDisplay;
+                        }
+                        if (publicRoomDescriptionWrap && publicRoomDescription) {
+                            if (roomDescriptionText) {
+                                publicRoomDescription.textContent = roomDescriptionText;
+                                publicRoomDescriptionWrap.classList.remove('hidden');
+                            } else {
+                                publicRoomDescription.textContent = '';
+                                publicRoomDescriptionWrap.classList.add('hidden');
+                            }
+                        }
+
+                        if (currentRoomGroup) {
+                            const selectorGroup = CSS.escape(String(currentRoomGroup));
+                            const sidebarSubtitle = document.querySelector(`[data-private-room-subtitle-for="${selectorGroup}"]`);
+                            if (sidebarSubtitle) {
+                                sidebarSubtitle.textContent = roomDescriptionText || 'Private room';
+                            }
+                        }
+                    } catch {}
+
+                    try {
+                        if (settingsDescription && typeof currentRoomSettings.room_description === 'string') settingsDescription.value = currentRoomSettings.room_description;
+                        if (settingsAdminOnly) settingsAdminOnly.checked = !!currentRoomSettings.only_admins_can_send;
+                        if (settingsMediaAllowed) settingsMediaAllowed.checked = !!currentRoomSettings.allow_media_uploads;
+                        if (settingsMembersInviteAllowed) settingsMembersInviteAllowed.checked = !!currentRoomSettings.allow_members_invite_others;
+                        if (settingsSlowMode) {
+                            settingsSlowMode.value = String(currentRoomSettings.slow_mode_seconds || 0);
+                            setSlowModeChipState(settingsSlowMode.value);
+                        }
+                        if (settingsName && typeof currentRoomSettings.room_display_name === 'string' && currentRoomSettings.room_display_name) {
+                            settingsName.value = currentRoomSettings.room_display_name;
+                        }
+                        if (settingsResetInvite) {
+                            const canResetInvite = !!currentRoomSettings.is_code_room;
+                            settingsResetInvite.disabled = !canResetInvite;
+                            settingsResetInvite.classList.toggle('opacity-40', !canResetInvite);
+                            settingsResetInvite.classList.toggle('cursor-not-allowed', !canResetInvite);
+                        }
+                    } catch {}
+
+                    try {
+                        const pinEnabled = !!currentRoomSettings.announcement_pinned;
+                        const pinText = String(currentRoomSettings.pinned_message || '').trim();
+                        if (pinnedBanner && pinnedBannerText) {
+                            if (pinEnabled && pinText) {
+                                pinnedBannerText.textContent = pinText;
+                                pinnedBanner.classList.remove('hidden');
+                            } else {
+                                pinnedBanner.classList.add('hidden');
+                                pinnedBannerText.textContent = '';
+                            }
+                        }
+                    } catch {}
+
+                    try {
+                        const avatarUrl = String(currentRoomSettings.room_avatar_url || '').trim();
+                        const roomDisplayForAvatar = String(currentRoomSettings.room_display_name || '').trim();
+                        const roomFallbackLetter = (roomDisplayForAvatar || '').slice(0, 1).toUpperCase() || 'R';
+                        if (settingsAvatarPreview) {
+                            if (avatarUrl) {
+                                settingsAvatarPreview.src = avatarUrl;
+                                settingsAvatarPreview.classList.remove('hidden');
+                            } else {
+                                settingsAvatarPreview.src = '';
+                                settingsAvatarPreview.classList.add('hidden');
+                            }
+                        }
+
+                        if (topRoomAvatar && topRoomAvatarFallback) {
+                            if (avatarUrl) {
+                                topRoomAvatar.src = avatarUrl;
+                                topRoomAvatar.classList.remove('hidden');
+                                topRoomAvatarFallback.classList.add('hidden');
+                            } else {
+                                topRoomAvatar.src = '';
+                                topRoomAvatar.classList.add('hidden');
+                                topRoomAvatarFallback.textContent = roomFallbackLetter;
+                                topRoomAvatarFallback.classList.remove('hidden');
+                            }
+                        }
+
+                        if (currentRoomGroup) {
+                            const selectorGroup = CSS.escape(String(currentRoomGroup));
+                            const sidebarAvatar = document.querySelector(`[data-private-room-avatar-img-for="${selectorGroup}"]`);
+                            const sidebarAvatarFallback = document.querySelector(`[data-private-room-avatar-fallback-for="${selectorGroup}"]`);
+                            if (sidebarAvatar && sidebarAvatarFallback) {
+                                if (avatarUrl) {
+                                    sidebarAvatar.setAttribute('src', avatarUrl);
+                                    sidebarAvatar.classList.remove('hidden');
+                                    sidebarAvatarFallback.classList.add('hidden');
+                                } else {
+                                    sidebarAvatar.setAttribute('src', '');
+                                    sidebarAvatar.classList.add('hidden');
+                                    sidebarAvatarFallback.textContent = roomFallbackLetter;
+                                    sidebarAvatarFallback.classList.remove('hidden');
+                                }
+                            }
+                        }
+                    } catch {}
+
+                    try {
+                        const code = String(currentRoomSettings.room_code || '').trim();
+                        if (code) {
+                            roomCodeButtons.forEach((el) => {
+                                try {
+                                    el.textContent = code;
+                                    el.setAttribute('data-room-code-copy', code);
+                                } catch {}
+                            });
+                        }
+                    } catch {}
+
+                    try {
+                        const uploadBtn = document.getElementById('chat_upload_btn');
+                        const fileInput = document.getElementById('chat_file_input');
+                        const uploadAux = document.getElementById('chat_upload_aux');
+                        const composerRowEl = document.getElementById('chat_composer_row');
+                        const adminOnlyRowEl = document.getElementById('chat_admin_only_row');
+                        const sendBtn = document.getElementById('chat_send_btn');
+                        const emojiBtn = document.getElementById('emoji_btn');
+                        const gifBtn = document.getElementById('gif_btn');
+                        const chatInput = document.getElementById('chat_message_input');
+                        const mediaAllowed = !!currentRoomSettings.allow_media_uploads;
+                        const adminOnlyLocked = !!currentRoomSettings.only_admins_can_send && !viewerIsRoomAdmin;
+                        const hideUploadUi = adminOnlyLocked || !mediaAllowed;
+                        try { window.__vixoMediaUploadsAllowed = mediaAllowed; } catch {}
+
+                        if (composerRowEl) composerRowEl.classList.toggle('hidden', adminOnlyLocked);
+                        if (adminOnlyRowEl) adminOnlyRowEl.classList.toggle('hidden', !adminOnlyLocked);
+                        if (chatInput) chatInput.disabled = adminOnlyLocked;
+                        if (sendBtn) sendBtn.disabled = adminOnlyLocked;
+                        if (emojiBtn) emojiBtn.disabled = adminOnlyLocked;
+                        if (gifBtn) gifBtn.disabled = adminOnlyLocked;
+
+                        if (uploadBtn) {
+                            uploadBtn.disabled = hideUploadUi;
+                            uploadBtn.classList.toggle('hidden', hideUploadUi);
+                        }
+                        if (fileInput) fileInput.disabled = hideUploadUi;
+                        if (uploadAux) uploadAux.classList.toggle('hidden', hideUploadUi);
+
+                        const allowMembersInvite = !!currentRoomSettings.allow_members_invite_others;
+                        const canShowInviteToggle = !!(viewerCanManageRoom || viewerIsMember);
+                        const canUseInviteToggle = !!(viewerCanManageRoom || (viewerIsMember && allowMembersInvite));
+                        const inviteToggleEl = document.getElementById('vixo_member_invite_toggle');
+                        const inviteModalEl = document.getElementById('vixo_member_invite_modal');
+                        if (inviteToggleEl) {
+                            inviteToggleEl.classList.toggle('hidden', !canShowInviteToggle);
+                            inviteToggleEl.disabled = !canUseInviteToggle;
+                            inviteToggleEl.classList.toggle('opacity-40', !canUseInviteToggle);
+                            inviteToggleEl.classList.toggle('cursor-not-allowed', !canUseInviteToggle);
+                        }
+                        if (!canUseInviteToggle && inviteModalEl && !inviteModalEl.classList.contains('hidden')) {
+                            try { inviteModalEl.classList.add('hidden'); } catch {}
+                            try { inviteModalEl.setAttribute('aria-hidden', 'true'); } catch {}
+                            try { document.body.classList.remove('overflow-hidden'); } catch {}
+                        }
+                    } catch {}
+                };
+
+                window.__vixoApplyRoomSettings = applyRoomSettings;
+                applyRoomSettings(currentRoomSettings);
+
+                if (settingsSlowMode) {
+                    settingsSlowMode.addEventListener('change', () => {
+                        setSlowModeChipState(settingsSlowMode.value || '0');
+                    });
+                }
+                settingsSlowOptions.forEach((chip) => {
+                    chip.addEventListener('click', () => {
+                        const next = String(chip.getAttribute('data-slow-option') || '0');
+                        if (settingsSlowMode) {
+                            settingsSlowMode.value = next;
+                            try {
+                                settingsSlowMode.dispatchEvent(new Event('change', { bubbles: true }));
+                            } catch {
+                                setSlowModeChipState(next);
+                            }
+                        } else {
+                            setSlowModeChipState(next);
+                        }
+                    });
+                });
+
+                if (settingsAvatarInput && settingsAvatarPreview) {
+                    settingsAvatarInput.addEventListener('change', () => {
+                        const f = settingsAvatarInput.files && settingsAvatarInput.files[0];
+                        if (!f) return;
+                        const u = URL.createObjectURL(f);
+                        settingsAvatarPreview.src = u;
+                        settingsAvatarPreview.classList.remove('hidden');
+                    });
+                }
+
+                const saveSettings = async (resetInvite) => {
+                    if (!settingsUrl || !settingsSave) return;
+                    const fd = new FormData();
+                    if (settingsName) fd.append('room_name', settingsName.value || '');
+                    if (settingsDescription) fd.append('room_description', settingsDescription.value || '');
+                    if (settingsAdminOnly) fd.append('only_admins_can_send', settingsAdminOnly.checked ? '1' : '0');
+                    if (settingsMediaAllowed) fd.append('allow_media_uploads', settingsMediaAllowed.checked ? '1' : '0');
+                    if (settingsMembersInviteAllowed) fd.append('allow_members_invite_others', settingsMembersInviteAllowed.checked ? '1' : '0');
+                    if (settingsSlowMode) fd.append('slow_mode_seconds', settingsSlowMode.value || '0');
+                    if (resetInvite) fd.append('reset_invite_link', '1');
+                    if (settingsAvatarInput && settingsAvatarInput.files && settingsAvatarInput.files[0]) {
+                        fd.append('room_avatar', settingsAvatarInput.files[0]);
+                    }
+
+                    const csrf = getCookieSafe('csrftoken') || '';
+                    settingsSave.disabled = true;
+                    if (settingsResetInvite) settingsResetInvite.disabled = true;
+                    setSettingsStatus('Saving…', false);
+                    try {
+                        const resp = await fetch(settingsUrl, {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: csrf ? { 'X-CSRFToken': csrf } : {},
+                            body: fd,
+                        });
+                        const data = await resp.json();
+                        if (!resp.ok || !data || !data.ok) {
+                            setSettingsStatus('Failed to save settings', true);
+                            return;
+                        }
+                        applyRoomSettings(data);
+                        try {
+                            if (typeof window.__vixoSetAdminOnly === 'function') {
+                                window.__vixoSetAdminOnly(!!data.only_admins_can_send, data.admins);
+                            }
+                        } catch {}
+                        setSettingsStatus(data.invite_code_reset ? 'Settings saved + invite link reset' : 'Settings saved', false);
+                    } catch {
+                        setSettingsStatus('Network error while saving settings', true);
+                    } finally {
+                        settingsSave.disabled = false;
+                        if (settingsResetInvite) settingsResetInvite.disabled = false;
+                    }
+                };
+
+                if (settingsSave) settingsSave.addEventListener('click', () => saveSettings(false));
+                if (settingsResetInvite) settingsResetInvite.addEventListener('click', async () => {
+                    const ok = await vixoConfirm('Reset current invite link and generate a new one?', 'Reset link');
+                    if (!ok) return;
+                    saveSettings(true);
+                });
+
+                if (settingsAdminOnly) {
+                    settingsAdminOnly.addEventListener('change', () => {});
+                }
+                if (settingsMediaAllowed) {
+                    settingsMediaAllowed.addEventListener('change', () => {});
+                }
+                if (settingsMembersInviteAllowed) {
+                    settingsMembersInviteAllowed.addEventListener('change', () => {});
+                }
+
+                const actionsMenu = document.getElementById('vixo_member_actions_menu');
+                const actionsTitle = document.getElementById('vixo_member_actions_title');
+                const actionsClose = document.getElementById('vixo_member_actions_close');
+                const muteToggleBtn = document.getElementById('vixo_member_action_mute_toggle');
+                const muteOptions = document.getElementById('vixo_member_mute_options');
+                const adminToggleBtn = document.getElementById('vixo_member_action_admin_toggle');
+
+                const inviteToggle = document.getElementById('vixo_member_invite_toggle');
+                const inviteModal = document.getElementById('vixo_member_invite_modal');
+                const inviteOverlay = document.getElementById('vixo_member_invite_overlay');
+                const inviteClose = document.getElementById('vixo_member_invite_close');
+                const inviteInput = document.getElementById('vixo_member_invite_input');
+                const inviteResults = document.getElementById('vixo_member_invite_results');
+                const inviteNextBtn = document.getElementById('vixo_member_invite_next');
+                const memberInviteUrl = "{% url 'chatroom-member-invite' chatroom_name %}";
+                const mentionSearchUrl = "{% url 'mention-search' %}";
+                const viewerUserId = parseInt("{{ user.id|default:0 }}", 10) || 0;
+                const roomOwnerId = parseInt("{{ chat_group.admin_id|default:0 }}", 10) || 0;
+                const memberRemoveUrlTpl = "{% url 'chatroom-member-remove' chatroom_name 0 %}";
+                const memberMakeAdminUrlTpl = "{% url 'chatroom-member-make-admin' chatroom_name 0 %}";
+                const memberRemoveAdminUrlTpl = "{% url 'chatroom-member-remove-admin' chatroom_name 0 %}";
+                const memberMuteUrlTpl = "{% url 'chatroom-member-mute' chatroom_name 0 %}";
+
+                let activeMemberRow = null;
+
+                const menuIsOpen = () => !!(actionsMenu && !actionsMenu.classList.contains('hidden'));
+                const muteMenuIsOpen = () => !!(muteOptions && !muteOptions.classList.contains('hidden'));
+                const closeMuteOptions = () => {
+                    try { if (muteOptions) muteOptions.classList.add('hidden'); } catch {}
+                };
+                const openMuteOptions = (anchorEl) => {
+                    if (!muteOptions || !anchorEl) return;
+                    try { muteOptions.classList.remove('hidden'); } catch {}
+                    try {
+                        const anchor = anchorEl.getBoundingClientRect();
+                        const panel = muteOptions.getBoundingClientRect();
+                        const panelW = Math.ceil(panel.width || 192);
+                        const panelH = Math.ceil(panel.height || 180);
+
+                        let left = Math.round(anchor.right + 8);
+                        if (left + panelW > window.innerWidth - 8) {
+                            left = Math.round(anchor.left - panelW - 8);
+                        }
+                        left = Math.max(8, Math.min(left, Math.max(8, window.innerWidth - panelW - 8)));
+
+                        let top = Math.round(anchor.top);
+                        top = Math.max(8, Math.min(top, Math.max(8, window.innerHeight - panelH - 8)));
+
+                        muteOptions.style.left = `${left}px`;
+                        muteOptions.style.top = `${top}px`;
+                    } catch {}
+                };
+                const menuClose = () => {
+                    activeMemberRow = null;
+                    try { if (actionsMenu) actionsMenu.classList.add('hidden'); } catch {}
+                    closeMuteOptions();
+                };
+
+                const menuOpenForRow = (row) => {
+                    if (!actionsMenu || !row) return;
+                    activeMemberRow = row;
+                    try {
+                        const name = row.getAttribute('data-member-name') || 'Member';
+                        if (actionsTitle) actionsTitle.textContent = String(name);
+                    } catch {}
+
+                    // Update admin toggle label based on current admin status.
+                    try {
+                        const isAdmin = (row.getAttribute('data-member-is-admin') || '0') === '1';
+                        if (adminToggleBtn) adminToggleBtn.textContent = isAdmin ? 'Remove as admin' : 'Make admin';
+                    } catch {}
+
+                    closeMuteOptions();
+
+                    // Position the menu near the row.
+                    try {
+                        const r = row.getBoundingClientRect();
+                        const top = Math.min(window.innerHeight - 8, Math.max(8, r.bottom + 6));
+                        const left = Math.min(window.innerWidth - 8, Math.max(8, r.left));
+                        actionsMenu.style.top = `${top}px`;
+                        actionsMenu.style.left = `${left}px`;
+                    } catch {}
+
+                    try { actionsMenu.classList.remove('hidden'); } catch {}
+                };
+
+                if (actionsClose) actionsClose.addEventListener('click', (e) => { try { e.preventDefault(); } catch {} menuClose(); });
+
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') {
+                        if (menuIsOpen()) menuClose();
+                    }
+                });
+
+                document.addEventListener('click', (e) => {
+                    try {
+                        const t = e && e.target;
+                        if (!t) return;
+                        if (actionsMenu && actionsMenu.contains(t)) return;
+                        if (muteOptions && muteOptions.contains(t)) return;
+                        if (activeMemberRow && activeMemberRow.contains(t)) return;
+                        if (menuIsOpen()) menuClose();
+                    } catch {}
+                }, true);
+
+                window.addEventListener('resize', () => {
+                    if (!muteMenuIsOpen() || !muteToggleBtn) return;
+                    openMuteOptions(muteToggleBtn);
+                });
+
+                const postJson = async (url, body) => {
+                    const csrf = getCookieSafe('csrftoken') || '';
+                    const resp = await fetch(url, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(csrf ? { 'X-CSRFToken': csrf } : {}),
+                        },
+                        body: JSON.stringify(body || {}),
+                    });
+                    let data = null;
+                    try { data = await resp.json(); } catch {}
+                    return { resp, data };
+                };
+
+                const removeMember = async (row) => {
+                    const url = row.getAttribute('data-member-remove-url') || '';
+                    if (!url) return;
+                    const ok = await vixoConfirm('Are you sure you want to remove this member?', 'Remove');
+                    if (!ok) return;
+
+                    try {
+                        const csrf = getCookieSafe('csrftoken') || '';
+                        const resp = await fetch(url, {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: {
+                                ...(csrf ? { 'X-CSRFToken': csrf } : {}),
+                            },
+                        });
+                        if (!resp.ok) {
+                            alert('Could not remove member.');
+                            return;
+                        }
+                        let data = null;
+                        try { data = await resp.json(); } catch {}
+                        if (!data || !data.ok) {
+                            alert('Could not remove member.');
+                            return;
+                        }
+
+                        row.remove();
+
+                        // Update count badge in Members button
+                        try {
+                            const badge = btn.querySelector('span.text-emerald-300');
+                            if (badge) {
+                                const n = parseInt(String(badge.textContent || '').trim(), 10);
+                                if (!Number.isNaN(n) && n > 0) badge.textContent = String(n - 1);
+                            }
+                        } catch {}
+                    } catch {
+                        alert('Could not remove member.');
+                    }
+                };
+
+                const ensureRowActionable = (row) => {
+                    try {
+                        if (!row) return false;
+                        if ((row.getAttribute('data-member-actionable') || '') === '1') return true;
+                        const amAdmin = (() => {
+                            try {
+                                if (typeof __isRoomAdminLive !== 'undefined') return !!__isRoomAdminLive;
+                            } catch {}
+                            return !!viewerIsRoomAdmin;
+                        })();
+                        if (!amAdmin) return false;
+
+                        const uid = parseInt(String(row.getAttribute('data-member-user-id') || '0'), 10) || 0;
+                        if (!uid || uid === viewerUserId || uid === roomOwnerId) return false;
+
+                        row.setAttribute('data-member-actionable', '1');
+                        if (!row.classList.contains('cursor-pointer')) row.classList.add('cursor-pointer');
+                        if (!row.classList.contains('hover:bg-gray-900/55')) row.classList.add('hover:bg-gray-900/55');
+
+                        const fallbackNameEl = row.querySelector('[data-member-name-text]') || row.querySelector('.min-w-0.truncate');
+                        const fallbackName = String((fallbackNameEl && fallbackNameEl.textContent) || 'Member').replace(/\s*\(you\)\s*$/i, '').trim();
+                        if (!(row.getAttribute('data-member-name') || '').trim()) {
+                            row.setAttribute('data-member-name', fallbackName || 'Member');
+                        }
+
+                        if (!(row.getAttribute('data-member-remove-url') || '').trim()) {
+                            row.setAttribute('data-member-remove-url', memberRemoveUrlTpl.replace('/0/', `/${uid}/`));
+                        }
+                        if (!(row.getAttribute('data-member-make-admin-url') || '').trim()) {
+                            row.setAttribute('data-member-make-admin-url', memberMakeAdminUrlTpl.replace('/0/', `/${uid}/`));
+                        }
+                        if (!(row.getAttribute('data-member-remove-admin-url') || '').trim()) {
+                            row.setAttribute('data-member-remove-admin-url', memberRemoveAdminUrlTpl.replace('/0/', `/${uid}/`));
+                        }
+                        if (!(row.getAttribute('data-member-mute-url') || '').trim()) {
+                            row.setAttribute('data-member-mute-url', memberMuteUrlTpl.replace('/0/', `/${uid}/`));
+                        }
+                        if (!(row.getAttribute('data-member-is-admin') || '').trim()) {
+                            const hasAdminBadge = !!row.querySelector('[data-admin-badge]');
+                            row.setAttribute('data-member-is-admin', hasAdminBadge ? '1' : '0');
+                        }
+                        return true;
+                    } catch {
+                        return false;
+                    }
+                };
+
+                const bindActionableRows = () => {
+                    try {
+                        const rows = panel.querySelectorAll('[data-member-actionable="1"]');
+                        rows.forEach((row) => {
+                            if (row.__vixoBound) return;
+                            row.__vixoBound = true;
+                            row.addEventListener('click', (e) => {
+                                try { e.preventDefault(); } catch {}
+                                menuOpenForRow(row);
+                            });
+                        });
+                    } catch {}
+                };
+
+                bindActionableRows();
+
+                if (panel) {
+                    panel.addEventListener('click', (e) => {
+                        try {
+                            const target = e && e.target;
+                            const row = target && target.closest ? target.closest('[data-member-row][data-member-user-id]') : null;
+                            if (!row || !panel.contains(row)) return;
+                            if (!ensureRowActionable(row)) return;
+                            try { e.preventDefault(); } catch {}
+                            menuOpenForRow(row);
+                        } catch {}
+                    });
+                }
+
+                // Add member -> username search -> send invite
+                (function initMemberInvite() {
+                    if (!inviteToggle || !inviteModal || !inviteInput || !inviteResults) return;
+                    let activeFetch = 0;
+                    let inviteUsers = [];
+                    let invitePage = 0;
+                    const PAGE_SIZE = 4;
+                    const RECENT_LIMIT = 3;
+                    const RECENT_STORAGE_KEY = `vixo_member_invite_recent:${"{{ chatroom_name|escapejs }}"}`;
+                    let recentSearches = [];
+
+                    const normalizeSearchValue = (value) => {
+                        const raw = String(value || '').trim();
+                        if (!raw) return '';
+                        const clean = raw.startsWith('@') ? raw.slice(1) : raw;
+                        return clean.slice(0, 32);
+                    };
+
+                    const loadRecentSearches = () => {
+                        try {
+                            const raw = window.localStorage.getItem(RECENT_STORAGE_KEY);
+                            const parsed = raw ? JSON.parse(raw) : [];
+                            if (!Array.isArray(parsed)) {
+                                recentSearches = [];
+                                return;
+                            }
+                            const seen = new Set();
+                            const list = [];
+                            parsed.forEach((entry) => {
+                                const value = normalizeSearchValue(entry);
+                                if (!value) return;
+                                const key = value.toLowerCase();
+                                if (seen.has(key)) return;
+                                seen.add(key);
+                                list.push(value);
+                            });
+                            recentSearches = list.slice(0, RECENT_LIMIT);
+                        } catch {
+                            recentSearches = [];
+                        }
+                    };
+
+                    const saveRecentSearches = () => {
+                        try {
+                            window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recentSearches.slice(0, RECENT_LIMIT)));
+                        } catch {
+                            // ignore
+                        }
+                    };
+
+                    const pushRecentSearch = (value) => {
+                        const clean = normalizeSearchValue(value);
+                        if (!clean) return;
+                        const key = clean.toLowerCase();
+                        recentSearches = recentSearches.filter((v) => String(v || '').toLowerCase() !== key);
+                        recentSearches.unshift(clean);
+                        recentSearches = recentSearches.slice(0, RECENT_LIMIT);
+                        saveRecentSearches();
+                    };
+
+                    const renderRecentSearches = () => {
+                        try { inviteResults.innerHTML = ''; } catch {}
+
+                        const wrap = document.createElement('div');
+                        wrap.className = 'px-2 py-2';
+
+                        const title = document.createElement('div');
+                        title.className = 'text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-2';
+                        title.textContent = 'Your recent searches';
+                        wrap.appendChild(title);
+
+                        if (!recentSearches.length) {
+                            const empty = document.createElement('div');
+                            empty.className = 'px-1 py-2 text-xs text-gray-500';
+                            empty.textContent = 'No recent searches yet.';
+                            wrap.appendChild(empty);
+                        } else {
+                            recentSearches.slice(0, RECENT_LIMIT).forEach((username) => {
+                                const row = document.createElement('button');
+                                row.type = 'button';
+                                row.className = 'w-full text-left px-2 py-1.5 rounded-xl border border-gray-800 bg-gray-900/40 text-xs text-gray-100 hover:bg-gray-900/55 mt-1';
+                                row.setAttribute('data-recent-search', username);
+
+                                const content = document.createElement('div');
+                                content.className = 'flex items-center justify-between gap-2';
+
+                                const left = document.createElement('div');
+                                left.className = 'min-w-0 flex items-center gap-2';
+
+                                const icon = document.createElement('div');
+                                icon.className = 'h-6 w-6 rounded-full border border-gray-700 bg-gray-800/70 text-[11px] text-gray-300 flex items-center justify-center';
+                                icon.textContent = '⏱';
+
+                                const label = document.createElement('div');
+                                label.className = 'min-w-0 truncate';
+                                label.textContent = `@${username}`;
+
+                                left.appendChild(icon);
+                                left.appendChild(label);
+
+                                const hint = document.createElement('div');
+                                hint.className = 'shrink-0 text-[11px] text-gray-500';
+                                hint.textContent = 'Search';
+
+                                content.appendChild(left);
+                                content.appendChild(hint);
+                                row.appendChild(content);
+                                wrap.appendChild(row);
+                            });
+                        }
+
+                        inviteResults.appendChild(wrap);
+                        try { if (inviteNextBtn) inviteNextBtn.disabled = true; } catch {}
+                    };
+
+                    const canOpenInvite = () => {
+                        const allowMembersInvite = !!(currentRoomSettings && currentRoomSettings.allow_members_invite_others);
+                        return !!(viewerIsRoomAdmin || (viewerIsMember && allowMembersInvite));
+                    };
+
+                    const close = () => {
+                        try { inviteModal.classList.add('hidden'); } catch {}
+                        try { inviteModal.setAttribute('aria-hidden', 'true'); } catch {}
+                        try { inviteInput.value = ''; } catch {}
+                        try { inviteUsers = []; } catch {}
+                        try { invitePage = 0; } catch {}
+                        try { inviteResults.innerHTML = ''; } catch {}
+                        try { if (inviteNextBtn) inviteNextBtn.disabled = true; } catch {}
+                        try { document.body.classList.remove('overflow-hidden'); } catch {}
+                    };
+
+                    const open = () => {
+                        loadRecentSearches();
+                        try { inviteModal.classList.remove('hidden'); } catch {}
+                        try { inviteModal.setAttribute('aria-hidden', 'false'); } catch {}
+                        try { document.body.classList.add('overflow-hidden'); } catch {}
+                        renderRecentSearches();
+                        try { inviteInput.focus(); } catch {}
+                    };
+                    const toggleModal = () => {
+                        try {
+                            if (inviteModal.classList.contains('hidden')) open();
+                            else close();
+                        } catch {}
+                    };
+
+                    inviteToggle.addEventListener('click', (e) => {
+                        try { e.preventDefault(); } catch {}
+                        if (!canOpenInvite()) return;
+                        toggleModal();
+                    });
+
+                    if (inviteClose) {
+                        inviteClose.addEventListener('click', (e) => {
+                            try { e.preventDefault(); } catch {}
+                            close();
+                        });
+                    }
+
+                    if (inviteOverlay) {
+                        inviteOverlay.addEventListener('click', () => close());
+                    }
+
+                    document.addEventListener('keydown', (e) => {
+                        if (e.key === 'Escape') {
+                            try {
+                                if (!inviteModal.classList.contains('hidden')) close();
+                            } catch {}
+                        }
+                    });
+
+                    const normalizeAvatarUrl = (avatarRaw) => {
+                        const avatar = String(avatarRaw || '').trim();
+                        if (!avatar) return '';
+                        if (avatar.startsWith('http://') || avatar.startsWith('https://') || avatar.startsWith('/')) return avatar;
+                        return `/media/${avatar.replace(/^\/+/, '')}`;
+                    };
+
+                    const updatePager = () => {
+                        const totalPages = Math.ceil(inviteUsers.length / PAGE_SIZE);
+                        if (!inviteNextBtn) return;
+                        inviteNextBtn.disabled = totalPages <= 1;
+                    };
+
+                    const renderResults = () => {
+                        try { inviteResults.innerHTML = ''; } catch {}
+                        if (!inviteUsers || !inviteUsers.length) {
+                            const empty = document.createElement('div');
+                            empty.className = 'px-2 py-3 text-xs text-gray-400';
+                            empty.textContent = 'No users found';
+                            inviteResults.appendChild(empty);
+                            updatePager();
+                            return;
+                        }
+
+                        const start = invitePage * PAGE_SIZE;
+                        const pageItems = inviteUsers.slice(start, start + PAGE_SIZE);
+                        pageItems.forEach((u) => {
+                            const username = (u && u.username) ? String(u.username) : '';
+                            if (!username) return;
+                            const display = (u && u.display) ? String(u.display) : username;
+                            const avatarUrl = normalizeAvatarUrl(u && u.avatar ? u.avatar : '');
+                            const initial = (display.trim().charAt(0) || username.trim().charAt(0) || '?').toUpperCase();
+
+                            const row = document.createElement('button');
+                            row.type = 'button';
+                            row.className = 'w-full text-left px-2 py-1.5 rounded-xl border border-gray-800 bg-gray-900/40 text-xs text-gray-100 hover:bg-gray-900/55';
+                            row.setAttribute('data-invite-username', username);
+
+                            const layout = document.createElement('div');
+                            layout.className = 'flex items-center justify-between gap-2';
+
+                            const left = document.createElement('div');
+                            left.className = 'min-w-0 flex items-center gap-2';
+
+                            const avatarWrap = document.createElement('div');
+                            avatarWrap.className = 'shrink-0';
+
+                            if (avatarUrl) {
+                                const img = document.createElement('img');
+                                img.src = avatarUrl;
+                                img.alt = display;
+                                img.className = 'h-7 w-7 rounded-full object-cover border border-gray-700';
+                                avatarWrap.appendChild(img);
+                            } else {
+                                const fallback = document.createElement('div');
+                                fallback.className = 'h-7 w-7 rounded-full border border-gray-700 bg-gray-800/70 text-[11px] font-semibold text-gray-200 flex items-center justify-center';
+                                fallback.textContent = initial;
+                                avatarWrap.appendChild(fallback);
+                            }
+
+                            const nameNode = document.createElement('div');
+                            nameNode.className = 'min-w-0 truncate';
+                            nameNode.textContent = display;
+
+                            left.appendChild(avatarWrap);
+                            left.appendChild(nameNode);
+
+                            const usernameNode = document.createElement('div');
+                            usernameNode.className = 'shrink-0 text-gray-400';
+                            usernameNode.textContent = `@${username}`;
+
+                            layout.appendChild(left);
+                            layout.appendChild(usernameNode);
+                            row.appendChild(layout);
+                            inviteResults.appendChild(row);
+                        });
+                        updatePager();
+                    };
+
+                    const fetchUsers = async () => {
+                        const qRaw = String(inviteInput.value || '').trim();
+                        const q = qRaw.startsWith('@') ? qRaw.slice(1) : qRaw;
+                        if (!q) {
+                            inviteUsers = [];
+                            invitePage = 0;
+                            renderRecentSearches();
+                            return;
+                        }
+                        const cur = ++activeFetch;
+                        try {
+                            const resp = await fetch(`${mentionSearchUrl}?q=${encodeURIComponent(q)}&limit=40`, { credentials: 'same-origin' });
+                            if (!resp.ok) return;
+                            const data = await resp.json();
+                            if (cur !== activeFetch) return;
+                            inviteUsers = (data && data.results) ? data.results : [];
+                            invitePage = 0;
+                            renderResults();
+                        } catch {
+                            // ignore
+                        }
+                    };
+
+                    let timer = null;
+                    inviteInput.addEventListener('input', () => {
+                        const qRaw = String(inviteInput.value || '').trim();
+                        const q = qRaw.startsWith('@') ? qRaw.slice(1) : qRaw;
+                        if (!q) {
+                            try { if (timer) clearTimeout(timer); } catch {}
+                            inviteUsers = [];
+                            invitePage = 0;
+                            renderRecentSearches();
+                            return;
+                        }
+                        try { if (timer) clearTimeout(timer); } catch {}
+                        timer = setTimeout(fetchUsers, 160);
+                    });
+
+                    if (inviteNextBtn) {
+                        inviteNextBtn.addEventListener('click', (e) => {
+                            try { e.preventDefault(); } catch {}
+                            const totalPages = Math.ceil(inviteUsers.length / PAGE_SIZE);
+                            if (totalPages <= 1) return;
+                            invitePage = (invitePage + 1) % totalPages;
+                            renderResults();
+                        });
+                    }
+
+                    inviteResults.addEventListener('click', async (e) => {
+                        const t = e && e.target;
+                        const recentBtn = t && t.closest ? t.closest('[data-recent-search]') : null;
+                        if (recentBtn) {
+                            try { e.preventDefault(); } catch {}
+                            const recentUsername = String(recentBtn.getAttribute('data-recent-search') || '').trim();
+                            if (!recentUsername) return;
+                            inviteInput.value = `@${recentUsername}`;
+                            try { inviteInput.focus(); } catch {}
+                            await fetchUsers();
+                            return;
+                        }
+
+                        const btnRow = t && t.closest ? t.closest('[data-invite-username]') : null;
+                        if (!btnRow) return;
+                        try { e.preventDefault(); } catch {}
+
+                        const username = String(btnRow.getAttribute('data-invite-username') || '').trim();
+                        if (!username) return;
+                        pushRecentSearch(username);
+
+                        const ok = await vixoConfirm(`Send invite to @${username}?`, 'Send invite');
+                        if (!ok) return;
+
+                        try {
+                            const { resp, data } = await postJson(memberInviteUrl, { username });
+                            if (!resp.ok || !data || !data.ok) {
+                                const err = data && data.error ? String(data.error) : '';
+                                if (err === 'already_member') {
+                                    await vixoAlert('This user is already a member of this group.', 'Cannot send invite');
+                                } else {
+                                    await vixoAlert('Could not send invite.', 'Cannot send invite');
+                                }
+                                return;
+                            }
+                            await vixoAlert('Invite sent.', 'Invite');
+                            close();
+                        } catch {
+                            await vixoAlert('Could not send invite.', 'Cannot send invite');
+                        }
+                    });
+
+                    // Close invite box when closing the members panel.
+                    if (closeBtn) closeBtn.addEventListener('click', () => close());
+                })();
+
+                const handleMemberActionClick = async (e) => {
+                        try {
+                            const t = e && e.target;
+                            const btnAct = t && t.closest ? t.closest('[data-member-action]') : null;
+                            if (!btnAct) return;
+                            const action = btnAct.getAttribute('data-member-action') || '';
+                            if (!activeMemberRow) return;
+                            if (action === 'mute_toggle') {
+                                if (muteMenuIsOpen()) closeMuteOptions();
+                                else openMuteOptions(btnAct);
+                                return;
+                            }
+
+                            if (action === 'remove') {
+                                const row = activeMemberRow;
+                                // Close the member menu before showing confirm to avoid z-index overlap.
+                                menuClose();
+                                await removeMember(row);
+                                return;
+                            }
+
+                            if (action === 'make_admin') {
+                                const memberRow = activeMemberRow;
+                                if (!memberRow) return;
+
+                                const isAdmin = (memberRow.getAttribute('data-member-is-admin') || '0') === '1';
+                                const url = isAdmin
+                                    ? (memberRow.getAttribute('data-member-remove-admin-url') || '')
+                                    : (memberRow.getAttribute('data-member-make-admin-url') || '');
+                                if (!url) return;
+
+                                const ok = await vixoConfirm(
+                                    isAdmin ? 'Remove admin role from this member?' : 'Make this member admin?',
+                                    isAdmin ? 'Remove as admin' : 'Make admin'
+                                );
+                                if (!ok) return;
                                 try {
                                     const csrf = getCookieSafe('csrftoken') || '';
                                     const resp = await fetch(url, {
@@ -573,37 +1784,123 @@
                                             ...(csrf ? { 'X-CSRFToken': csrf } : {}),
                                         },
                                     });
-                                    if (!resp.ok) {
-                                        alert('Could not remove member.');
-                                        return;
-                                    }
                                     let data = null;
                                     try { data = await resp.json(); } catch {}
-                                    if (!data || !data.ok) {
-                                        alert('Could not remove member.');
+                                    if (!resp.ok || !data || !data.ok) {
+                                        const err = String((data && data.error) || '');
+                                        if (err === 'not_a_member') {
+                                            await vixoAlert('User is not a room member.', 'Cannot update admin');
+                                            return;
+                                        }
+                                        if (err === 'not_room_admin') {
+                                            await vixoAlert('You are no longer a room admin. Refresh and try again.', 'Cannot update admin');
+                                            try { scheduleCatchupPoll(); } catch {}
+                                            return;
+                                        }
+                                        if (err === 'room_not_private') {
+                                            await vixoAlert('This action is only available in private rooms.', 'Cannot update admin');
+                                            return;
+                                        }
+                                        if (err === 'cannot_make_self_admin') {
+                                            await vixoAlert('You cannot change your own admin role here.', 'Cannot update admin');
+                                            return;
+                                        }
+                                        if (err === 'cannot_remove_owner_admin') {
+                                            await vixoAlert('Room owner admin role cannot be removed.', 'Cannot update admin');
+                                            return;
+                                        }
+                                        if (!err && resp.status === 403) {
+                                            await vixoAlert('Permission denied. Refresh and try again.', 'Cannot update admin');
+                                            try { scheduleCatchupPoll(); } catch {}
+                                            return;
+                                        }
+                                        if (!err && resp.status === 404) {
+                                            await vixoAlert('Room/member not found. Refresh and try again.', 'Cannot update admin');
+                                            try { scheduleCatchupPoll(); } catch {}
+                                            return;
+                                        }
+                                        await vixoAlert(
+                                            isAdmin ? 'Could not remove admin.' : 'Could not make admin.',
+                                            'Cannot update admin'
+                                        );
                                         return;
                                     }
 
-                                    const row = b.closest('[data-member-row]');
-                                    if (row) row.remove();
-
-                                    // Update count badge in Members button
                                     try {
-                                        const badge = btn.querySelector('span.text-emerald-300');
-                                        if (badge) {
-                                            const n = parseInt(String(badge.textContent || '').trim(), 10);
-                                            if (!Number.isNaN(n) && n > 0) badge.textContent = String(n - 1);
+                                        memberRow.setAttribute('data-member-is-admin', isAdmin ? '0' : '1');
+                                        const right = memberRow.querySelector('.shrink-0.flex.items-center.gap-2') || memberRow.lastElementChild;
+                                        const existingBadge = memberRow.querySelector('[data-admin-badge]');
+                                        if (isAdmin) {
+                                            if (existingBadge) existingBadge.remove();
+                                        } else if (!existingBadge && right) {
+                                            const badge = document.createElement('span');
+                                            badge.className = 'rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] font-extrabold text-emerald-200';
+                                            badge.setAttribute('data-admin-badge', '');
+                                            badge.textContent = 'Admin';
+                                            right.appendChild(badge);
                                         }
                                     } catch {}
-                                } catch {
-                                    alert('Could not remove member.');
-                                }
-                            });
-                        });
-                    } catch {}
-                };
 
-                bindRemoveButtons();
+                                    menuClose();
+                                } catch {
+                                    try {
+                                        await vixoAlert(
+                                            isAdmin ? 'Could not remove admin.' : 'Could not make admin.',
+                                            'Cannot update admin'
+                                        );
+                                    } catch {}
+                                    try { scheduleCatchupPoll(); } catch {}
+                                }
+                                return;
+                            }
+
+                            if (action === 'mute') {
+                                const url = activeMemberRow.getAttribute('data-member-mute-url') || '';
+                                if (!url) return;
+                                const s = parseInt(String(btnAct.getAttribute('data-mute-seconds') || '0'), 10);
+                                if (!s) return;
+                                const ok = await vixoConfirm('Mute this user in this room?', 'Mute');
+                                if (!ok) return;
+                                try {
+                                    const { resp, data } = await postJson(url, { seconds: s });
+                                    if (!resp.ok || !data || !data.ok) {
+                                        alert('Could not mute user.');
+                                        return;
+                                    }
+                                    menuClose();
+                                } catch {
+                                    alert('Could not mute user.');
+                                }
+                                return;
+                            }
+
+                            if (action === 'unmute') {
+                                const url = activeMemberRow.getAttribute('data-member-mute-url') || '';
+                                if (!url) return;
+                                const ok = await vixoConfirm('Unmute this user in this room?', 'Unmute');
+                                if (!ok) return;
+                                try {
+                                    const { resp, data } = await postJson(url, { seconds: 0 });
+                                    if (!resp.ok || !data || !data.ok) {
+                                        alert('Could not unmute user.');
+                                        return;
+                                    }
+                                    menuClose();
+                                } catch {
+                                    alert('Could not unmute user.');
+                                }
+                                return;
+                            }
+                        } catch {}
+                    };
+
+                // Menu actions
+                if (actionsMenu) {
+                    actionsMenu.addEventListener('click', handleMemberActionClick);
+                }
+                if (muteOptions) {
+                    muteOptions.addEventListener('click', handleMemberActionClick);
+                }
             })();
         </script>
 
@@ -626,7 +1923,7 @@
 
         {% if chat_group.is_code_room and chat_group.room_code and request.GET.created == '1' %}
             <!-- Room tutorial (shown once on room creation, can be disabled via "Do not show again") -->
-            <div id="vixo_room_tutorial" class="hidden fixed inset-0 z-[80]">
+            <div id="vixo_room_tutorial" class="hidden fixed inset-0 z-[80]" data-tutorial-mode="private-room" data-tutorial-force="0">
                 <div class="absolute inset-0 bg-black/60 backdrop-blur-[1px]" data-tutorial-backdrop></div>
 
                 <!-- Highlight boxes (positioned by JS) -->
@@ -642,7 +1939,7 @@
                 </div>
 
                 <!-- Bottom instruction box -->
-                <div class="absolute left-0 right-0 bottom-0 p-3 sm:p-6">
+                <div class="absolute left-0 right-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-0 p-3 sm:p-6">
                     <div class="mx-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-gray-900/95 backdrop-blur-sm shadow-2xl overflow-hidden">
                         <div class="px-4 sm:px-6 py-4 border-b border-white/10 flex items-start justify-between gap-3">
                             <div>
@@ -686,15 +1983,74 @@
                     </div>
                 </div>
             </div>
+        {% elif chat_group.group_name == 'public-chat' and show_public_chat_tutorial %}
+            <div id="vixo_room_tutorial" class="hidden fixed inset-0 z-[80]" data-tutorial-mode="public-chat" data-tutorial-force="1">
+                <div class="absolute inset-0 bg-black/60 backdrop-blur-[1px]" data-tutorial-backdrop></div>
+
+                <div id="vixo_room_tutorial_hl_waiting" class="hidden fixed border-2 border-red-500 rounded-xl pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0)]"></div>
+                <div id="vixo_room_tutorial_hl_code" class="hidden fixed border-2 border-red-500 rounded-xl pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0)]"></div>
+
+                <div id="vixo_room_tutorial_callout" class="hidden fixed z-[81] pointer-events-none">
+                    <div class="rounded-xl border border-red-500/40 bg-gray-900/95 text-white px-3 py-2 text-xs shadow-2xl">
+                        <div class="font-semibold text-red-200">Tip</div>
+                        <div class="mt-0.5 text-gray-200" id="vixo_room_tutorial_callout_text">Use this button</div>
+                    </div>
+                </div>
+
+                <div class="absolute left-0 right-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-0 p-3 sm:p-6">
+                    <div class="mx-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-gray-900/95 backdrop-blur-sm shadow-2xl overflow-hidden">
+                        <div class="px-4 sm:px-6 py-4 border-b border-white/10 flex items-start justify-between gap-3">
+                            <div>
+                                <div class="text-base sm:text-lg font-extrabold text-white">Chat tutorial</div>
+                                <div class="mt-1 text-xs sm:text-sm text-gray-300">Quick guide to use public chat.</div>
+                            </div>
+                            <button type="button" class="h-9 w-9 inline-flex items-center justify-center rounded-xl bg-gray-800/60 hover:bg-gray-800 text-gray-200" aria-label="Close tutorial" data-tutorial-close>×</button>
+                        </div>
+
+                        <div class="px-4 sm:px-6 py-4">
+                            <div class="grid sm:grid-cols-2 gap-3">
+                                <div class="rounded-xl border border-gray-800 bg-gray-950/40 p-3">
+                                    <div class="text-sm font-semibold text-gray-100">Choose a room</div>
+                                    <div class="mt-1 text-xs text-gray-300">Pick a chat from the left sidebar and jump in.</div>
+                                </div>
+                                <div class="rounded-xl border border-gray-800 bg-gray-950/40 p-3">
+                                    <div class="text-sm font-semibold text-gray-100">Start chatting</div>
+                                    <div class="mt-1 text-xs text-gray-300">Type in the message box below and hit <span class="font-semibold">Send</span>.</div>
+                                </div>
+                                <div class="rounded-xl border border-gray-800 bg-gray-950/40 p-3">
+                                    <div class="text-sm font-semibold text-gray-100">React & reply</div>
+                                    <div class="mt-1 text-xs text-gray-300">Long-press or right-click messages for quick actions.</div>
+                                </div>
+                                <div class="rounded-xl border border-gray-800 bg-gray-950/40 p-3">
+                                    <div class="text-sm font-semibold text-gray-100">Stay updated</div>
+                                    <div class="mt-1 text-xs text-gray-300">Use notifications and invite to bring friends in.</div>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 flex items-center justify-end gap-2">
+                                <button type="button" class="rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-100 px-4 py-2 text-sm font-semibold" data-tutorial-close>Got it</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         {% endif %}
 
-        {% if chat_group.pinned_message %}
-            <div class="vixo-chat-surface mx-2 mt-2 rounded-xl border border-gray-800 bg-gray-900/50 px-3 py-2">
+        {% if chat_group.announcement_pinned and chat_group.pinned_message %}
+            <div id="vixo_pinned_banner" class="vixo-chat-surface mx-2 mt-2 rounded-xl border border-gray-800 bg-gray-900/50 px-3 py-2">
                 <div class="flex items-center gap-2 text-xs font-semibold text-emerald-300">
                     <span aria-hidden="true">📌</span>
                     <span>Pinned</span>
                 </div>
-                <div class="mt-1 text-xs text-gray-200 whitespace-pre-wrap">{{ chat_group.pinned_message }}</div>
+                <div id="vixo_pinned_banner_text" class="mt-1 text-xs text-gray-200 whitespace-pre-wrap">{{ chat_group.pinned_message }}</div>
+            </div>
+        {% else %}
+            <div id="vixo_pinned_banner" class="hidden vixo-chat-surface mx-2 mt-2 rounded-xl border border-gray-800 bg-gray-900/50 px-3 py-2">
+                <div class="flex items-center gap-2 text-xs font-semibold text-emerald-300">
+                    <span aria-hidden="true">📌</span>
+                    <span>Pinned</span>
+                </div>
+                <div id="vixo_pinned_banner_text" class="mt-1 text-xs text-gray-200 whitespace-pre-wrap"></div>
             </div>
         {% endif %}
 
@@ -799,12 +2155,12 @@
             </button>
         {% endif %}
 
-        <div id="chat_composer_bar" class="vixo-chat-surface vixo-chat-composer sticky bottom-0 z-10 p-3 sm:px-4 sm:pt-4 sm:pb-0 bg-gray-900/60 border-t border-gray-800 rounded-none sm:rounded-b-2xl">
+        <div id="chat_composer_bar" class="vixo-chat-surface vixo-chat-composer sticky bottom-0 z-10 p-3 sm:px-4 sm:pt-4 sm:pb-0 bg-gray-900/60 border-t border-gray-800 rounded-none sm:rounded-b-2xl mb-0">
             <div id="reply_bar" class="hidden mb-2 rounded-xl border border-gray-800 bg-gray-900/80 px-3 py-2">
                 <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0">
+                    <div class="flex-1 min-w-0">
                         <div class="text-[10px] font-semibold text-emerald-400">Replying to <span id="reply_bar_author" class="text-gray-200"></span></div>
-                        <div id="reply_bar_preview" class="text-[11px] text-gray-400 truncate"></div>
+                        <div id="reply_bar_preview" class="block w-full max-w-full text-[11px] text-gray-400 truncate"></div>
                     </div>
                     <button type="button" id="reply_bar_cancel" class="text-gray-300 hover:text-white px-2">×</button>
                 </div>
@@ -833,9 +2189,9 @@
                     Verify your email to continue chatting.
                     <a href="{% url 'profile-settings' %}" class="ml-2 inline-flex items-center text-emerald-400 hover:text-emerald-300 font-semibold">Verify now</a>
                 </div>
-            {% elif chat_muted_seconds and chat_muted_seconds > 0 %}
+            {% elif not_member %}
                 <div class="bg-gray-900/40 border border-gray-800 rounded-xl px-4 py-3 text-sm text-gray-200">
-                    You are on cooldown for <span class="font-semibold text-emerald-400">{{ chat_muted_seconds }}s</span>. Please wait.
+                    You are not a member of this group.
                 </div>
             {% else %}
                 <form id="chat_message_form" class="flex flex-col gap-2" data-no-loading
@@ -851,16 +2207,36 @@
                     <input type="hidden" id="chat_file_caption" name="caption" value="" />
                     <input type="hidden" id="chat_one_time_seconds" name="one_time_seconds" value="" />
 
-                    <div class="flex items-center gap-2 flex-nowrap">
+                    <div id="chat_composer_row" class="flex items-center gap-2 flex-nowrap{% if chat_group.is_private and chat_group.only_admins_can_send and not is_room_admin %} hidden{% endif %}">
                         <div id="chat_body_wrap" class="flex-1 min-w-0">
                             <div class="relative flex items-center gap-2">
                                 {{ form.body }}
+
+                                <button
+                                    type="button"
+                                    id="emoji_btn"
+                                    class="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-gray-200 transition duration-150 ease-out hover:bg-white/5 hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                                    aria-label="Insert emoji"
+                                    aria-haspopup="dialog"
+                                    aria-expanded="false"
+                                >
+                                    😊
+                                </button>
+
+                                <div
+                                    id="emoji_panel"
+                                    class="hidden opacity-0 scale-95 pointer-events-none transition duration-150 ease-out fixed sm:absolute bottom-24 sm:bottom-full right-3 sm:right-0 sm:mb-2 w-[min(20rem,calc(100vw-1.5rem))] sm:w-[min(20rem,calc(100vw-3rem))] max-h-[70vh] overflow-y-auto overscroll-contain rounded-xl border border-gray-800 bg-gray-900/95 shadow-lg shadow-black/30 p-3 z-30"
+                                    role="dialog"
+                                    aria-label="Emoji picker"
+                                >
+                                    <div id="emoji_mart_mount"></div>
+                                </div>
 
                                 {% if gifs_allowed %}
                                     <button
                                         type="button"
                                         id="gif_btn"
-                                        class="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-gray-300 hover:text-gray-100 hover:bg-white/5 transition focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                                        class="absolute right-12 top-1/2 -translate-y-1/2 h-8 w-8 inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-gray-300 hover:text-gray-100 hover:bg-white/5 transition focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                                         aria-label="GIF"
                                         title="GIF"
                                     >
@@ -906,10 +2282,10 @@
                                 <button
                                     type="button"
                                     id="chat_upload_btn"
-                                    class="h-11 w-11 inline-flex items-center justify-center rounded-full border border-gray-300 bg-gray-200/90 text-gray-800 transition duration-150 ease-out hover:bg-gray-300/90 hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-transparent dark:bg-gray-800/50 dark:text-white dark:hover:bg-gray-800/70"
+                                    class="h-11 w-11 inline-flex items-center justify-center rounded-full border border-gray-300 bg-gray-200/90 text-gray-800 transition duration-150 ease-out hover:bg-gray-300/90 hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-transparent dark:bg-gray-800/50 dark:text-white dark:hover:bg-gray-800/70{% if chat_group.is_private and chat_group.only_admins_can_send and not is_room_admin %} hidden{% endif %}"
                                     aria-label="Upload"
                                     title="Upload"
-                                    {% if uploads_remaining == 0 %}disabled{% endif %}
+                                    {% if uploads_remaining == 0 or chat_group.is_private and chat_group.only_admins_can_send and not is_room_admin %}disabled{% endif %}
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
                                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -918,27 +2294,6 @@
                                     </svg>
                                 </button>
                             {% endif %}
-                            <div class="relative shrink-0">
-                                <button
-                                    type="button"
-                                    id="emoji_btn"
-                                    class="h-11 w-11 inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-gray-200 transition duration-150 ease-out hover:bg-white/5 hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                                    aria-label="Insert emoji"
-                                    aria-haspopup="dialog"
-                                    aria-expanded="false"
-                                >
-                                    😊
-                                </button>
-
-                                <div
-                                    id="emoji_panel"
-                                    class="hidden opacity-0 scale-95 pointer-events-none transition duration-150 ease-out fixed sm:absolute bottom-24 sm:bottom-full right-3 sm:right-0 sm:mb-2 w-[min(20rem,calc(100vw-1.5rem))] sm:w-[min(20rem,calc(100vw-3rem))] max-h-[70vh] overflow-y-auto overscroll-contain rounded-xl border border-gray-800 bg-gray-900/95 shadow-lg shadow-black/30 p-3 z-30"
-                                    role="dialog"
-                                    aria-label="Emoji picker"
-                                >
-                                    <div id="emoji_mart_mount"></div>
-                                </div>
-                            </div>
 
                             <button
                                 id="chat_send_btn"
@@ -963,8 +2318,24 @@
                         </div>
                     </div>
 
-                    <div id="chat_send_cooldown_notice" class="hidden text-xs text-amber-300">
-                        Cooldown: <span id="chat_send_cooldown_seconds" class="font-semibold">0</span>s
+                    <div id="chat_admin_only_row" class="rounded-2xl border border-gray-800 bg-gray-900/70 px-4 py-3 text-sm text-gray-200{% if not chat_group.is_private or not chat_group.only_admins_can_send or is_room_admin %} hidden{% endif %}">
+                        <div class="text-center">
+                            Only <button type="button" id="chat_admin_only_admins_btn" class="text-emerald-400 hover:text-emerald-300 font-semibold">admins</button> can send messages
+                        </div>
+                        <div id="chat_admin_only_admins_panel" class="overflow-hidden max-h-0 opacity-0 transition-all duration-200 ease-out">
+                            <div class="mt-2 rounded-xl border border-gray-800 bg-gray-900/60 p-2">
+                                <div class="text-[11px] font-semibold text-gray-200 mb-1">Message admin</div>
+                                <div id="chat_admin_only_admins_list" class="space-y-1"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="chat_not_member_row" class="hidden rounded-2xl border border-gray-800 bg-gray-900/70 px-4 py-3 text-sm text-gray-200">
+                        <div class="text-center">You have been removed from the group by an admin.</div>
+                    </div>
+
+                    <div id="chat_send_cooldown_notice" class="hidden rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200 text-center font-semibold" aria-live="polite">
+                        ⏳ Cooldown: <span id="chat_send_cooldown_seconds" class="font-extrabold">0</span>s
                     </div>
 
                     <div id="chat_upload_progress" class="hidden mt-2 rounded-xl border border-gray-800 bg-gray-900/60 px-3 py-2">
@@ -978,8 +2349,8 @@
                     </div>
 
                     {% if uploads_allowed %}
-                        <div class="mt-1 sm:mt-0">
-                            <input id="chat_file_input" name="file" type="file" accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime" class="sr-only" {% if uploads_remaining == 0 %}disabled{% endif %} />
+                        <div id="chat_upload_aux" class="mt-1 sm:mt-0{% if chat_group.is_private and chat_group.only_admins_can_send and not is_room_admin %} hidden{% endif %}">
+                            <input id="chat_file_input" name="file" type="file" accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime" class="sr-only" {% if uploads_remaining == 0 or chat_group.is_private and chat_group.only_admins_can_send and not is_room_admin %}disabled{% endif %} />
 
                             {% if upload_limit %}
                                 <div id="upload_counter" class="text-xs text-gray-400 text-center" data-used="{{ uploads_used }}" data-limit="{{ upload_limit }}">
@@ -997,6 +2368,52 @@
         </div>
 
     </div>
+
+    <nav id="chat_mobile_nav" data-active-tab="chat" class="lg:hidden fixed left-1/2 -translate-x-1/2 bottom-[max(1.75rem,env(safe-area-inset-bottom))] z-[85] w-[min(20rem,calc(100vw-1.2rem))] rounded-2xl border border-gray-800/90 bg-gray-900/92 backdrop-blur-md shadow-2xl shadow-black/45 px-2 py-1.5" aria-label="Chat mobile navigation">
+        <div id="chat_mobile_nav_tabs" class="relative grid grid-cols-3 gap-0">
+            <span id="chat_mobile_tab_indicator" aria-hidden="true"></span>
+            <button
+                type="button"
+                id="chat_mobile_tab_chat"
+                class="chat-mobile-tab is-active inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-gray-100"
+                aria-label="Current chat"
+            >
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+                </svg>
+                <span>Chat</span>
+            </button>
+            <button
+                type="button"
+                id="chat_mobile_tab_groups"
+                class="chat-mobile-tab inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-gray-300"
+                aria-label="Open groups list"
+            >
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M3 6h18M3 12h18M3 18h18" />
+                </svg>
+                <span>Groups</span>
+            </button>
+            <a
+                href="{% url 'profile' %}"
+                id="chat_mobile_tab_profile"
+                data-mobile-profile-menu-toggle="1"
+                class="chat-mobile-tab relative inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-gray-300"
+                aria-label="Open profile"
+            >
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M20 21a8 8 0 1 0-16 0" />
+                    <circle cx="12" cy="8" r="4" />
+                </svg>
+                <span>Profile</span>
+                <span id="chat_mobile_profile_badge" class="hidden absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-red-500 text-[10px] leading-5 text-center font-bold text-white"></span>
+            </a>
+        </div>
+    </nav>
+
+                    <div id="chat_muted_row" class="rounded-2xl border border-gray-800 bg-gray-900/70 px-4 py-3 text-sm text-gray-200{% if not chat_muted_seconds or chat_muted_seconds <= 0 %} hidden{% endif %}">
+                        <div id="chat_muted_text" class="text-center">You are muted for {{ chat_muted_seconds|default:0 }}s.</div>
+                    </div>
 </wrapper>
 
 <!-- Verify required overlay (blocks chat without page refresh) -->
@@ -1011,15 +2428,32 @@
                 <div id="verify_gate_reason" class="mt-1 text-xs text-gray-300">Verify your email to continue chatting.</div>
             </div>
             <div class="p-4">
-                <div class="text-xs text-gray-400">Once verified, come back and refresh this chat.</div>
+                <div class="text-xs text-gray-400">Once verified, come back to this chat.</div>
                 <div class="mt-4 flex items-center gap-2">
                     <a href="{% url 'profile-settings' %}" class="inline-flex items-center justify-center rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 text-sm font-semibold transition">
                         Verify now
                     </a>
-                    <button type="button" id="verify_gate_refresh" class="inline-flex items-center justify-center rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-100 px-4 py-2 text-sm font-semibold transition">
-                        Refresh
-                    </button>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Removed-from-group overlay (shows instantly on realtime kick) -->
+<div id="removed_gate"
+     data-redirect="{% url 'home' %}"
+     class="hidden fixed inset-0 z-[1100]">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+    <div class="relative min-h-full flex items-end sm:items-center justify-center p-3 sm:p-6">
+        <div class="w-full sm:max-w-md rounded-2xl border border-gray-800 bg-gray-900/95 backdrop-blur-sm shadow-2xl overflow-hidden">
+            <div class="p-4 border-b border-gray-800/50">
+                <div class="text-base font-semibold text-emerald-200">Removed from group</div>
+                <div id="removed_gate_msg" class="mt-1 text-xs text-gray-300">You have been removed from the group.</div>
+            </div>
+            <div class="p-4">
+                <button type="button" id="removed_gate_ok" class="w-full inline-flex items-center justify-center rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 text-sm font-semibold transition">
+                    OK
+                </button>
             </div>
         </div>
     </div>
@@ -1115,9 +2549,9 @@
 
     <!-- Upload preview + crop modal -->
     <div id="upload_modal" class="hidden fixed inset-0 z-[90]">
-        <div id="upload_modal_backdrop" class="absolute inset-0 bg-black/60"></div>
+        <div id="upload_modal_backdrop" class="absolute inset-0 bg-black/60 opacity-0 transition-opacity duration-200 ease-out"></div>
         <div class="absolute inset-0 flex items-end sm:items-center justify-center p-3 sm:p-6">
-            <div class="w-full sm:max-w-lg rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl overflow-hidden">
+            <div id="upload_modal_panel" class="w-full sm:max-w-lg rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl overflow-hidden opacity-0 translate-y-3 scale-[0.98] transition-all duration-200 ease-out">
                 <div class="flex items-center justify-between gap-3 p-4 border-b border-gray-800/60">
                     <div class="flex items-center gap-2 min-w-0">
                         <div class="text-sm font-semibold text-gray-100">Preview</div>
@@ -1449,12 +2883,52 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
 
         // If server rate-limits message sends (429), show a countdown on the Send button.
         let sendCooldownTimer = null;
+        function stopSendCooldown() {
+            const btn = document.getElementById('chat_send_btn');
+            const input = document.getElementById('id_body');
+            const caption = document.getElementById('chat_file_caption');
+            const fileInput = document.getElementById('chat_file_input');
+            const uploadBtn = document.getElementById('chat_upload_btn');
+            const emojiBtn = document.getElementById('emoji_btn');
+            const gifBtn = document.getElementById('gif_btn');
+            const notice = document.getElementById('chat_send_cooldown_notice');
+            const mediaAllowed = (window.__vixoMediaUploadsAllowed !== false);
+
+            if (sendCooldownTimer) {
+                window.clearInterval(sendCooldownTimer);
+                sendCooldownTimer = null;
+            }
+
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = btn.dataset.originalText || 'Send';
+            }
+            if (input) input.disabled = false;
+            if (caption) caption.disabled = false;
+            if (fileInput) fileInput.disabled = !mediaAllowed;
+            if (uploadBtn) {
+                uploadBtn.disabled = !mediaAllowed;
+                uploadBtn.classList.toggle('hidden', !mediaAllowed);
+            }
+            if (emojiBtn) {
+                emojiBtn.disabled = false;
+                emojiBtn.classList.remove('hidden');
+            }
+            if (gifBtn) {
+                gifBtn.disabled = false;
+                gifBtn.classList.remove('hidden');
+            }
+            if (notice) notice.classList.add('hidden');
+        }
+
         function startSendCooldown(seconds) {
             const btn = document.getElementById('chat_send_btn');
             const input = document.getElementById('id_body');
             const caption = document.getElementById('chat_file_caption');
             const fileInput = document.getElementById('chat_file_input');
+            const uploadBtn = document.getElementById('chat_upload_btn');
             const emojiBtn = document.getElementById('emoji_btn');
+            const gifBtn = document.getElementById('gif_btn');
             const notice = document.getElementById('chat_send_cooldown_notice');
             const noticeSecs = document.getElementById('chat_send_cooldown_seconds');
             if (!btn || !input) return;
@@ -1468,7 +2942,16 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
             input.disabled = true;
             if (caption) caption.disabled = true;
             if (fileInput) fileInput.disabled = true;
+            if (uploadBtn) {
+                uploadBtn.disabled = true;
+                uploadBtn.classList.add('hidden');
+            }
             if (emojiBtn) emojiBtn.disabled = true;
+            if (emojiBtn) emojiBtn.classList.add('hidden');
+            if (gifBtn) {
+                gifBtn.disabled = true;
+                gifBtn.classList.add('hidden');
+            }
             if (notice) notice.classList.remove('hidden');
 
             const tick = () => {
@@ -1476,15 +2959,7 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
                 if (noticeSecs) noticeSecs.textContent = String(remaining);
                 remaining -= 1;
                 if (remaining < 0) {
-                    window.clearInterval(sendCooldownTimer);
-                    sendCooldownTimer = null;
-                    btn.disabled = false;
-                    input.disabled = false;
-                    if (caption) caption.disabled = false;
-                    if (fileInput) fileInput.disabled = false;
-                    if (emojiBtn) emojiBtn.disabled = false;
-                    btn.textContent = btn.dataset.originalText || 'Send';
-                    if (notice) notice.classList.add('hidden');
+                    stopSendCooldown();
                     try { input.focus(); } catch (e) {}
                 }
             };
@@ -1554,6 +3029,47 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
 
             const retryAfter = Number(xhr.getResponseHeader('Retry-After') || '10');
             startSendCooldown(Number.isFinite(retryAfter) ? retryAfter : 10);
+        });
+
+        // Not-a-member: if the server blocks a send, lock composer + show message.
+        document.body.addEventListener('htmx:afterRequest', (event) => {
+            try {
+                const form = document.getElementById('chat_message_form');
+                if (!form) return;
+                if (event.target !== form) return;
+                const xhr = event.detail.xhr;
+                if (!xhr) return;
+                if (xhr.status !== 403) return;
+                const flag = String(xhr.getResponseHeader('X-Vixo-Not-Member') || '');
+                if (flag !== '1') return;
+                if (typeof window.__vixoSetNotMember === 'function') {
+                    window.__vixoSetNotMember(true);
+                }
+            } catch {
+                // ignore
+            }
+        });
+
+        // Admin-only messaging mode: if the server blocks a send, show popup + lock composer.
+        document.body.addEventListener('htmx:afterRequest', (event) => {
+            try {
+                const form = document.getElementById('chat_message_form');
+                if (!form) return;
+                if (event.target !== form) return;
+                const xhr = event.detail.xhr;
+                if (!xhr) return;
+                if (xhr.status !== 403) return;
+                const flag = String(xhr.getResponseHeader('X-Vixo-Admin-Only') || '');
+                if (flag !== '1') return;
+                if (typeof window.__vixoSetAdminOnly === 'function') {
+                    window.__vixoSetAdminOnly(true);
+                }
+                if (typeof window.__vixoShowAdminOnlyPopup === 'function') {
+                    window.__vixoShowAdminOnlyPopup();
+                }
+            } catch {
+                // ignore
+            }
         });
 
         // After a successful HTMX swap (used for file uploads), hydrate timestamps.
@@ -1706,8 +3222,12 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
                 typingIndicatorTextEl.textContent = '';
                 return;
             }
+            const visibleNames = names.slice(0, 3);
+            const extraTypingCount = Math.max(0, names.length - visibleNames.length);
             typingIndicatorEl.classList.remove('hidden');
-            typingIndicatorTextEl.textContent = `${names.join(', ')} typing...`;
+            typingIndicatorTextEl.textContent = extraTypingCount > 0
+                ? `${visibleNames.join(', ')} +${extraTypingCount} typing...`
+                : `${visibleNames.join(', ')} typing...`;
         }
 
         function handleTypingEvent(payload) {
@@ -1827,6 +3347,278 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
             });
         }
 
+        // --- Admin-only messaging (WhatsApp-like) ---
+        const __isRoomAdmin = {% if is_room_admin %}true{% else %}false{% endif %};
+        const __adminOnlyInitial = {% if chat_group.is_private and chat_group.only_admins_can_send %}true{% else %}false{% endif %};
+        const __notMemberInitial = {% if not_member %}true{% else %}false{% endif %};
+        const __adminListInitial = {{ room_admins_json|safe }};
+        let __isRoomAdminLive = !!__isRoomAdmin;
+        let __adminListCurrent = Array.isArray(__adminListInitial) ? __adminListInitial : [];
+
+        const composerRow = document.getElementById('chat_composer_row');
+        const composerForm = document.getElementById('chat_message_form');
+        const composerBar = document.getElementById('chat_composer_bar');
+        const adminOnlyRow = document.getElementById('chat_admin_only_row');
+        const notMemberRow = document.getElementById('chat_not_member_row');
+        const adminsBtn = document.getElementById('chat_admin_only_admins_btn');
+        const adminsPanel = document.getElementById('chat_admin_only_admins_panel');
+        const adminsList = document.getElementById('chat_admin_only_admins_list');
+        const uploadAux = document.getElementById('chat_upload_aux');
+        const uploadProgress = document.getElementById('chat_upload_progress');
+        const cooldownNotice = document.getElementById('chat_send_cooldown_notice');
+
+        function adminIdsFromList(admins) {
+            const ids = new Set();
+            try {
+                (Array.isArray(admins) ? admins : []).forEach((a) => {
+                    const aid = parseInt((a && a.id) || 0, 10) || 0;
+                    if (aid > 0) ids.add(aid);
+                });
+            } catch {
+                // ignore
+            }
+            return ids;
+        }
+
+        function renderAdminList(admins) {
+            if (!adminsList) return;
+            try { adminsList.innerHTML = ''; } catch {}
+            const items = Array.isArray(admins) ? admins : [];
+            if (!items.length) {
+                const el = document.createElement('div');
+                el.className = 'text-xs text-gray-400 px-1 py-1';
+                el.textContent = 'No admins.';
+                adminsList.appendChild(el);
+                return;
+            }
+            items.forEach((a) => {
+                const name = (a && (a.name || a.username)) ? String(a.name || a.username) : 'Admin';
+                const username = (a && a.username) ? String(a.username) : '';
+                const row = document.createElement('div');
+                row.className = 'px-2 py-1.5 rounded-xl border border-gray-800 bg-gray-900/40 text-xs text-gray-100 flex items-center justify-between gap-2';
+                row.innerHTML = `<div class="min-w-0 truncate">${name}</div>${username ? `<div class="shrink-0 text-gray-400">@${username}</div>` : ''}`;
+                adminsList.appendChild(row);
+            });
+        }
+
+        function setAdminsPanelOpen(open) {
+            if (!adminsPanel) return;
+            try {
+                if (open) {
+                    adminsPanel.classList.remove('max-h-0', 'opacity-0');
+                    adminsPanel.classList.add('max-h-40', 'opacity-100');
+                } else {
+                    adminsPanel.classList.add('max-h-0', 'opacity-0');
+                    adminsPanel.classList.remove('max-h-40', 'opacity-100');
+                }
+            } catch {}
+        }
+
+        function setAdminOnly(enabled, admins) {
+            // Admins can always send; only lock normal members.
+            if (__isRoomAdminLive) return;
+
+            const on = !!enabled;
+            const mediaAllowed = (window.__vixoMediaUploadsAllowed !== false);
+            if (adminOnlyRow) adminOnlyRow.classList.toggle('hidden', !on);
+            if (notMemberRow) notMemberRow.classList.add('hidden');
+            if (composerRow) composerRow.classList.toggle('hidden', on);
+
+            if (uploadAux) uploadAux.classList.toggle('hidden', on || !mediaAllowed);
+            if (uploadProgress) uploadProgress.classList.toggle('hidden', true);
+            if (cooldownNotice) cooldownNotice.classList.toggle('hidden', true);
+
+            if (input) input.disabled = on;
+            try {
+                const sendBtn = document.getElementById('chat_send_btn');
+                if (sendBtn) sendBtn.disabled = on;
+                const uploadBtn = document.getElementById('chat_upload_btn');
+                if (uploadBtn) {
+                    uploadBtn.disabled = on || !mediaAllowed;
+                    uploadBtn.classList.toggle('hidden', on || !mediaAllowed);
+                }
+                const emojiBtn = document.getElementById('emoji_btn');
+                if (emojiBtn) emojiBtn.disabled = on;
+                const gifBtn = document.getElementById('gif_btn');
+                if (gifBtn) gifBtn.disabled = on;
+                const fileInput = document.getElementById('chat_file_input');
+                if (fileInput) fileInput.disabled = on || !mediaAllowed;
+            } catch {}
+
+            __adminListCurrent = Array.isArray(admins) ? admins : (Array.isArray(__adminListInitial) ? __adminListInitial : []);
+            renderAdminList(__adminListCurrent);
+            setAdminsPanelOpen(false);
+        }
+
+        window.__vixoSetAdminOnly = (enabled, admins) => {
+            setAdminOnly(!!enabled, admins);
+        };
+
+        function setNotMember(enabled) {
+            const on = !!enabled;
+            const mediaAllowed = (window.__vixoMediaUploadsAllowed !== false);
+
+            // Once a user is not a member, stop all realtime/polling to avoid
+            // repeated websocket reconnect activity (looks like refresh).
+            if (on) {
+                try { window.__vixoChatRealtimeDisabled = true; } catch {}
+                try {
+                    if (window.__vixoChatPollTimer) {
+                        clearInterval(window.__vixoChatPollTimer);
+                        window.__vixoChatPollTimer = null;
+                    }
+                } catch {}
+                try {
+                    if (window.__roomPingTimer) {
+                        clearInterval(window.__roomPingTimer);
+                        window.__roomPingTimer = null;
+                    }
+                } catch {}
+                try {
+                    if (window.__vixoChatSocket && window.__vixoChatSocket.readyState <= 1) {
+                        window.__vixoChatSocket.close();
+                    }
+                    window.__vixoChatSocket = null;
+                } catch {}
+            }
+
+            // Do not show the inline "not a member" banner; use the removal modal only.
+            if (composerForm) composerForm.classList.toggle('hidden', on);
+            if (composerBar) composerBar.classList.toggle('hidden', on);
+            if (notMemberRow) notMemberRow.classList.add('hidden');
+            if (adminOnlyRow) adminOnlyRow.classList.add('hidden');
+            if (composerRow) composerRow.classList.toggle('hidden', on);
+            if (uploadAux) uploadAux.classList.toggle('hidden', on || !mediaAllowed);
+            if (input) input.disabled = on;
+            try {
+                const sendBtn = document.getElementById('chat_send_btn');
+                if (sendBtn) sendBtn.disabled = on;
+                const uploadBtn = document.getElementById('chat_upload_btn');
+                if (uploadBtn) {
+                    uploadBtn.disabled = on || !mediaAllowed;
+                    uploadBtn.classList.toggle('hidden', on || !mediaAllowed);
+                }
+                const emojiBtn = document.getElementById('emoji_btn');
+                if (emojiBtn) emojiBtn.disabled = on;
+                const gifBtn = document.getElementById('gif_btn');
+                if (gifBtn) gifBtn.disabled = on;
+                const fileInput = document.getElementById('chat_file_input');
+                if (fileInput) fileInput.disabled = on || !mediaAllowed;
+            } catch {}
+        }
+
+        window.__vixoSetNotMember = (enabled) => {
+            setNotMember(!!enabled);
+        };
+
+        // Removed-from-group modal (instant on realtime kick)
+        (function initRemovedModal() {
+            try {
+                const gate = document.getElementById('removed_gate');
+                const okBtn = document.getElementById('removed_gate_ok');
+                if (!gate || !okBtn) return;
+                okBtn.addEventListener('click', () => {
+                    const to = gate.getAttribute('data-redirect') || '/';
+                    window.location.href = to;
+                });
+                window.__vixoShowRemovedModal = (message) => {
+                    try {
+                        const msg = document.getElementById('removed_gate_msg');
+                        if (msg) msg.textContent = String(message || 'You have been removed from the group by an admin.');
+                        gate.classList.remove('hidden');
+                    } catch {
+                        gate.classList.remove('hidden');
+                    }
+                };
+            } catch {
+                // ignore
+            }
+        })();
+
+        function ensureAdminOnlyToastContainer() {
+            let c = document.getElementById('admin-only-toast-container');
+            if (c) return c;
+            c = document.createElement('div');
+            c.id = 'admin-only-toast-container';
+            c.className = 'fixed bottom-24 left-1/2 -translate-x-1/2 z-50 w-[min(28rem,calc(100vw-2rem))]';
+            document.body.appendChild(c);
+            return c;
+        }
+
+        window.__vixoShowAdminOnlyPopup = () => {
+            try {
+                const container = ensureAdminOnlyToastContainer();
+                const toast = document.createElement('div');
+                toast.className = 'pointer-events-auto rounded-2xl border border-gray-800 bg-gray-900/95 px-4 py-3 text-sm text-gray-100 shadow-lg shadow-black/20 transition duration-200 ease-out';
+                toast.innerHTML = `
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="font-semibold">Only admins can send messages</div>
+                            <div class="mt-1 text-xs text-gray-300">This group is now admin-only.</div>
+                        </div>
+                        <button type="button" class="h-8 w-8 rounded-lg bg-gray-800/60 hover:bg-gray-800 text-gray-300 hover:text-gray-100" aria-label="Close">×</button>
+                    </div>
+                `;
+                const closeBtn = toast.querySelector('button');
+                const remove = () => {
+                    toast.classList.add('opacity-0');
+                    setTimeout(() => toast.remove(), 200);
+                };
+                if (closeBtn) closeBtn.addEventListener('click', remove);
+                setTimeout(remove, 5000);
+                container.appendChild(toast);
+            } catch {
+                // ignore
+            }
+        };
+
+        window.__vixoShowAdminRemovedPopup = () => {
+            try {
+                const container = ensureAdminOnlyToastContainer();
+                const toast = document.createElement('div');
+                toast.className = 'pointer-events-auto rounded-2xl border border-gray-800 bg-gray-900/95 px-4 py-3 text-sm text-gray-100 shadow-lg shadow-black/20 transition duration-200 ease-out';
+                toast.innerHTML = `
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="font-semibold">Admin role removed</div>
+                            <div class="mt-1 text-xs text-gray-300">You have been removed from admin.</div>
+                        </div>
+                        <button type="button" class="h-8 w-8 rounded-lg bg-gray-800/60 hover:bg-gray-800 text-gray-300 hover:text-gray-100" aria-label="Close">×</button>
+                    </div>
+                `;
+                const closeBtn = toast.querySelector('button');
+                const remove = () => {
+                    toast.classList.add('opacity-0');
+                    setTimeout(() => toast.remove(), 200);
+                };
+                if (closeBtn) closeBtn.addEventListener('click', remove);
+                setTimeout(remove, 5000);
+                container.appendChild(toast);
+            } catch {
+                // ignore
+            }
+        };
+
+        if (adminsBtn) {
+            adminsBtn.addEventListener('click', (e) => {
+                try { e.preventDefault(); } catch {}
+                const open = adminsPanel && adminsPanel.classList.contains('max-h-0');
+                setAdminsPanelOpen(open);
+            });
+        }
+
+        // Initial state on page load.
+        if (__notMemberInitial) {
+            setNotMember(true);
+            try {
+                if (typeof window.__vixoShowRemovedModal === 'function') {
+                    window.__vixoShowRemovedModal('You have been removed from the group by an admin.');
+                }
+            } catch {}
+        } else {
+            setAdminOnly(__adminOnlyInitial, __adminListInitial);
+        }
+
         let socket = null;
         let wsConnected = false;
         let lastId = 0;
@@ -1895,8 +3687,82 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
             if (!Number.isNaN(id) && id > lastId) lastId = id;
         }
 
+        function appendMessagesHtmlDedup(rawHtml) {
+            try {
+                if (!rawHtml || !messagesEl) return;
+
+                const tmp = document.createElement('div');
+                tmp.innerHTML = String(rawHtml);
+
+                const nodes = Array.from(tmp.childNodes || []).filter(n => n && n.nodeType === 1);
+                if (!nodes.length) return;
+
+                nodes.forEach((el) => {
+                    try {
+                        const mid = parseInt(el.getAttribute('data-message-id') || (el.dataset ? el.dataset.messageId : '0') || '0', 10) || 0;
+                        if (mid && document.querySelector(`[data-message-id="${mid}"]`)) {
+                            return;
+                        }
+                        messagesEl.appendChild(el);
+
+                        try {
+                            const isAdminRemoved = (el.getAttribute('data-system-admin-removed') || '0') === '1';
+                            const isSelf = (el.getAttribute('data-system-admin-removed-self') || '0') === '1';
+                            if (isAdminRemoved && isSelf) {
+                                __isRoomAdminLive = false;
+                                if (typeof window.__vixoShowAdminRemovedPopup === 'function') {
+                                    window.__vixoShowAdminRemovedPopup('You have been removed from admin.');
+                                }
+                            }
+                        } catch {
+                            // ignore
+                        }
+                    } catch {
+                        try { messagesEl.appendChild(el); } catch {}
+                    }
+                });
+            } catch {
+                // ignore
+            }
+        }
+
+        function getMembersCountBadge() {
+            try {
+                return document.getElementById('vixo_members_count')
+                    || (document.getElementById('vixo_members_btn')
+                        ? document.getElementById('vixo_members_btn').querySelector('span.text-emerald-300')
+                        : null);
+            } catch {
+                return null;
+            }
+        }
+
+        function updateMembersCountBadge(serverCount, fallbackDelta) {
+            try {
+                const badge = getMembersCountBadge();
+                if (!badge) return;
+
+                const parsedServer = parseInt(serverCount || 0, 10) || 0;
+                if (parsedServer > 0) {
+                    badge.textContent = String(parsedServer);
+                    return;
+                }
+
+                const current = parseInt(String(badge.textContent || '').trim(), 10);
+                if (Number.isNaN(current)) return;
+
+                const delta = parseInt(fallbackDelta || 0, 10) || 0;
+                const next = Math.max(0, current + delta);
+                badge.textContent = String(next);
+            } catch {}
+        }
+
         function connect() {
+            try {
+                if (window.__vixoChatRealtimeDisabled) return;
+            } catch {}
             socket = new WebSocket(wsUrl);
+            try { window.__vixoChatSocket = socket; } catch {}
 
             socket.onopen = function () {
                 wsConnected = true;
@@ -1930,16 +3796,287 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
                 }
 
                 if (payload.type === 'chat_message' && payload.html) {
+                    try {
+                        if (window.__vixoChatRealtimeDisabled) return;
+                    } catch {}
                     const emptyEl = document.getElementById('empty_state');
                     if (emptyEl) emptyEl.remove();
                     if (messagesEl && messagesEl.classList.contains('hidden')) {
                         messagesEl.classList.remove('hidden');
                     }
-                    messagesEl.insertAdjacentHTML('beforeend', payload.html);
+                    appendMessagesHtmlDedup(payload.html);
                     hydrateLocalTimes(messagesEl);
                     updateLastIdFromDom();
                     safeScrollToBottom();
                     if (document.visibilityState === 'visible') sendReadAck(lastId);
+                    return;
+                }
+
+                if (payload.type === 'not_member') {
+                    if (typeof window.__vixoSetNotMember === 'function') {
+                        window.__vixoSetNotMember(true);
+                    }
+                    try {
+                        if (typeof window.__vixoShowRemovedModal === 'function') {
+                            window.__vixoShowRemovedModal(payload.message || 'You have been removed from the group by an admin.');
+                        }
+                    } catch {}
+                    return;
+                }
+
+                if (payload.type === 'member_removed') {
+                    const rid = parseInt(payload.removed_user_id || payload.removedUserId || payload.user_id || 0, 10) || 0;
+
+                    // Update members list/count for everyone.
+                    try {
+                        const panel = document.getElementById('vixo_members_panel');
+
+                        if (panel && rid) {
+                            const row = panel.querySelector(`[data-member-row][data-member-user-id="${rid}"]`);
+                            if (row) row.remove();
+                        }
+                        updateMembersCountBadge(payload.member_count, -1);
+                    } catch {}
+
+                    // For the removed user: lock UI + show modal.
+                    if (!rid || rid === currentUserId) {
+                        if (typeof window.__vixoSetNotMember === 'function') {
+                            window.__vixoSetNotMember(true);
+                        }
+                        if (typeof window.__vixoShowRemovedModal === 'function') {
+                            window.__vixoShowRemovedModal(payload.message || 'You have been removed from the group by an admin.');
+                        }
+                    }
+                    try { scheduleCatchupPoll(); } catch {}
+                    return;
+                }
+
+                if (payload.type === 'member_left') {
+                    const uid = parseInt(payload.user_id || 0, 10) || 0;
+                    try {
+                        const panel = document.getElementById('vixo_members_panel');
+
+                        if (panel && uid) {
+                            const row = panel.querySelector(`[data-member-row][data-member-user-id="${uid}"]`);
+                            if (row) row.remove();
+                        }
+                        updateMembersCountBadge(payload.member_count, -1);
+                    } catch {}
+                    try { scheduleCatchupPoll(); } catch {}
+                    return;
+                }
+
+                if (payload.type === 'member_added') {
+                    try {
+                        const member = payload.member || {};
+                        const uid = parseInt(member.id || 0, 10) || 0;
+
+                        // Update count in Members button.
+                        updateMembersCountBadge(payload.member_count, 1);
+
+                        if (!uid) {
+                            try { scheduleCatchupPoll(); } catch {}
+                            return;
+                        }
+
+                        // Insert member into members panel list (if present).
+                        const list = document.getElementById('vixo_members_list');
+                        const panel = document.getElementById('vixo_members_panel');
+                        if (!panel) return;
+
+                        // If list didn't exist because it was empty initially, create it.
+                        let listEl = list;
+                        if (!listEl) {
+                            const empty = document.getElementById('vixo_members_empty');
+                            if (empty) empty.remove();
+                            const host = document.getElementById('vixo_panel_members') || panel;
+                            if (host) {
+                                listEl = document.createElement('div');
+                                listEl.id = 'vixo_members_list';
+                                listEl.className = 'space-y-1';
+                                host.appendChild(listEl);
+                            }
+                        }
+                        if (!listEl) return;
+
+                        // Prevent duplicates.
+                        const existing = panel.querySelector(`[data-member-row][data-member-user-id="${uid}"]`);
+                        if (existing) return;
+
+                        const ownerId = (() => {
+                            try {
+                                return (__adminListCurrent && __adminListCurrent.length) ? (parseInt(__adminListCurrent[0].id || 0, 10) || 0) : 0;
+                            } catch { return 0; }
+                        })();
+                        const isYou = (typeof currentUserId !== 'undefined') && uid === currentUserId;
+                        const actionable = !!(__isRoomAdminLive && !isYou && (!ownerId || uid !== ownerId));
+
+                        const row = document.createElement('div');
+                        row.setAttribute('data-member-row', '');
+                        row.setAttribute('data-member-user-id', String(uid));
+                        row.className = 'px-2 py-2 rounded-xl border border-gray-800 bg-gray-900/40 text-sm text-gray-100 flex items-center justify-between gap-2 select-none';
+                        if (actionable) row.className += ' cursor-pointer hover:bg-gray-900/55';
+
+                        if (actionable) {
+                            row.setAttribute('data-member-actionable', '1');
+                            const displayName = String(member.name || member.username || 'Member');
+                            row.setAttribute('data-member-name', displayName);
+                            const removeTpl = "{% url 'chatroom-member-remove' chatroom_name 0 %}";
+                            const makeTpl = "{% url 'chatroom-member-make-admin' chatroom_name 0 %}";
+                            const remAdminTpl = "{% url 'chatroom-member-remove-admin' chatroom_name 0 %}";
+                            const muteTpl = "{% url 'chatroom-member-mute' chatroom_name 0 %}";
+                            row.setAttribute('data-member-remove-url', removeTpl.replace('/0/', `/${uid}/`));
+                            row.setAttribute('data-member-make-admin-url', makeTpl.replace('/0/', `/${uid}/`));
+                            row.setAttribute('data-member-remove-admin-url', remAdminTpl.replace('/0/', `/${uid}/`));
+                            row.setAttribute('data-member-is-admin', '0');
+                            row.setAttribute('data-member-mute-url', muteTpl.replace('/0/', `/${uid}/`));
+                        }
+
+                        const displayName = String(member.name || member.username || 'Member');
+                        const avatarUrl = String(member.avatar || '').trim();
+                        const fallbackLetter = (displayName.slice(0, 1) || 'U').toUpperCase();
+
+                        const left = document.createElement('div');
+                        left.className = 'min-w-0 flex items-center gap-2.5';
+
+                        const avatar = document.createElement('span');
+                        avatar.className = 'h-8 w-8 shrink-0 rounded-full border border-gray-700 bg-gray-800 overflow-hidden';
+                        if (avatarUrl) {
+                            const img = document.createElement('img');
+                            img.src = avatarUrl;
+                            img.alt = `@${String(member.username || '').trim() || 'user'}`;
+                            img.className = 'h-full w-full object-cover';
+                            avatar.appendChild(img);
+                        } else {
+                            const fallback = document.createElement('span');
+                            fallback.className = 'h-full w-full flex items-center justify-center text-[11px] font-bold text-gray-100';
+                            fallback.textContent = fallbackLetter;
+                            avatar.appendChild(fallback);
+                        }
+
+                        const name = document.createElement('div');
+                        name.className = 'min-w-0 truncate';
+                        name.textContent = displayName;
+
+                        left.appendChild(avatar);
+                        left.appendChild(name);
+                        if (isYou) {
+                            const you = document.createElement('span');
+                            you.className = 'text-gray-400 font-semibold';
+                            you.textContent = ' (you)';
+                            name.appendChild(you);
+                        }
+
+                        const right = document.createElement('div');
+                        right.className = 'shrink-0 flex items-center gap-2';
+
+                        row.appendChild(left);
+                        row.appendChild(right);
+                        listEl.appendChild(row);
+                    } catch {
+                        // ignore
+                    }
+                    try { scheduleCatchupPoll(); } catch {}
+                    return;
+                }
+
+                if (payload.type === 'waiting_list_updated') {
+                    try {
+                        if (typeof window.__vixoWaitingListRealtime === 'function') {
+                            window.__vixoWaitingListRealtime(payload.count || 0);
+                        }
+                    } catch {
+                        // ignore
+                    }
+                    return;
+                }
+
+                if (payload.type === 'room_settings') {
+                    try {
+                        if (typeof window.__vixoApplyRoomSettings === 'function') {
+                            window.__vixoApplyRoomSettings(payload);
+                        }
+                        let nextAdminIds = new Set();
+                        if (Array.isArray(payload.admins)) {
+                            const previousIsAdmin = !!__isRoomAdminLive;
+                            nextAdminIds = adminIdsFromList(payload.admins);
+                            __isRoomAdminLive = nextAdminIds.has(currentUserId);
+                            __adminListCurrent = payload.admins;
+                            if (previousIsAdmin && !__isRoomAdminLive && typeof window.__vixoShowAdminRemovedPopup === 'function') {
+                                window.__vixoShowAdminRemovedPopup();
+                            }
+                        }
+
+                        try {
+                            const panel = document.getElementById('vixo_members_panel');
+                            if (panel) {
+                                const rows = panel.querySelectorAll('[data-member-row][data-member-user-id]');
+                                rows.forEach((row) => {
+                                    const uid = parseInt(String(row.getAttribute('data-member-user-id') || '0'), 10) || 0;
+                                    if (!uid) return;
+
+                                    const isAdminMember = nextAdminIds.has(uid);
+                                    row.setAttribute('data-member-is-admin', isAdminMember ? '1' : '0');
+
+                                    const right = row.querySelector('.shrink-0.flex.items-center.gap-2') || row.lastElementChild;
+                                    const badge = row.querySelector('[data-admin-badge]');
+                                    if (isAdminMember) {
+                                        if (!badge && right) {
+                                            const b = document.createElement('span');
+                                            b.className = 'rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] font-extrabold text-emerald-200';
+                                            b.setAttribute('data-admin-badge', '');
+                                            b.textContent = 'Admin';
+                                            right.appendChild(b);
+                                        }
+                                    } else if (badge) {
+                                        badge.remove();
+                                    }
+                                });
+                            }
+                        } catch {
+                            // ignore
+                        }
+                    } catch {
+                        // ignore
+                    }
+                    if (typeof window.__vixoSetAdminOnly === 'function') {
+                        window.__vixoSetAdminOnly(!!payload.only_admins_can_send, payload.admins);
+                    }
+                    try { scheduleCatchupPoll(); } catch {}
+                    return;
+                }
+
+                if (payload.type === 'admin_only') {
+                    if (typeof window.__vixoSetAdminOnly === 'function') {
+                        window.__vixoSetAdminOnly(true, payload.admins);
+                    }
+                    if (typeof window.__vixoShowAdminOnlyPopup === 'function') {
+                        window.__vixoShowAdminOnlyPopup();
+                    }
+                    return;
+                }
+
+                if (payload.type === 'admin_role_removed') {
+                    const did = parseInt(payload.demoted_user_id || 0, 10) || 0;
+                    if (did && did === currentUserId) {
+                        __isRoomAdminLive = false;
+                        if (typeof window.__vixoShowAdminRemovedPopup === 'function') {
+                            window.__vixoShowAdminRemovedPopup(payload.message || 'You have been removed from admin.');
+                        }
+                    }
+                    return;
+                }
+
+                if (payload.type === 'member_mute_updated') {
+                    const targetId = parseInt(payload.target_user_id || 0, 10) || 0;
+                    if (targetId && targetId === currentUserId) {
+                        const seconds = parseInt(payload.seconds || 0, 10) || 0;
+                        if (seconds > 0) {
+                            startSendCooldown(seconds);
+                        } else {
+                            stopSendCooldown();
+                        }
+                    }
                     return;
                 }
 
@@ -2006,7 +4143,10 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
                 } catch {
                     // ignore
                 }
-                // Simple reconnect
+                // Simple reconnect (unless realtime disabled)
+                try {
+                    if (window.__vixoChatRealtimeDisabled) return;
+                } catch {}
                 setTimeout(connect, 1000);
             };
 
@@ -2309,6 +4449,17 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
             if (callPopupSubtitleEl) callPopupSubtitleEl.textContent = text || '';
         }
 
+        function getPublicCallErrorMessage(error) {
+            const raw = String((error && error.message) ? error.message : (error || '')).toLowerCase();
+            if (raw.includes('permission') || raw.includes('notallowed') || raw.includes('denied')) {
+                return 'Microphone/camera permission is required.';
+            }
+            if (raw.includes('device') || raw.includes('camera') || raw.includes('microphone') || raw.includes('track')) {
+                return 'Could not access your mic/camera. Please check device settings.';
+            }
+            return 'Could not start call. Please try again.';
+        }
+
         function showCallPopup() {
             if (!callPopupEl) return;
             callPopupEl.classList.remove('hidden');
@@ -2454,7 +4605,8 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
 
                 setCallStatus('In call');
             } catch (e) {
-                setCallStatus('Error: ' + (e && e.message ? e.message : String(e)));
+                try { console.error('Call popup start failed:', e); } catch {}
+                setCallStatus(getPublicCallErrorMessage(e));
 
                 // Allow retry without refresh.
                 try {
@@ -2600,13 +4752,40 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
             await openCallPopup(type, 'caller');
         }, true);
 
-        async function poll() {
+        let __vixoCatchupTimer = null;
+        function scheduleCatchupPoll() {
+            try {
+                if (__vixoCatchupTimer) return;
+                __vixoCatchupTimer = setTimeout(() => {
+                    __vixoCatchupTimer = null;
+                    try { poll(true); } catch {}
+                }, 200);
+            } catch {
+                // ignore
+            }
+        }
+
+        async function poll(force) {
             // Fallback: if websocket isn't connected, poll for new messages
-            if (wsConnected) return;
+            if (wsConnected && !force) return;
+            try {
+                if (window.__vixoChatRealtimeDisabled) return;
+            } catch {}
             try {
                 updateLastIdFromDom();
                 const res = await fetch(`${pollUrl}?after=${lastId}`, { credentials: 'same-origin' });
-                if (!res.ok) return;
+                if (!res.ok) {
+                    // If removed from a private room, the server returns 404/403.
+                    if (res.status === 403 || res.status === 404) {
+                        try {
+                            if (typeof window.__vixoSetNotMember === 'function') window.__vixoSetNotMember(true);
+                            if (typeof window.__vixoShowRemovedModal === 'function') {
+                                window.__vixoShowRemovedModal('You have been removed from the group by an admin.');
+                            }
+                        } catch {}
+                    }
+                    return;
+                }
                 const data = await res.json();
                 if (data && typeof data.online_count !== 'undefined') {
                     __setOnlineCount(data.online_count);
@@ -2617,7 +4796,7 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
                     if (messagesEl && messagesEl.classList.contains('hidden')) {
                         messagesEl.classList.remove('hidden');
                     }
-                    messagesEl.insertAdjacentHTML('beforeend', data.messages_html);
+                    appendMessagesHtmlDedup(data.messages_html);
                     hydrateLocalTimes(messagesEl);
                     updateLastIdFromDom();
                     safeScrollToBottom();
@@ -2631,8 +4810,13 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
             }
         }
 
-        setInterval(poll, 1200);
-        connect();
+        if (!__notMemberInitial) {
+            try { window.__vixoChatRealtimeDisabled = false; } catch {}
+            try { window.__vixoChatPollTimer = setInterval(poll, 1200); } catch { setInterval(poll, 1200); }
+            connect();
+        } else {
+            try { window.__vixoChatRealtimeDisabled = true; } catch {}
+        }
 
         function clearReply() {
             if (replyToIdInput) replyToIdInput.value = '';

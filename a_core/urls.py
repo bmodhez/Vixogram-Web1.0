@@ -8,6 +8,7 @@ from django.views.generic import TemplateView
 from django.templatetags.static import static as static_url
 from a_core.firebase_views import firebase_messaging_sw
 from a_core.maintenance_views import maintenance_page_view, maintenance_status_view, maintenance_toggle_view
+from a_core.security_views import network_security_status_view, network_security_client_report_view
 from a_users.allauth_views import CooldownEmailView, WelcomeLoginView, WelcomeSignupView
 from a_home.views import pricing_view
 
@@ -19,6 +20,8 @@ urlpatterns = [
     path('maintenance/', maintenance_page_view, name='maintenance'),
     path('api/site/maintenance/status/', maintenance_status_view, name='maintenance-status'),
     path('api/site/maintenance/toggle/', maintenance_toggle_view, name='maintenance-toggle'),
+    path('api/security/network-status/', network_security_status_view, name='network-security-status'),
+    path('api/security/network-client-report/', network_security_client_report_view, name='network-security-client-report'),
     path('admin/', admin.site.urls),
     path('firebase-messaging-sw.js', firebase_messaging_sw, name='firebase-messaging-sw'),
     path('pricing/', pricing_view, name='pricing'),

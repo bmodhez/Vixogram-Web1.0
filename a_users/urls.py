@@ -12,6 +12,13 @@ urlpatterns = [
     path('edit/', profile_edit_view, name="profile-edit"),
     path('settings/', profile_settings_view, name="profile-settings"),
     path('username/check/', username_availability_view, name='username-check'),
+
+    # Onboarding (after welcome popup)
+    path('onboarding/username/', onboarding_username_view, name='onboarding-username'),
+    path('onboarding/intro/', onboarding_intro_view, name='onboarding-intro'),
+    path('onboarding/photo/', onboarding_photo_view, name='onboarding-photo'),
+    path('onboarding/about/', onboarding_about_view, name='onboarding-about'),
+
     path('u/<username>/', profile_view, name='profile-user'),
     path('u/<username>/config/', profile_config_view, name='profile-config'),
     path('u/<username>/followers/', profile_followers_partial_view, name='profile-followers'),

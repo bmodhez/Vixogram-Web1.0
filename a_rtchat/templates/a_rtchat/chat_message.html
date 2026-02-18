@@ -1,10 +1,168 @@
 {% load chat_extras %}
 
-{% if message.body and message.body|slice:":6" == "[CALL]" %}
+{% if message.body == "[SYSTEM_JOIN]" %}
+    <div data-message-id="{{ message.id }}" class="flex justify-center{% if extra_classes %} {{ extra_classes }}{% endif %}">
+        <div class="max-w-[90%]">
+            <div class="inline-flex items-center gap-2 rounded-full border border-gray-700 bg-gray-800/60 px-3 py-1.5 text-[11px] font-medium text-gray-200/80">
+                <span>
+                    {% if message.author == user %}
+                        You joined the group
+                    {% else %}
+                        {% with dn=message.author.profile.name|default:message.author.username %}{{ dn }}{% endwith %} joined the group
+                    {% endif %}
+                </span>
+                <span class="text-gray-500">•</span>
+                {% if chat_group and not chat_group.is_private and not chat_group.is_code_room %}
+                    {# Public groups: don't show message time #}
+                {% else %}
+                    <time class="text-gray-400/70" data-dt="{{ message.created|date:'c' }}"></time>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% elif message.body == "[SYSTEM_LEFT]" %}
+    <div data-message-id="{{ message.id }}" class="flex justify-center{% if extra_classes %} {{ extra_classes }}{% endif %}">
+        <div class="max-w-[90%]">
+            <div class="inline-flex items-center gap-2 rounded-full border border-gray-700 bg-gray-800/60 px-3 py-1.5 text-[11px] font-medium text-gray-200/80">
+                <span>
+                    {% if message.author == user %}
+                        You have exited the group
+                    {% else %}
+                        This member has exited the group
+                    {% endif %}
+                </span>
+                <span class="text-gray-500">•</span>
+                {% if chat_group and not chat_group.is_private and not chat_group.is_code_room %}
+                    {# Public groups: don't show message time #}
+                {% else %}
+                    <time class="text-gray-400/70" data-dt="{{ message.created|date:'c' }}"></time>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% elif message.body == "[SYSTEM_REMOVED]" %}
+    <div data-message-id="{{ message.id }}" class="flex justify-center{% if extra_classes %} {{ extra_classes }}{% endif %}">
+        <div class="max-w-[90%]">
+            <div class="inline-flex items-center gap-2 rounded-full border border-gray-700 bg-gray-800/60 px-3 py-1.5 text-[11px] font-medium text-gray-200/80">
+                <span>
+                    {% if message.author == user %}
+                        You were removed from the group
+                    {% else %}
+                        {% with dn=message.author.profile.name|default:message.author.username %}{{ dn }}{% endwith %} was removed from the group
+                    {% endif %}
+                </span>
+                <span class="text-gray-500">•</span>
+                {% if chat_group and not chat_group.is_private and not chat_group.is_code_room %}
+                    {# Public groups: don't show message time #}
+                {% else %}
+                    <time class="text-gray-400/70" data-dt="{{ message.created|date:'c' }}"></time>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% elif message.body == "[SYSTEM_ADMIN_ADDED]" %}
+    <div data-message-id="{{ message.id }}" class="flex justify-center{% if extra_classes %} {{ extra_classes }}{% endif %}">
+        <div class="max-w-[90%]">
+            <div class="inline-flex items-center gap-2 rounded-full border border-gray-700 bg-gray-800/60 px-3 py-1.5 text-[11px] font-medium text-gray-200/80">
+                <span>
+                    {% if message.author == user %}
+                        You are now an admin
+                    {% else %}
+                        {% with dn=message.author.profile.name|default:message.author.username %}{{ dn }}{% endwith %} is now an admin
+                    {% endif %}
+                </span>
+                <span class="text-gray-500">•</span>
+                {% if chat_group and not chat_group.is_private and not chat_group.is_code_room %}
+                    {# Public groups: don't show message time #}
+                {% else %}
+                    <time class="text-gray-400/70" data-dt="{{ message.created|date:'c' }}"></time>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% elif message.body == "[SYSTEM_ADMIN_REMOVED]" %}
+    <div
+        data-message-id="{{ message.id }}"
+        data-system-admin-removed="1"
+        data-system-admin-removed-self="{% if message.author == user %}1{% else %}0{% endif %}"
+        class="flex justify-center{% if extra_classes %} {{ extra_classes }}{% endif %}">
+        <div class="max-w-[90%]">
+            <div class="inline-flex items-center gap-2 rounded-full border border-gray-700 bg-gray-800/60 px-3 py-1.5 text-[11px] font-medium text-gray-200/80">
+                <span>
+                    {% if message.author == user %}
+                        You are no longer an admin
+                    {% else %}
+                        {% with dn=message.author.profile.name|default:message.author.username %}{{ dn }}{% endwith %} is no longer an admin
+                    {% endif %}
+                </span>
+                <span class="text-gray-500">•</span>
+                {% if chat_group and not chat_group.is_private and not chat_group.is_code_room %}
+                    {# Public groups: don't show message time #}
+                {% else %}
+                    <time class="text-gray-400/70" data-dt="{{ message.created|date:'c' }}"></time>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% elif message.body == "[SYSTEM_ADMINS_ONLY_ENABLED]" %}
+    <div data-message-id="{{ message.id }}" class="flex justify-center{% if extra_classes %} {{ extra_classes }}{% endif %}">
+        <div class="max-w-[90%]">
+            <div class="inline-flex items-center gap-2 rounded-full border border-gray-700 bg-gray-800/60 px-3 py-1.5 text-[11px] font-medium text-gray-200/80">
+                <span>
+                    {% if message.author == user %}
+                        You have enabled admins only chat
+                    {% else %}
+                        {% with dn=message.author.profile.name|default:message.author.username %}{{ dn }}{% endwith %} has enabled admins only chat
+                    {% endif %}
+                </span>
+                <span class="text-gray-500">•</span>
+                {% if chat_group and not chat_group.is_private and not chat_group.is_code_room %}
+                    {# Public groups: don't show message time #}
+                {% else %}
+                    <time class="text-gray-400/70" data-dt="{{ message.created|date:'c' }}"></time>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% elif message.body == "[SYSTEM_ADMINS_ONLY_DISABLED]" %}
+    <div data-message-id="{{ message.id }}" class="flex justify-center{% if extra_classes %} {{ extra_classes }}{% endif %}">
+        <div class="max-w-[90%]">
+            <div class="inline-flex items-center gap-2 rounded-full border border-gray-700 bg-gray-800/60 px-3 py-1.5 text-[11px] font-medium text-gray-200/80">
+                <span>
+                    {% if message.author == user %}
+                        You have disabled admins only chat
+                    {% else %}
+                        {% with dn=message.author.profile.name|default:message.author.username %}{{ dn }}{% endwith %} has disabled admins only chat
+                    {% endif %}
+                </span>
+                <span class="text-gray-500">•</span>
+                {% if chat_group and not chat_group.is_private and not chat_group.is_code_room %}
+                    {# Public groups: don't show message time #}
+                {% else %}
+                    <time class="text-gray-400/70" data-dt="{{ message.created|date:'c' }}"></time>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% elif message.body and message.body|slice:":6" == "[CALL]" %}
     <div data-message-id="{{ message.id }}" class="flex justify-center{% if extra_classes %} {{ extra_classes }}{% endif %}">
         <div class="max-w-[90%]">
             <div class="inline-flex items-center gap-2 rounded-full border border-gray-700 bg-gray-800/60 px-3 py-1.5 text-[11px] font-medium text-gray-200/80">
                 <span>{{ message.body|cut:"[CALL] " }}</span>
+                <span class="text-gray-500">•</span>
+                {% if chat_group and not chat_group.is_private and not chat_group.is_code_room %}
+                    {# Public groups: don't show message time #}
+                {% else %}
+                    <time class="text-gray-400/70" data-dt="{{ message.created|date:'c' }}"></time>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% elif message.body and message.body|slice:":13" == "[SYSTEM_TAG] " %}
+    <div data-message-id="{{ message.id }}" class="flex justify-center{% if extra_classes %} {{ extra_classes }}{% endif %}">
+        <div class="max-w-[90%]">
+            <div class="inline-flex items-center gap-2 rounded-full border border-gray-700 bg-gray-800/60 px-3 py-1.5 text-[11px] font-medium text-gray-200/80">
+                <span>{{ message.body|cut:"[SYSTEM_TAG] " }}</span>
                 <span class="text-gray-500">•</span>
                 {% if chat_group and not chat_group.is_private and not chat_group.is_code_room %}
                     {# Public groups: don't show message time #}
@@ -30,32 +188,37 @@
                         class="inline-flex items-center gap-2 min-w-0"
                     >
                         <img src="{{ message.author.profile.avatar }}" class="w-6 h-6 rounded-full object-cover border border-white/10">
-                        <span class="text-[14px] font-semibold truncate {% if message.author.profile.is_founder_club %}founder{% else %}text-gray-200{% endif %}">
-                            {% if message.author.profile.is_founder_club %}👑{% endif %}
-                            {{ message.author.profile.name|default:message.author.username }}
-                        </span>
-                        {% if verified_user_ids and message.author_id in verified_user_ids %}
-                            <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-sky-500/20 text-sky-300 text-[10px] leading-none" title="Verified" aria-label="Verified">✓</span>
-                        {% endif %}
-                        {% if message.author.profile.is_founder_club %}
-                            <span class="role-badge founder-badge" title="Founder Club" aria-label="Founder Club">Founder</span>
+                        {% if message.author.is_superuser %}
+                            <span class="text-[14px] font-semibold truncate text-gray-100 vixo-superuser-name-shock {% if message.author.profile.name_glow_color and message.author.profile.name_glow_color != 'none' %}vixo-user-glow-{{ message.author.profile.name_glow_color }}{% endif %}" title="Verified superuser">
+                                {{ message.author.profile.name|default:message.author.username }}
+                            </span>
+                            <span class="vixo-superuser-verified-badge" aria-label="Verified" title="Verified superuser">✓</span>
+                        {% else %}
+                            <span class="text-[14px] font-semibold truncate text-gray-200 {% if message.author.profile.name_glow_color and message.author.profile.name_glow_color != 'none' %}vixo-user-glow-{{ message.author.profile.name_glow_color }}{% endif %}">
+                                {{ message.author.profile.name|default:message.author.username }}
+                            </span>
                         {% endif %}
                     </a>
                 {% else %}
-                    <span class="text-[14px] font-semibold text-gray-200/70 inline-flex items-center gap-2">
-                        <span class="{% if user.profile.is_founder_club %}founder{% endif %}">{% if user.profile.is_founder_club %}👑{% endif %}You</span>
-                        {% if verified_user_ids and user.id in verified_user_ids %}
-                            <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-sky-500/20 text-sky-300 text-[10px] leading-none" title="Verified" aria-label="Verified">✓</span>
+                    <span class="text-[14px] font-semibold inline-flex items-center gap-2">
+                        {% if message.author.is_superuser %}
+                            <span class="text-gray-100 vixo-superuser-name-shock {% if message.author.profile.name_glow_color and message.author.profile.name_glow_color != 'none' %}vixo-user-glow-{{ message.author.profile.name_glow_color }}{% endif %}" title="Verified superuser">
+                                {{ message.author.profile.name|default:message.author.username }}
+                            </span>
+                            <span class="vixo-superuser-verified-badge" aria-label="Verified" title="Verified superuser">✓</span>
+                        {% else %}
+                            <span class="text-gray-200 {% if message.author.profile.name_glow_color and message.author.profile.name_glow_color != 'none' %}vixo-user-glow-{{ message.author.profile.name_glow_color }}{% endif %}">
+                                {{ message.author.profile.name|default:message.author.username }}
+                            </span>
                         {% endif %}
-                        {% if user.profile.is_founder_club %}
-                            <span class="role-badge founder-badge" title="Founder Club" aria-label="Founder Club">Founder</span>
-                        {% endif %}
+                        <span class="text-[11px] text-gray-400/70">(you)</span>
                     </span>
                 {% endif %}
 
                 {# Time moved into bubble footer (WhatsApp-like) #}
             </div>
 
+            {% comment %}
             {% if message.auto_badges %}
                 <div class="mt-1 flex flex-wrap gap-1">
                     {% for b in message.auto_badges %}
@@ -66,6 +229,7 @@
                     {% endfor %}
                 </div>
             {% endif %}
+            {% endcomment %}
         </div>
 
         <div class="flex items-end gap-2">
@@ -73,20 +237,15 @@
                 {% include 'a_rtchat/partials/reaction_picker.html' %}
             {% endif %}
 
-            <div data-message-bubble class="relative px-3 py-2.5 rounded-2xl shadow-sm shadow-black/20 backdrop-blur-md 
-                {% if message.author == user %}
-                    bg-gradient-to-r from-purple-500 via-indigo-500 to-sky-500 text-white vixo-keep-white rounded-tr-none border border-white/10
-                {% else %}
-                    bg-white/5 text-gray-100 border border-white/10 rounded-tl-none
-                {% endif %}">
+            <div data-message-bubble class="relative min-w-0 max-w-full {% if message.body and message.body|slice:':5' == '[GIF]' or message.is_image or message.is_video %}p-0 bg-transparent border-0 shadow-none backdrop-blur-none{% else %}px-3 py-2.5 rounded-2xl shadow-sm shadow-black/20 backdrop-blur-md {% if message.author == user %}bg-gradient-to-r from-purple-500 via-indigo-500 to-sky-500 text-white vixo-keep-white rounded-tr-none border border-white/10{% else %}bg-white/5 text-gray-100 border border-white/10 rounded-tl-none{% endif %}{% endif %}">
 
                 {% if message.reply_to %}
-                    <button type="button" data-scroll-to="msg-{{ message.reply_to.id }}" class="block w-full text-left mb-1.5">
-                        <div class="px-3 py-1.5 rounded-xl border-l-2 border-indigo-300/70 bg-white/5">
+                    <button type="button" data-scroll-to="msg-{{ message.reply_to.id }}" class="block w-full max-w-full min-w-0 text-left mb-1.5" style="max-width:100%;overflow:hidden;">
+                        <div class="px-3 py-1.5 rounded-xl border-l-2 border-indigo-300/70 bg-white/5 min-w-0 max-w-full overflow-hidden" style="max-width:100%;overflow:hidden;">
                             <div class="text-[10px] font-semibold text-gray-200/80">
                                 Replying to {{ message.reply_to.author.profile.name|default:message.reply_to.author.username }}
                             </div>
-                            <div class="text-[11px] text-gray-100/80 truncate">
+                            <div class="block min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-gray-100/80" style="display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                 {% if message.reply_to.body %}
                                     {% if message.reply_to.body|slice:":5" == "[GIF]" %}
                                         {% with gif_url=message.reply_to.body|slice:"5:"|cut:" " %}
@@ -96,16 +255,16 @@
                                             </span>
                                         {% endwith %}
                                     {% else %}
-                                        {{ message.reply_to.body|escape|highlight_mentions }}
+                                        {{ message.reply_to.body|striptags|truncatechars:90 }}
                                     {% endif %}
                                 {% elif message.reply_to.file %}
-                                    {{ message.reply_to.filename }}
+                                    {{ message.reply_to.filename|truncatechars:90 }}
                                 {% endif %}
                             </div>
                         </div>
                     </button>
                 {% endif %}
-                <div class="text-[14px] sm:text-[15px] leading-relaxed text-white/95{% if message.author == user %} vixo-keep-white{% endif %}">{% include 'a_rtchat/partials/message_content.html' %}</div>
+                <div class="vixo-msg-text text-[14px] sm:text-[15px] leading-relaxed text-white/95{% if message.author == user %} vixo-keep-white{% endif %}">{% include 'a_rtchat/partials/message_content.html' %}</div>
 
                 <div class="mt-1 flex items-end justify-end gap-1 text-[11px] {% if message.author == user %}text-white/80{% else %}text-gray-300/80{% endif %}">
                     {% if message.edited_at %}

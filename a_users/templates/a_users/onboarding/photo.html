@@ -1,0 +1,474 @@
+{% extends 'layouts/box.html' %}
+
+{% block box_title %}Add a profile photo{% endblock %}
+
+{% block box_subtitle %}
+  <p class="text-sm text-gray-300 mt-1">Help friends recognize you.</p>
+{% endblock %}
+
+{% block box_body %}
+<div class="space-y-5">
+  <div class="flex items-center justify-center">
+    <div class="vixo-avatar-rotor-wrap">
+      <span class="vixo-avatar-rotor" aria-hidden="true"></span>
+      <img id="onboarding_avatar_preview" src="{{ profile.avatar }}" alt="Your avatar" class="vixo-onboarding-avatar-preview w-24 h-24 rounded-full object-cover ring-4 ring-black/30 border border-white/10" />
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="space-y-3" novalidate>
+    {% csrf_token %}
+
+    <div>
+      <label class="block text-sm font-semibold text-gray-200 mb-2">Upload photo</label>
+      {{ form.image }}
+
+      <div class="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          id="onboarding_select_photo_btn"
+          class="inline-flex items-center justify-center rounded-xl bg-gray-800/70 hover:bg-gray-800 text-gray-100 text-sm font-semibold px-4 py-3 border border-white/10 transition"
+        >
+          Select photo
+        </button>
+        <div id="onboarding_selected_filename" class="text-xs text-gray-400 truncate max-w-[14rem]" aria-live="polite"></div>
+      </div>
+
+      {% if form.image.errors %}
+        <div class="mt-2 text-xs text-red-400">{{ form.image.errors|first }}</div>
+      {% endif %}
+    </div>
+
+    <button id="onboarding_upload_btn" type="submit" name="action" value="upload" class="w-full bg-gradient-to-r from-purple-500 via-indigo-500 to-sky-500 hover:from-purple-400 hover:via-indigo-400 hover:to-sky-400 text-white font-bold py-3 px-6 rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed" disabled>
+      Upload Photo
+    </button>
+
+    <button type="submit" name="action" value="skip" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-xl transition-colors">
+      Skip for now
+    </button>
+  </form>
+
+  <!-- Crop modal (opens after selecting a photo) -->
+  <div id="onboarding_crop_modal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+    <div class="absolute inset-0 bg-black/70"></div>
+    <div class="relative h-[100dvh] overflow-y-auto flex items-start justify-center px-4 pt-6 pb-3 sm:pt-10 sm:pb-6 lg:pt-1 xl:pt-0">
+      <div class="w-full max-w-md max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-4rem)] bg-gray-900/70 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 overflow-hidden lg:-mt-14 xl:-mt-20">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-white/10">
+          <div class="text-white font-bold">Crop photo</div>
+          <button id="onboarding_crop_close" type="button" class="text-gray-300 hover:text-white px-2 py-1" aria-label="Close">✕</button>
+        </div>
+
+        <div class="p-5 overflow-y-auto">
+          <div class="text-xs text-gray-400 mb-3">Drag to position • Use zoom</div>
+
+          <div class="mx-auto w-[min(18rem,84vw)] sm:w-[min(20rem,85vw)] max-w-full">
+            <div id="onboarding_crop_area" class="relative w-[min(18rem,84vw)] h-[min(18rem,84vw)] sm:w-[min(20rem,85vw)] sm:h-[min(20rem,85vw)] max-w-full bg-black/20 border border-white/10 rounded-2xl overflow-hidden touch-none select-none">
+              <img id="onboarding_crop_img" alt="Crop preview" class="absolute left-1/2 top-1/2 will-change-transform pointer-events-none max-w-none max-h-none" />
+              <div aria-hidden="true" class="absolute inset-0 ring-1 ring-white/10"></div>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <label class="text-xs text-gray-400">Zoom</label>
+            <input id="onboarding_crop_zoom" type="range" min="1" max="3" step="0.01" value="1" class="w-full" />
+          </div>
+
+          <div class="mt-5 flex items-center gap-3">
+            <button id="onboarding_crop_cancel" type="button" class="flex-1 text-center bg-gray-800/70 hover:bg-gray-800 text-white font-bold py-2 px-4 rounded-xl transition border border-white/10">Cancel</button>
+            <button id="onboarding_crop_apply" type="button" class="flex-1 bg-gradient-to-r from-purple-500 via-indigo-500 to-sky-500 hover:from-purple-400 hover:via-indigo-400 hover:to-sky-400 text-white font-bold py-2 px-4 rounded-xl transition">Apply</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_body %}
+{{ block.super }}
+<style>
+  .vixo-avatar-rotor-wrap {
+    position: relative;
+    width: 6.6rem;
+    height: 6.6rem;
+    border-radius: 9999px;
+    display: grid;
+    place-items: center;
+  }
+
+  .vixo-avatar-rotor {
+    position: absolute;
+    inset: -5px;
+    border-radius: inherit;
+    background: conic-gradient(
+      from 0deg,
+      rgba(168, 85, 247, 0.95) 0deg 36deg,
+      transparent 36deg 116deg,
+      rgba(56, 189, 248, 0.92) 116deg 150deg,
+      transparent 150deg 250deg,
+      rgba(139, 92, 246, 0.9) 250deg 292deg,
+      transparent 292deg 360deg
+    );
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+    animation: vixoAvatarRingSpin 2.8s linear infinite;
+    pointer-events: none;
+  }
+
+  .vixo-onboarding-avatar-preview {
+    position: relative;
+    z-index: 1;
+    will-change: transform, opacity, filter;
+    transform-origin: center;
+  }
+
+  @keyframes vixoAvatarRingSpin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+
+  .vixo-onboarding-avatar-preview.vixo-avatar-swap-out {
+    animation: vixoAvatarSwapOut 190ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  .vixo-onboarding-avatar-preview.vixo-avatar-swap-in {
+    animation: vixoAvatarSwapIn 280ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  @keyframes vixoAvatarSwapOut {
+    from {
+      opacity: 1;
+      transform: scale(1);
+      filter: blur(0);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.92);
+      filter: blur(1px);
+    }
+  }
+
+  @keyframes vixoAvatarSwapIn {
+    from {
+      opacity: 0;
+      transform: scale(1.08);
+      filter: blur(2px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+      filter: blur(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .vixo-avatar-rotor {
+      animation: none !important;
+    }
+
+    .vixo-onboarding-avatar-preview.vixo-avatar-swap-out,
+    .vixo-onboarding-avatar-preview.vixo-avatar-swap-in {
+      animation: none !important;
+      opacity: 1 !important;
+      transform: none !important;
+      filter: none !important;
+    }
+  }
+</style>
+<script>
+(() => {
+  const fileInput = document.getElementById('onboarding_avatar_input');
+  const selectBtn = document.getElementById('onboarding_select_photo_btn');
+  const fileNameEl = document.getElementById('onboarding_selected_filename');
+  const previewImg = document.getElementById('onboarding_avatar_preview');
+  const uploadBtn = document.getElementById('onboarding_upload_btn');
+
+  if (!fileInput || !selectBtn) return;
+
+  const modal = document.getElementById('onboarding_crop_modal');
+  const closeBtn = document.getElementById('onboarding_crop_close');
+  const cancelBtn = document.getElementById('onboarding_crop_cancel');
+  const applyBtn = document.getElementById('onboarding_crop_apply');
+  const cropArea = document.getElementById('onboarding_crop_area');
+  const cropImg = document.getElementById('onboarding_crop_img');
+  const zoomInput = document.getElementById('onboarding_crop_zoom');
+
+  const OUT_SIZE = 512;
+
+  const open = () => {
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+  };
+
+  const close = () => {
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+  };
+
+  selectBtn.addEventListener('click', () => {
+    try { fileInput.click(); } catch {}
+  });
+
+  if (!modal || !closeBtn || !cancelBtn || !applyBtn || !cropArea || !cropImg || !zoomInput) return;
+
+  const getCropSize = () => {
+    const rect = cropArea.getBoundingClientRect();
+    const size = Math.max(1, Math.round(Math.min(rect.width || 0, rect.height || 0)));
+    return size;
+  };
+
+  let objectUrl = null;
+  let imgEl = null;
+  let imgW = 0;
+  let imgH = 0;
+  let baseScale = 1;
+  let zoom = 1;
+  let offsetX = 0;
+  let offsetY = 0;
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let startOffsetX = 0;
+  let startOffsetY = 0;
+  let originalFile = null;
+  let previewObjectUrl = null;
+
+  const cleanupObjectUrl = () => {
+    if (objectUrl) {
+      try { URL.revokeObjectURL(objectUrl); } catch {}
+      objectUrl = null;
+    }
+  };
+
+  const clearSelection = () => {
+    try { fileInput.value = ''; } catch {}
+    originalFile = null;
+    cleanupObjectUrl();
+    if (fileNameEl) fileNameEl.textContent = '';
+    try { if (uploadBtn) uploadBtn.disabled = true; } catch {}
+  };
+
+  const animatePreviewSwap = (nextUrl) => {
+    if (!previewImg || !nextUrl) return;
+
+    const previousPreviewObjectUrl = previewObjectUrl;
+    previewImg.classList.remove('vixo-avatar-swap-out', 'vixo-avatar-swap-in');
+    try { void previewImg.offsetWidth; } catch {}
+    previewImg.classList.add('vixo-avatar-swap-out');
+
+    window.setTimeout(() => {
+      const finishFadeIn = () => {
+        previewImg.classList.remove('vixo-avatar-swap-out');
+        previewImg.classList.add('vixo-avatar-swap-in');
+        window.setTimeout(() => {
+          previewImg.classList.remove('vixo-avatar-swap-in');
+        }, 300);
+      };
+
+      previewImg.onload = () => {
+        previewImg.onload = null;
+        if (previousPreviewObjectUrl && previousPreviewObjectUrl !== nextUrl) {
+          try { URL.revokeObjectURL(previousPreviewObjectUrl); } catch {}
+        }
+        finishFadeIn();
+      };
+
+      previewImg.onerror = () => {
+        previewImg.onerror = null;
+        previewImg.onload = null;
+        previewImg.classList.remove('vixo-avatar-swap-out');
+      };
+
+      previewImg.src = nextUrl;
+      previewObjectUrl = nextUrl;
+    }, 190);
+  };
+
+  const syncUploadEnabled = () => {
+    try {
+      const hasFile = !!(fileInput && fileInput.files && fileInput.files.length > 0);
+      if (uploadBtn) uploadBtn.disabled = !hasFile;
+    } catch {}
+  };
+
+  const clampOffsets = () => {
+    const CROP_SIZE = getCropSize();
+    const scale = baseScale * zoom;
+    const scaledW = imgW * scale;
+    const scaledH = imgH * scale;
+    const halfCrop = CROP_SIZE / 2;
+    const maxX = Math.max(0, (scaledW / 2) - halfCrop);
+    const maxY = Math.max(0, (scaledH / 2) - halfCrop);
+    offsetX = Math.min(maxX, Math.max(-maxX, offsetX));
+    offsetY = Math.min(maxY, Math.max(-maxY, offsetY));
+  };
+
+  const renderTransform = () => {
+    clampOffsets();
+    const scale = baseScale * zoom;
+    cropImg.style.transform = `translate(-50%, -50%) translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+  };
+
+  const syncCropSize = () => {
+    if (!imgEl) return;
+    const CROP_SIZE = getCropSize();
+    baseScale = Math.max(CROP_SIZE / imgW, CROP_SIZE / imgH);
+    renderTransform();
+  };
+
+  const loadImageFromFile = (file) => {
+    cleanupObjectUrl();
+    originalFile = file;
+    objectUrl = URL.createObjectURL(file);
+    return new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = reject;
+      im.src = objectUrl;
+    });
+  };
+
+  const resetStateForImage = (im) => {
+    imgEl = im;
+    imgW = im.naturalWidth || im.width || 1;
+    imgH = im.naturalHeight || im.height || 1;
+    baseScale = Math.max(getCropSize() / imgW, getCropSize() / imgH);
+    zoom = 1;
+    zoomInput.value = '1';
+    offsetX = 0;
+    offsetY = 0;
+    cropImg.src = im.src;
+    cropImg.style.width = imgW + 'px';
+    cropImg.style.height = imgH + 'px';
+    renderTransform();
+  };
+
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    if (fileNameEl) fileNameEl.textContent = file.name || '';
+    if (!file.type || !file.type.startsWith('image/')) {
+      clearSelection();
+      syncUploadEnabled();
+      return;
+    }
+
+    try {
+      const im = await loadImageFromFile(file);
+      open();
+      requestAnimationFrame(() => {
+        resetStateForImage(im);
+        syncCropSize();
+        setTimeout(syncCropSize, 50);
+      });
+    } catch {
+      clearSelection();
+      syncUploadEnabled();
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    if (modal.classList.contains('hidden')) return;
+    syncCropSize();
+  });
+
+  zoomInput.addEventListener('input', () => {
+    zoom = Math.max(1, Math.min(3, parseFloat(zoomInput.value || '1') || 1));
+    renderTransform();
+  });
+
+  const onPointerDown = (e) => {
+    if (!imgEl) return;
+    dragging = true;
+    cropArea.setPointerCapture?.(e.pointerId);
+    startX = e.clientX;
+    startY = e.clientY;
+    startOffsetX = offsetX;
+    startOffsetY = offsetY;
+  };
+
+  const onPointerMove = (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    offsetX = startOffsetX + dx;
+    offsetY = startOffsetY + dy;
+    renderTransform();
+  };
+
+  const onPointerUp = () => {
+    dragging = false;
+  };
+
+  cropArea.addEventListener('pointerdown', onPointerDown);
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
+
+  const applyCrop = async () => {
+    if (!imgEl || !originalFile) return;
+    const CROP_SIZE = getCropSize();
+
+    const canvas = document.createElement('canvas');
+    canvas.width = OUT_SIZE;
+    canvas.height = OUT_SIZE;
+    const ctx = canvas.getContext('2d', { alpha: true });
+    if (!ctx) return;
+
+    const scale = baseScale * zoom;
+    const ratio = OUT_SIZE / CROP_SIZE;
+
+    ctx.clearRect(0, 0, OUT_SIZE, OUT_SIZE);
+    ctx.save();
+    ctx.translate(OUT_SIZE / 2 + offsetX * ratio, OUT_SIZE / 2 + offsetY * ratio);
+    ctx.scale(scale * ratio, scale * ratio);
+    ctx.drawImage(imgEl, -imgW / 2, -imgH / 2);
+    ctx.restore();
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.92));
+    if (!blob) return;
+
+    const baseName = (originalFile.name || 'avatar').replace(/\.[^/.]+$/, '');
+    const croppedFile = new File([blob], `${baseName}-cropped.png`, { type: 'image/png' });
+
+    const dt = new DataTransfer();
+    dt.items.add(croppedFile);
+    fileInput.files = dt.files;
+
+    if (previewImg) {
+      try {
+        const previewUrl = URL.createObjectURL(croppedFile);
+        animatePreviewSwap(previewUrl);
+      } catch {}
+    }
+
+    close();
+    syncUploadEnabled();
+  };
+
+  const cancelCrop = () => {
+    close();
+    clearSelection();
+  };
+
+  closeBtn.addEventListener('click', (e) => { e.preventDefault(); cancelCrop(); });
+  cancelBtn.addEventListener('click', (e) => { e.preventDefault(); cancelCrop(); });
+  applyBtn.addEventListener('click', async (e) => { e.preventDefault(); await applyCrop(); });
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal || e.target === modal.firstElementChild) cancelCrop();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !modal.classList.contains('hidden')) cancelCrop();
+  });
+
+  syncUploadEnabled();
+})();
+</script>
+{% endblock %}

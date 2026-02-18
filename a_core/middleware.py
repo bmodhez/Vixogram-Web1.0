@@ -8,6 +8,15 @@ from django.shortcuts import redirect
 from django.shortcuts import render
 
 from a_rtchat.rate_limit import check_rate_limit, get_client_ip, make_key
+from a_users.location_ip import vpn_proxy_status_for_ip
+
+
+VPN_PROXY_WARNING_MESSAGE = (
+    'VPN or proxy connections are not allowed on Vixogram. '
+    'Please disable your VPN to continue using all features.'
+)
+VPN_PROXY_CLIENT_BLOCKED_SESSION_KEY = 'vixo_vpn_proxy_client_blocked'
+VPN_PROXY_CLIENT_REPORT_PATH = '/api/security/network-client-report/'
 
 
 class MaintenanceModeMiddleware:
@@ -102,6 +111,65 @@ class RateLimitMiddleware:
                     except Exception:
                         pass
                     return redirect(path)
+
+        return self.get_response(request)
+
+
+class VpnProxyEnforcementMiddleware:
+    """Detect VPN/proxy usage and block unsafe actions when detected."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        path = (request.path or '')
+        blocked = False
+
+        try:
+            enabled = bool(getattr(settings, 'VPN_PROXY_GUARD_ENABLED', True))
+            if enabled:
+                if path.startswith('/admin/'):
+                    blocked = False
+                else:
+                    try:
+                        blocked = bool(getattr(request, 'session', None) and request.session.get(VPN_PROXY_CLIENT_BLOCKED_SESSION_KEY))
+                    except Exception:
+                        blocked = False
+
+                    ip = get_client_ip(request)
+                    status = vpn_proxy_status_for_ip(ip)
+                    blocked = bool(blocked or status.get('blocked'))
+        except Exception:
+            blocked = False
+
+        request.vixo_vpn_proxy_blocked = bool(blocked)
+        request.vixo_vpn_proxy_warning_message = VPN_PROXY_WARNING_MESSAGE
+
+        if blocked and request.method not in {'GET', 'HEAD', 'OPTIONS'}:
+            if path.startswith(VPN_PROXY_CLIENT_REPORT_PATH):
+                return self.get_response(request)
+
+            accepts_json = 'application/json' in str(request.headers.get('Accept') or '')
+            is_htmx = (
+                str(request.headers.get('HX-Request') or '').lower() == 'true'
+                or str(request.META.get('HTTP_HX_REQUEST') or '').lower() == 'true'
+            )
+            is_api = path.startswith('/api/')
+
+            payload = {
+                'ok': False,
+                'blocked': True,
+                'code': 'vpn_proxy_blocked',
+                'error': VPN_PROXY_WARNING_MESSAGE,
+            }
+            if is_api or is_htmx or accepts_json:
+                return JsonResponse(payload, status=403)
+
+            try:
+                messages.error(request, VPN_PROXY_WARNING_MESSAGE)
+            except Exception:
+                pass
+            return redirect(path or '/')
 
         return self.get_response(request)
 

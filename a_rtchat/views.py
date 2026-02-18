@@ -1,5 +1,6 @@
 import csv
 import json
+import shortuuid
 import time
 from datetime import timedelta
 from urllib.parse import urlparse
@@ -25,6 +26,7 @@ from django.db.models import Q
 from django.db.models import Count
 from django.db.models.functions import TruncDate, TruncHour
 from django.utils.http import url_has_allowed_host_and_scheme
+from a_core.error_views import render_chat_banned
 
 try:
     from a_users.location_ip import maybe_set_profile_city_from_ip
@@ -36,11 +38,193 @@ from a_users.models import FCMToken
 from a_users.models import UserReport
 from a_users.models import SupportEnquiry
 from a_users.models import BetaFeature
+from a_users.models import ChatBanHistory
 from .models import *
 from .forms import *
 from .agora import build_rtc_token
 from .moderation import moderate_message
 from .channels_utils import chatroom_channel_group_name
+
+
+def _is_room_admin(user, chat_group) -> bool:
+    """Room admin = owner (`chat_group.admin`) OR in `chat_group.admins` OR staff."""
+    try:
+        if not user or not getattr(user, 'is_authenticated', False):
+            return False
+    except Exception:
+        return False
+    try:
+        if getattr(user, 'is_staff', False):
+            return True
+    except Exception:
+        pass
+    try:
+        if user == getattr(chat_group, 'admin', None):
+            return True
+    except Exception:
+        pass
+    try:
+        return bool(getattr(chat_group, 'admins', None) and chat_group.admins.filter(id=getattr(user, 'id', None)).exists())
+    except Exception:
+        return False
+
+
+def _create_and_broadcast_system_join_message(chat_group, joined_user):
+    """Persist a WhatsApp-like "joined the group" tag and broadcast it realtime."""
+    try:
+        if not chat_group or not getattr(chat_group, 'id', None):
+            return
+        if not joined_user or not getattr(joined_user, 'id', None):
+            return
+        if not bool(getattr(chat_group, 'is_private', False)):
+            return
+        if not chat_group.members.filter(pk=joined_user.pk).exists():
+            return
+
+        msg = GroupMessage.objects.create(
+            author=joined_user,
+            group=chat_group,
+            body='[SYSTEM_JOIN]',
+        )
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            chatroom_channel_group_name(chat_group),
+            {
+                'type': 'message_handler',
+                'message_id': msg.id,
+                'author_id': int(getattr(joined_user, 'id', 0) or 0),
+            },
+        )
+    except Exception:
+        return
+
+
+def _room_admins_payload(chat_group):
+    """Return [{id, username, name}, ...] for owner + additional admins."""
+    admins = []
+    seen = set()
+    try:
+        owner = getattr(chat_group, 'admin', None)
+    except Exception:
+        owner = None
+    if owner:
+        try:
+            name = getattr(getattr(owner, 'profile', None), 'name', '') or getattr(owner, 'username', '')
+        except Exception:
+            name = getattr(owner, 'username', '')
+        try:
+            admins.append({'id': int(owner.id), 'username': owner.username, 'name': (name or owner.username)})
+            seen.add(int(owner.id))
+        except Exception:
+            pass
+    try:
+        qs = chat_group.admins.select_related('profile').all()
+    except Exception:
+        qs = []
+    for u in qs:
+        try:
+            uid = int(getattr(u, 'id', 0) or 0)
+        except Exception:
+            uid = 0
+        if not uid or uid in seen:
+            continue
+        try:
+            name = getattr(getattr(u, 'profile', None), 'name', '') or getattr(u, 'username', '')
+        except Exception:
+            name = getattr(u, 'username', '')
+        try:
+            admins.append({'id': uid, 'username': u.username, 'name': (name or u.username)})
+            seen.add(uid)
+        except Exception:
+            continue
+    return admins
+
+
+def _normalize_slow_mode_seconds(value) -> int:
+    try:
+        parsed = int(value or 0)
+    except Exception:
+        parsed = 0
+    return parsed if parsed in {0, 10, 20, 30} else 0
+
+
+def _room_settings_payload(chat_group):
+    try:
+        avatar_url = chat_group.room_avatar.url if getattr(chat_group, 'room_avatar', None) else ''
+    except Exception:
+        avatar_url = ''
+
+    display_name = ''
+    try:
+        display_name = (
+            getattr(chat_group, 'code_room_name', None)
+            or getattr(chat_group, 'groupchat_name', None)
+            or getattr(chat_group, 'room_code', None)
+            or getattr(chat_group, 'group_name', '')
+        )
+    except Exception:
+        display_name = getattr(chat_group, 'group_name', '')
+
+    return {
+        'only_admins_can_send': bool(getattr(chat_group, 'only_admins_can_send', False)),
+        'allow_media_uploads': bool(getattr(chat_group, 'allow_media_uploads', True)),
+        'allow_members_invite_others': bool(getattr(chat_group, 'allow_members_invite_others', False)),
+        'slow_mode_seconds': _normalize_slow_mode_seconds(getattr(chat_group, 'slow_mode_seconds', 0)),
+        'announcement_pinned': bool(getattr(chat_group, 'announcement_pinned', False)),
+        'pinned_message': (getattr(chat_group, 'pinned_message', '') or ''),
+        'room_description': (getattr(chat_group, 'room_description', '') or ''),
+        'room_avatar_url': avatar_url,
+        'room_display_name': display_name,
+        'room_code': (getattr(chat_group, 'room_code', '') or ''),
+        'is_code_room': bool(getattr(chat_group, 'is_code_room', False)),
+        'admins': _room_admins_payload(chat_group),
+    }
+
+
+def _broadcast_room_settings(chat_group):
+    try:
+        payload = _room_settings_payload(chat_group)
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            chatroom_channel_group_name(chat_group),
+            {
+                'type': 'room_settings_handler',
+                **payload,
+            },
+        )
+    except Exception:
+        return
+
+
+def _generate_room_code() -> str:
+    su = shortuuid.ShortUUID()
+    su.set_alphabet('23456789ABCDEFGHJKLMNPQRSTUVWXYZ')
+    for _ in range(40):
+        candidate = su.random(length=8)
+        if not ChatGroup.objects.filter(room_code=candidate).exists():
+            return candidate
+    return shortuuid.uuid()[:8].upper()
+
+
+def _enforce_room_slow_mode(chat_group, user):
+    try:
+        if not getattr(chat_group, 'is_private', False):
+            return None
+        if getattr(user, 'is_staff', False):
+            return None
+        seconds = _normalize_slow_mode_seconds(getattr(chat_group, 'slow_mode_seconds', 0))
+        if seconds <= 0:
+            return None
+        rl = check_rate_limit(
+            make_key('chat_slow', chat_group.group_name, user.id),
+            limit=1,
+            period_seconds=seconds,
+        )
+        if rl.allowed:
+            return None
+        return int(rl.retry_after or seconds)
+    except Exception:
+        return None
 from .mentions import extract_mention_usernames, resolve_mentioned_users
 from a_rtchat.link_policy import contains_link
 from .room_policy import room_allows_links, room_allows_uploads, is_free_promotion_room, is_meme_central_room
@@ -117,6 +301,87 @@ def _log_blocked_message_event(
         return
 
 
+def _create_and_broadcast_system_event_message(chat_group, actor_user, marker: str):
+    """Persist a system tag message and broadcast it realtime."""
+    try:
+        if not chat_group or not getattr(chat_group, 'id', None):
+            return
+        if not actor_user or not getattr(actor_user, 'id', None):
+            return
+        if not bool(getattr(chat_group, 'is_private', False)):
+            return
+        marker = (marker or '').strip()
+        if marker not in {
+            '[SYSTEM_LEFT]',
+            '[SYSTEM_REMOVED]',
+            '[SYSTEM_ADMIN_ADDED]',
+            '[SYSTEM_ADMIN_REMOVED]',
+            '[SYSTEM_ADMINS_ONLY_ENABLED]',
+            '[SYSTEM_ADMINS_ONLY_DISABLED]',
+        }:
+            return
+
+        msg = GroupMessage.objects.create(
+            author=actor_user,
+            group=chat_group,
+            body=marker,
+        )
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            chatroom_channel_group_name(chat_group),
+            {
+                'type': 'message_handler',
+                'message_id': msg.id,
+                'author_id': int(getattr(actor_user, 'id', 0) or 0),
+            },
+        )
+    except Exception:
+        return
+
+
+def _create_and_broadcast_system_tag_message(chat_group, actor_user, text: str):
+    """Persist a generic system tag message and broadcast it realtime."""
+    try:
+        if not chat_group or not getattr(chat_group, 'id', None):
+            return
+        if not actor_user or not getattr(actor_user, 'id', None):
+            return
+        if not bool(getattr(chat_group, 'is_private', False)):
+            return
+        body = (text or '').strip()
+        if not body:
+            return
+
+        msg = GroupMessage.objects.create(
+            author=actor_user,
+            group=chat_group,
+            body=f'[SYSTEM_TAG] {body[:220]}',
+        )
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            chatroom_channel_group_name(chat_group),
+            {
+                'type': 'message_handler',
+                'message_id': msg.id,
+                'author_id': int(getattr(actor_user, 'id', 0) or 0),
+            },
+        )
+    except Exception:
+        return
+
+
+def _format_mute_duration_label(seconds: int) -> str:
+    try:
+        total = max(0, int(seconds or 0))
+    except Exception:
+        total = 0
+    minutes, rem = divmod(total, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours > 0:
+        return f"{hours:02d}:{minutes:02d}:{rem:02d}"
+    return f"{minutes:02d}:{rem:02d}"
+
+
 @login_required
 def push_register(request):
     """Register an FCM token for the current user."""
@@ -160,7 +425,10 @@ def push_unregister(request):
 from .rate_limit import (
     check_rate_limit,
     get_muted_seconds,
+    get_room_muted_seconds,
     set_muted,
+    set_room_muted,
+    clear_room_muted,
     is_fast_long_message,
     is_same_emoji_spam,
     is_duplicate_message,
@@ -438,6 +706,7 @@ def mention_user_search(request):
     """Return a small list of users for @mention autocomplete.
 
     Query param: q (without @)
+    Query param: limit (optional, max 40)
     Response: { results: [{username, display, avatar}] }
     """
     q = (request.GET.get('q') or '').strip()
@@ -452,6 +721,12 @@ def mention_user_search(request):
             allowed.append(ch)
     q = ''.join(allowed)
 
+    try:
+        limit = int(request.GET.get('limit') or 8)
+    except Exception:
+        limit = 8
+    limit = max(1, min(limit, 40))
+
     if not q:
         return JsonResponse({'results': []})
 
@@ -461,7 +736,7 @@ def mention_user_search(request):
         .filter(Q(username__istartswith=q) | Q(profile__displayname__istartswith=q))
         .select_related('profile')
         .order_by('username')
-    )[:8]
+    )[:limit]
 
     results = []
     for u in qs:
@@ -481,7 +756,7 @@ def mention_user_search(request):
 @login_required
 def chat_view(request, chatroom_name='public-chat'):
     if _is_chat_banned(request.user):
-        return render(request, '403.html', status=403)
+        return render_chat_banned(request, status=403, redirect_url=reverse('chatroom', args=[chatroom_name]))
 
     # Only auto-create the global public chat. All other rooms must already exist.
     if chatroom_name == 'public-chat':
@@ -497,6 +772,8 @@ def chat_view(request, chatroom_name='public-chat'):
                 status=404,
             )
     
+    not_member = False
+
     # UI: render only a small slice initially to avoid freezing the browser
     # when a room has a long history. Retention is handled separately via
     # settings.CHAT_MAX_MESSAGES_PER_ROOM.
@@ -558,11 +835,15 @@ def chat_view(request, chatroom_name='public-chat'):
                             'redirect_url': reverse('chatroom', args=[chatroom_name]),
                         },
                     )
-            raise Http404()
-        for member in chat_group.members.all():
-            if member != request.user:
-                other_user = member
-                break
+            # Don't show a hard 404. Render the chat shell with a clear message.
+            not_member = True
+            chat_messages = []
+            has_older_messages = False
+        else:
+            for member in chat_group.members.all():
+                if member != request.user:
+                    other_user = member
+                    break
 
     other_last_read_id = 0
     if other_user and getattr(chat_group, 'is_private', False):
@@ -589,7 +870,7 @@ def chat_view(request, chatroom_name='public-chat'):
     except Exception:
         verified_user_ids = set()
             
-    if chat_group.groupchat_name:
+    if (not getattr(chat_group, 'is_private', False)) and chat_group.groupchat_name:
         if request.user not in chat_group.members.all():
             if chat_blocked:
                 # Let blocked users read, but do not auto-join as a member.
@@ -617,10 +898,47 @@ def chat_view(request, chatroom_name='public-chat'):
     if uploads_allowed:
         uploads_used = _uploads_used_today(chat_group, request.user)
         uploads_remaining = max(0, CHAT_UPLOAD_LIMIT_PER_ROOM - uploads_used)
+
+    # Enforce membership on all send attempts (HTMX and non-HTMX).
+    if request.method == 'POST':
+        try:
+            is_private = bool(getattr(chat_group, 'is_private', False))
+        except Exception:
+            is_private = False
+        if is_private and request.user not in chat_group.members.all() and not request.user.is_staff:
+            resp = HttpResponse('', status=403)
+            resp.headers['X-Vixo-Not-Member'] = '1'
+            return resp
     
     if request.htmx:
         if chat_blocked:
             return HttpResponse('', status=403)
+
+        # If the user is no longer a member of a private room, block sends/uploads.
+        try:
+            is_private = bool(getattr(chat_group, 'is_private', False))
+        except Exception:
+            is_private = False
+        if is_private and request.user not in chat_group.members.all() and not request.user.is_staff:
+            resp = HttpResponse('', status=403)
+            resp.headers['X-Vixo-Not-Member'] = '1'
+            return resp
+
+        # Admin-only messaging mode for private rooms.
+        try:
+            admin_only = bool(getattr(chat_group, 'is_private', False) and getattr(chat_group, 'only_admins_can_send', False))
+        except Exception:
+            admin_only = False
+        if admin_only and not _is_room_admin(request.user, chat_group):
+            resp = HttpResponse('', status=403)
+            resp.headers['X-Vixo-Admin-Only'] = '1'
+            return resp
+
+        slow_retry = _enforce_room_slow_mode(chat_group, request.user)
+        if slow_retry:
+            resp = HttpResponse('', status=429)
+            resp.headers['Retry-After'] = str(slow_retry)
+            return resp
 
         # Unverified users can send a limited number of messages, then must verify.
         if _requires_verified_email_for_chat(request.user):
@@ -650,8 +968,10 @@ def chat_view(request, chatroom_name='public-chat'):
         if request.FILES and 'file' in request.FILES:
             if not uploads_allowed:
                 raise Http404()
-            if request.user not in chat_group.members.all():
-                raise Http404()
+            if request.user not in chat_group.members.all() and not request.user.is_staff:
+                resp = HttpResponse('', status=403)
+                resp.headers['X-Vixo-Not-Member'] = '1'
+                return resp
 
             rl = check_rate_limit(
                 make_key('chat_upload', chatroom_name, request.user.id),
@@ -1262,7 +1582,8 @@ def chat_view(request, chatroom_name='public-chat'):
         burst_key = make_key('chat_burst', chat_group.group_name, request.user.id)
         burst = check_rate_limit(burst_key, limit=burst_limit, period_seconds=burst_period)
         burst_count = int(getattr(burst, 'count', 0) or 0)
-        burst_should_purge = burst_count >= max(1, int(burst_limit))
+        # Trigger cooldown only when crossing the limit (e.g. 6th msg when limit=5).
+        burst_should_purge = not bool(getattr(burst, 'allowed', True))
         if burst_should_purge:
             # Cooldown is a simple short mute; doesn't count as a "strike".
             try:
@@ -1739,6 +2060,33 @@ def chat_view(request, chatroom_name='public-chat'):
         # Invalid (e.g., empty/whitespace) message -> do nothing
         return HttpResponse('', status=204)
     
+    # Mention/reply room badges in sidebar:
+    # - Clear current room mentions/replies as read when user opens the room.
+    # - Keep unread mention/reply room list for initial badge restore after refresh.
+    unread_mention_rooms = []
+    try:
+        Notification.objects.filter(
+            user=request.user,
+            is_read=False,
+            type__in=['mention', 'reply'],
+            chatroom_name=chatroom_name,
+        ).update(is_read=True)
+    except Exception:
+        pass
+    try:
+        unread_mention_rooms = list(
+            Notification.objects.filter(
+                user=request.user,
+                is_read=False,
+                type__in=['mention', 'reply'],
+            )
+            .exclude(chatroom_name='')
+            .values_list('chatroom_name', flat=True)
+            .distinct()
+        )
+    except Exception:
+        unread_mention_rooms = []
+
     sidebar_groupchats_qs = (
         ChatGroup.objects
         .filter(groupchat_name__isnull=False)
@@ -1754,6 +2102,121 @@ def chat_view(request, chatroom_name='public-chat'):
     except Exception:
         needs_email_verification_for_chat = False
 
+    # Multi-admin support for UI + client-side enforcement.
+    try:
+        is_room_admin = _is_room_admin(request.user, chat_group)
+    except Exception:
+        is_room_admin = False
+    try:
+        room_admins_payload = [] if not_member else _room_admins_payload(chat_group)
+    except Exception:
+        room_admins_payload = []
+    try:
+        room_admin_ids = [int(a.get('id') or 0) for a in (room_admins_payload or []) if int(a.get('id') or 0) > 0]
+    except Exception:
+        room_admin_ids = []
+    try:
+        viewer_id = int(getattr(request.user, 'id', 0) or 0)
+    except Exception:
+        viewer_id = 0
+    try:
+        is_room_admin_ui = bool(viewer_id and (viewer_id in set(room_admin_ids or [])))
+    except Exception:
+        is_room_admin_ui = False
+
+    show_public_chat_tutorial = False
+    try:
+        welcome_qs = str(request.GET.get('welcome') or '').strip().lower()
+    except Exception:
+        welcome_qs = ''
+    try:
+        tutorial_source = str(getattr(request, 'session', {}).get('post_auth_chat_tutorial') or '').strip().lower()
+    except Exception:
+        tutorial_source = ''
+    try:
+        if chatroom_name == 'public-chat' and (welcome_qs in {'login', 'signup', 'register'} or tutorial_source in {'login', 'signup', 'register'}):
+            show_public_chat_tutorial = True
+            if getattr(request, 'session', None) is not None:
+                request.session.pop('post_auth_chat_tutorial', None)
+    except Exception:
+        show_public_chat_tutorial = False
+
+    sidebar_privatechats = []
+    sidebar_code_rooms = []
+    if not chat_blocked:
+        try:
+            sidebar_privatechats = request.user.chat_groups.filter(
+                is_private=True,
+                is_code_room=False,
+            ).exclude(group_name='online-status')
+        except Exception:
+            sidebar_privatechats = []
+
+        try:
+            joined_code_rooms = list(
+                request.user.chat_groups.filter(is_private=True, is_code_room=True)
+                .exclude(group_name='online-status')
+            )
+        except Exception:
+            joined_code_rooms = []
+
+        joined_ids = set()
+        for _room in joined_code_rooms:
+            try:
+                joined_ids.add(int(_room.id))
+            except Exception:
+                continue
+            try:
+                setattr(_room, 'vixo_join_state', 'joined')
+            except Exception:
+                pass
+
+        pending_code_rooms = []
+        try:
+            pending_room_ids = list(
+                CodeRoomJoinRequest.objects.filter(
+                    user=request.user,
+                    admitted_at__isnull=True,
+                ).values_list('room_id', flat=True)
+            )
+            if pending_room_ids:
+                pending_code_rooms = list(
+                    ChatGroup.objects.filter(
+                        id__in=pending_room_ids,
+                        is_private=True,
+                        is_code_room=True,
+                    ).exclude(group_name='online-status')
+                )
+        except Exception:
+            pending_code_rooms = []
+
+        merged_code_rooms = list(joined_code_rooms)
+        for _room in pending_code_rooms:
+            try:
+                room_id = int(_room.id)
+            except Exception:
+                continue
+            if room_id in joined_ids:
+                continue
+            try:
+                setattr(_room, 'vixo_join_state', 'pending')
+            except Exception:
+                pass
+            merged_code_rooms.append(_room)
+
+        try:
+            merged_code_rooms.sort(
+                key=lambda room: str(
+                    getattr(room, 'code_room_name', None)
+                    or getattr(room, 'room_code', None)
+                    or getattr(room, 'group_name', '')
+                ).lower()
+            )
+        except Exception:
+            pass
+
+        sidebar_code_rooms = merged_code_rooms
+
     context = {
         'chat_messages' : chat_messages, 
         'has_older_messages': has_older_messages,
@@ -1765,14 +2228,19 @@ def chat_view(request, chatroom_name='public-chat'):
         'chat_group_members': [],
         'verified_user_ids': verified_user_ids,
         'chat_blocked': chat_blocked,
+        'not_member': bool(not_member),
+        'is_room_admin': bool(is_room_admin),
+        'is_room_admin_ui': bool(is_room_admin_ui),
+        'room_admin_ids': room_admin_ids,
+        'room_admins_json': json.dumps(room_admins_payload or []),
         'chat_muted_seconds': chat_muted_seconds,
         'needs_email_verification_for_chat': needs_email_verification_for_chat,
         # Show all group chats so admin-created rooms appear in UI even before the user joins.
         'sidebar_groupchats': sidebar_groupchats,
         'sidebar_groupchat_sections': sidebar_groupchat_sections,
         'sidebar_groupchats_remaining': sidebar_groupchats_remaining,
-        'sidebar_privatechats': [] if chat_blocked else request.user.chat_groups.filter(is_private=True, is_code_room=False).exclude(group_name='online-status'),
-        'sidebar_code_rooms': [] if chat_blocked else request.user.chat_groups.filter(is_private=True, is_code_room=True).exclude(group_name='online-status'),
+        'sidebar_privatechats': sidebar_privatechats,
+        'sidebar_code_rooms': sidebar_code_rooms,
         'private_room_create_form': PrivateRoomCreateForm(),
         'room_code_join_form': RoomCodeJoinForm(),
         'uploads_used': uploads_used,
@@ -1781,19 +2249,27 @@ def chat_view(request, chatroom_name='public-chat'):
         'links_allowed': links_allowed,
         'uploads_allowed': uploads_allowed,
         'reaction_emojis': CHAT_REACTION_EMOJIS,
+        'show_public_chat_tutorial': bool(show_public_chat_tutorial),
+        'private_settings_url': reverse('private-room-settings', args=[chatroom_name]) if getattr(chat_group, 'is_private', False) else '',
     }
+
+    try:
+        context['room_settings_json'] = json.dumps(_room_settings_payload(chat_group) if getattr(chat_group, 'is_private', False) else {})
+    except Exception:
+        context['room_settings_json'] = '{}'
 
     # Members list for UI (prefetch profile to avoid N+1 in templates)
     try:
-        context['chat_group_members'] = list(chat_group.members.select_related('profile').all())
+        if not_member:
+            context['chat_group_members'] = []
+        else:
+            context['chat_group_members'] = list(chat_group.members.select_related('profile').all())
     except Exception:
         context['chat_group_members'] = []
 
     # Waiting list count for admin/staff (code rooms only)
     try:
-        if getattr(chat_group, 'is_private', False) and getattr(chat_group, 'is_code_room', False) and (
-            request.user == getattr(chat_group, 'admin', None) or request.user.is_staff
-        ):
+        if getattr(chat_group, 'is_private', False) and getattr(chat_group, 'is_code_room', False) and _is_room_admin(request.user, chat_group):
             cutoff = _code_room_waiting_cutoff()
             context['code_room_waiting_count'] = CodeRoomJoinRequest.objects.filter(
                 room=chat_group,
@@ -1866,6 +2342,8 @@ def chat_view(request, chatroom_name='public-chat'):
         'giphyApiKey': 'mA2NToNf2QW36bSdNgOVfdmUj7w6W7sz',
         'giphyLimit': 30,
         'chatBlocked': bool(chat_blocked),
+        'forceRoomTutorial': bool(show_public_chat_tutorial),
+        'unreadMentionRooms': unread_mention_rooms,
     }
 
     context['gifs_allowed'] = bool(gifs_allowed)
@@ -1917,7 +2395,7 @@ def chat_config_view(request, chatroom_name):
             other_last_read_id = 0
 
     # Group chat auto-join behavior (match chat_view)
-    if getattr(chat_group, 'groupchat_name', None):
+    if (not getattr(chat_group, 'is_private', False)) and getattr(chat_group, 'groupchat_name', None):
         if request.user not in chat_group.members.all() and not chat_blocked:
             email_verification = str(getattr(settings, 'ACCOUNT_EMAIL_VERIFICATION', 'optional')).lower()
             if email_verification == 'mandatory':
@@ -1952,6 +2430,31 @@ def chat_config_view(request, chatroom_name):
         except Exception:
             return ''
 
+    try:
+        Notification.objects.filter(
+            user=request.user,
+            is_read=False,
+            type__in=['mention', 'reply'],
+            chatroom_name=chatroom_name,
+        ).update(is_read=True)
+    except Exception:
+        pass
+
+    unread_mention_rooms = []
+    try:
+        unread_mention_rooms = list(
+            Notification.objects.filter(
+                user=request.user,
+                is_read=False,
+                type__in=['mention', 'reply'],
+            )
+            .exclude(chatroom_name='')
+            .values_list('chatroom_name', flat=True)
+            .distinct()
+        )
+    except Exception:
+        unread_mention_rooms = []
+
     data = {
         'chatroomName': chatroom_name,
         'currentUserId': getattr(request.user, 'id', 0) or 0,
@@ -1977,6 +2480,7 @@ def chat_config_view(request, chatroom_name):
         'gifsAllowed': bool(gifs_allowed),
         'giphyApiKey': 'mA2NToNf2QW36bSdNgOVfdmUj7w6W7sz',
         'giphyLimit': 30,
+        'unreadMentionRooms': unread_mention_rooms,
     }
     return JsonResponse(data)
 
@@ -2000,7 +2504,7 @@ def chat_older_view(request, chatroom_name):
         raise Http404()
     if chat_group.is_private and request.user not in chat_group.members.all():
         raise Http404()
-    if chat_group.groupchat_name and request.user not in chat_group.members.all():
+    if (not getattr(chat_group, 'is_private', False)) and chat_group.groupchat_name and request.user not in chat_group.members.all():
         if _is_chat_blocked(request.user):
             pass
         else:
@@ -2253,6 +2757,26 @@ def join_private_room_by_code(request):
             },
         )
 
+        # Realtime: notify admins/members that waiting list changed.
+        try:
+            cutoff = _code_room_waiting_cutoff()
+            pending_count = CodeRoomJoinRequest.objects.filter(
+                room=locked_room,
+                admitted_at__isnull=True,
+                last_seen_at__gte=cutoff,
+            ).count()
+
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                chatroom_channel_group_name(locked_room),
+                {
+                    'type': 'waiting_list_updated_handler',
+                    'count': int(pending_count),
+                },
+            )
+        except Exception:
+            pass
+
     return redirect('chatroom', room.group_name)
 
 
@@ -2263,7 +2787,7 @@ def code_room_waiting_list(request, chatroom_name):
     if not getattr(chat_group, 'is_private', False) or not getattr(chat_group, 'is_code_room', False):
         raise Http404()
 
-    if request.user != chat_group.admin and not request.user.is_staff:
+    if not _is_room_admin(request.user, chat_group):
         raise Http404()
 
     cutoff = _code_room_waiting_cutoff()
@@ -2309,7 +2833,7 @@ def code_room_waiting_admit(request, chatroom_name):
     if not getattr(chat_group, 'is_private', False) or not getattr(chat_group, 'is_code_room', False):
         raise Http404()
 
-    if request.user != chat_group.admin and not request.user.is_staff:
+    if not _is_room_admin(request.user, chat_group):
         raise Http404()
 
     try:
@@ -2334,6 +2858,25 @@ def code_room_waiting_admit(request, chatroom_name):
 
         if locked_room.members.filter(pk=user_id).exists():
             jr.mark_admitted(by_user=request.user)
+
+            # Realtime: waiting list changed.
+            try:
+                cutoff = _code_room_waiting_cutoff()
+                pending_count = CodeRoomJoinRequest.objects.filter(
+                    room=locked_room,
+                    admitted_at__isnull=True,
+                    last_seen_at__gte=cutoff,
+                ).count()
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                    chatroom_channel_group_name(locked_room),
+                    {
+                        'type': 'waiting_list_updated_handler',
+                        'count': int(pending_count),
+                    },
+                )
+            except Exception:
+                pass
             return JsonResponse({'ok': True, 'already_member': True})
 
         if locked_room.members.count() >= PRIVATE_ROOM_MEMBER_LIMIT:
@@ -2341,6 +2884,56 @@ def code_room_waiting_admit(request, chatroom_name):
 
         locked_room.members.add(user_id)
         jr.mark_admitted(by_user=request.user)
+
+        # Realtime: waiting list changed.
+        try:
+            cutoff = _code_room_waiting_cutoff()
+            pending_count = CodeRoomJoinRequest.objects.filter(
+                room=locked_room,
+                admitted_at__isnull=True,
+                last_seen_at__gte=cutoff,
+            ).count()
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                chatroom_channel_group_name(locked_room),
+                {
+                    'type': 'waiting_list_updated_handler',
+                    'count': int(pending_count),
+                },
+            )
+        except Exception:
+            pass
+
+        # Realtime: notify current members that someone joined.
+        try:
+            u = get_user_model().objects.select_related('profile').filter(pk=user_id).first()
+        except Exception:
+            u = None
+        if u:
+            try:
+                name = getattr(getattr(u, 'profile', None), 'name', '') or getattr(u, 'username', '')
+            except Exception:
+                name = getattr(u, 'username', '')
+            try:
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                    chatroom_channel_group_name(locked_room),
+                    {
+                        'type': 'member_added_handler',
+                        'member': {
+                            'id': int(getattr(u, 'id', 0) or 0),
+                            'username': getattr(u, 'username', ''),
+                            'name': (name or getattr(u, 'username', '')),
+                            'avatar': getattr(getattr(u, 'profile', None), 'avatar', ''),
+                        },
+                        'member_count': int(locked_room.members.count()),
+                    },
+                )
+            except Exception:
+                pass
+
+            # Chat tag: "X joined the group" ("You joined" for the joiner)
+            _create_and_broadcast_system_join_message(locked_room, u)
 
     return JsonResponse({'ok': True})
 
@@ -2374,6 +2967,53 @@ def code_room_waiting_status(request, chatroom_name):
 
 
 @login_required
+def code_room_waiting_leave(request, chatroom_name):
+    chat_group = get_object_or_404(ChatGroup, group_name=chatroom_name)
+
+    if not getattr(chat_group, 'is_private', False) or not getattr(chat_group, 'is_code_room', False):
+        raise Http404()
+
+    removed = False
+    try:
+        deleted_count, _ = CodeRoomJoinRequest.objects.filter(
+            room=chat_group,
+            user=request.user,
+            admitted_at__isnull=True,
+        ).delete()
+        removed = bool(deleted_count)
+    except Exception:
+        removed = False
+
+    if removed:
+        try:
+            cutoff = _code_room_waiting_cutoff()
+            pending_count = CodeRoomJoinRequest.objects.filter(
+                room=chat_group,
+                admitted_at__isnull=True,
+                last_seen_at__gte=cutoff,
+            ).count()
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                chatroom_channel_group_name(chat_group),
+                {
+                    'type': 'waiting_list_updated_handler',
+                    'count': int(pending_count),
+                },
+            )
+        except Exception:
+            pass
+
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.GET.get('_ajax') == '1'
+    if is_ajax:
+        return JsonResponse({'ok': True, 'removed': bool(removed)})
+
+    next_url = (request.GET.get('next') or '').strip()
+    if not next_url.startswith('/'):
+        next_url = reverse('home')
+    return redirect(next_url)
+
+
+@login_required
 def private_room_rename(request, chatroom_name):
     """Rename a private *code room* (not 1:1 DMs).
 
@@ -2388,7 +3028,7 @@ def private_room_rename(request, chatroom_name):
     if not getattr(chat_group, 'is_private', False) or not getattr(chat_group, 'is_code_room', False):
         raise Http404()
 
-    if request.user != chat_group.admin and not request.user.is_staff:
+    if not _is_room_admin(request.user, chat_group):
         raise Http404()
 
     if request.user not in chat_group.members.all() and not request.user.is_staff:
@@ -2417,6 +3057,107 @@ def private_room_rename(request, chatroom_name):
         'name': chat_group.code_room_name or '',
         'display': chat_group.code_room_name or chat_group.room_code or chat_group.group_name,
     })
+
+
+@login_required
+@require_POST
+def private_room_settings_update(request, chatroom_name):
+    chat_group = get_object_or_404(ChatGroup, group_name=chatroom_name)
+
+    if not getattr(chat_group, 'is_private', False):
+        raise Http404()
+
+    if not _is_room_admin(request.user, chat_group):
+        return JsonResponse({'ok': False, 'error': 'not_room_admin'}, status=403)
+
+    prev_only_admins_can_send = bool(getattr(chat_group, 'only_admins_can_send', False))
+
+    room_name = (request.POST.get('room_name') or '').strip()
+    room_description = (request.POST.get('room_description') or '').strip()
+    announcement_text = (request.POST.get('announcement_text') or '').strip()
+
+    announcement_pinned = str(request.POST.get('announcement_pinned') or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+    only_admins_can_send = str(request.POST.get('only_admins_can_send') or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+    allow_media_uploads = str(request.POST.get('allow_media_uploads') or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+    allow_members_invite_others = str(request.POST.get('allow_members_invite_others') or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+    reset_invite_link = str(request.POST.get('reset_invite_link') or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+    clear_avatar = str(request.POST.get('clear_avatar') or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+    slow_mode_seconds = _normalize_slow_mode_seconds(request.POST.get('slow_mode_seconds'))
+
+    update_fields = set()
+
+    if room_name:
+        room_name = room_name[:35]
+        if getattr(chat_group, 'is_code_room', False):
+            chat_group.code_room_name = room_name
+            update_fields.add('code_room_name')
+        else:
+            chat_group.groupchat_name = room_name
+            update_fields.add('groupchat_name')
+
+    chat_group.room_description = room_description[:300]
+    update_fields.add('room_description')
+
+    chat_group.announcement_pinned = bool(announcement_pinned)
+    update_fields.add('announcement_pinned')
+
+    chat_group.pinned_message = announcement_text[:300]
+    update_fields.add('pinned_message')
+
+    chat_group.only_admins_can_send = bool(only_admins_can_send)
+    update_fields.add('only_admins_can_send')
+
+    chat_group.allow_media_uploads = bool(allow_media_uploads)
+    update_fields.add('allow_media_uploads')
+
+    chat_group.allow_members_invite_others = bool(allow_members_invite_others)
+    update_fields.add('allow_members_invite_others')
+
+    chat_group.slow_mode_seconds = int(slow_mode_seconds)
+    update_fields.add('slow_mode_seconds')
+
+    avatar = request.FILES.get('room_avatar')
+    if clear_avatar:
+        try:
+            if chat_group.room_avatar:
+                chat_group.room_avatar.delete(save=False)
+        except Exception:
+            pass
+        chat_group.room_avatar = None
+        update_fields.add('room_avatar')
+    elif avatar:
+        content_type = (getattr(avatar, 'content_type', '') or '').lower()
+        if not content_type.startswith('image/'):
+            return JsonResponse({'ok': False, 'error': 'invalid_avatar_type'}, status=400)
+        if int(getattr(avatar, 'size', 0) or 0) > 5 * 1024 * 1024:
+            return JsonResponse({'ok': False, 'error': 'avatar_too_large'}, status=400)
+        chat_group.room_avatar = avatar
+        update_fields.add('room_avatar')
+
+    invite_code_reset = False
+    if reset_invite_link and getattr(chat_group, 'is_code_room', False):
+        chat_group.room_code = _generate_room_code()
+        update_fields.add('room_code')
+        invite_code_reset = True
+
+    if update_fields:
+        chat_group.save(update_fields=sorted(update_fields))
+
+    if prev_only_admins_can_send != bool(chat_group.only_admins_can_send):
+        _create_and_broadcast_system_event_message(
+            chat_group,
+            request.user,
+            '[SYSTEM_ADMINS_ONLY_ENABLED]' if bool(chat_group.only_admins_can_send) else '[SYSTEM_ADMINS_ONLY_DISABLED]',
+        )
+
+    _broadcast_room_settings(chat_group)
+
+    payload = _room_settings_payload(chat_group)
+    payload.update({
+        'ok': True,
+        'invite_code_reset': bool(invite_code_reset),
+    })
+    return JsonResponse(payload)
 
 @login_required
 def get_or_create_chatroom(request, username):
@@ -2479,7 +3220,7 @@ def create_groupchat(request):
 @login_required
 def chatroom_edit_view(request, chatroom_name):
     chat_group = get_object_or_404(ChatGroup, group_name=chatroom_name)
-    if request.user != chat_group.admin and not request.user.is_staff:
+    if not _is_room_admin(request.user, chat_group):
         raise Http404()
     
     form = ChatRoomEditForm(instance=chat_group) 
@@ -2491,6 +3232,27 @@ def chatroom_edit_view(request, chatroom_name):
             for member_id in remove_members:
                 member = User.objects.get(id=member_id)
                 chat_group.members.remove(member)  
+                try:
+                    chat_group.admins.remove(member)
+                except Exception:
+                    pass
+
+            # Realtime: broadcast room settings update to connected clients.
+            try:
+                admins = _room_admins_payload(chat_group)
+
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                    chatroom_channel_group_name(chat_group),
+                    {
+                        'type': 'room_settings_handler',
+                        'only_admins_can_send': bool(getattr(chat_group, 'only_admins_can_send', False)),
+                        'admins': admins,
+                    },
+                )
+            except Exception:
+                pass
+
             return redirect('chatroom', chatroom_name) 
     
     return render(request, 'a_rtchat/chatroom_edit.html', {'form': form, 'chat_group': chat_group}) 
@@ -2498,7 +3260,7 @@ def chatroom_edit_view(request, chatroom_name):
 @login_required
 def chatroom_delete_view(request, chatroom_name):
     chat_group = get_object_or_404(ChatGroup, group_name=chatroom_name)
-    if request.user != chat_group.admin and not request.user.is_staff:
+    if not _is_room_admin(request.user, chat_group):
         raise Http404()
     
     if request.method == "POST":
@@ -2513,7 +3275,7 @@ def chatroom_delete_view(request, chatroom_name):
 def chatroom_close_view(request, chatroom_name):
     """Hard-delete a room and all of its data (messages/files) from the DB."""
     chat_group = get_object_or_404(ChatGroup, group_name=chatroom_name)
-    if request.user != chat_group.admin and not request.user.is_staff:
+    if not _is_room_admin(request.user, chat_group):
         raise Http404()
 
     if request.method != 'POST':
@@ -2530,7 +3292,44 @@ def chatroom_leave_view(request, chatroom_name):
         raise Http404()
     
     if request.method == "POST":
+        # Chat tag: "X left the group" ("You left" for the leaver)
+        _create_and_broadcast_system_event_message(chat_group, request.user, '[SYSTEM_LEFT]')
         chat_group.members.remove(request.user)
+        try:
+            chat_group.admins.remove(request.user)
+        except Exception:
+            pass
+
+        # Realtime: update member list/count for connected clients (private rooms only)
+        try:
+            if getattr(chat_group, 'is_private', False):
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                    chatroom_channel_group_name(chat_group),
+                    {
+                        'type': 'member_left_handler',
+                        'user_id': int(getattr(request.user, 'id', 0) or 0),
+                        'member_count': int(chat_group.members.count()),
+                    },
+                )
+        except Exception:
+            pass
+
+        # Realtime: refresh room settings/admin list in case the leaver was an admin
+        try:
+            if getattr(chat_group, 'is_private', False):
+                admins = _room_admins_payload(chat_group)
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                    chatroom_channel_group_name(chat_group),
+                    {
+                        'type': 'room_settings_handler',
+                        'only_admins_can_send': bool(getattr(chat_group, 'only_admins_can_send', False)),
+                        'admins': admins,
+                    },
+                )
+        except Exception:
+            pass
         messages.success(request, 'You left the Chat')
         return redirect('home')
 
@@ -2545,7 +3344,7 @@ def chatroom_member_remove_view(request, chatroom_name, user_id):
     if not getattr(chat_group, 'is_private', False):
         raise Http404()
 
-    if request.user != getattr(chat_group, 'admin', None) and not request.user.is_staff:
+    if not _is_room_admin(request.user, chat_group):
         raise Http404()
 
     try:
@@ -2570,10 +3369,485 @@ def chatroom_member_remove_view(request, chatroom_name, user_id):
 
     try:
         chat_group.members.remove(member)
+        try:
+            chat_group.admins.remove(member)
+        except Exception:
+            pass
     except Exception:
         return JsonResponse({'ok': False, 'error': 'remove_failed'}, status=500)
 
+    # Chat tag: "X was removed" ("You were removed" for the removed user)
+    _create_and_broadcast_system_event_message(chat_group, member, '[SYSTEM_REMOVED]')
+
+    # Realtime: tell connected clients (including the removed user) to stop chat.
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            chatroom_channel_group_name(chat_group),
+            {
+                'type': 'member_removed_handler',
+                'removed_user_id': int(member.id),
+                'member_count': int(chat_group.members.count()),
+            },
+        )
+    except Exception:
+        pass
+
+    # Realtime: also refresh room settings so admin lists stay in sync.
+    try:
+        admins = _room_admins_payload(chat_group)
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            chatroom_channel_group_name(chat_group),
+            {
+                'type': 'room_settings_handler',
+                'only_admins_can_send': bool(getattr(chat_group, 'only_admins_can_send', False)),
+                'admins': admins,
+            },
+        )
+        async_to_sync(channel_layer.group_send)(
+            chatroom_channel_group_name(chat_group),
+            {
+                'type': 'admin_role_removed_handler',
+                'demoted_user_id': int(member.id),
+                'message': 'You have been removed from admin.',
+            },
+        )
+    except Exception:
+        pass
+
     return JsonResponse({'ok': True, 'removedUserId': int(member.id)})
+
+
+@login_required
+@require_POST
+def chatroom_member_make_admin_view(request, chatroom_name, user_id):
+    """Add a member as an additional room admin (admin/staff only).
+
+    The room owner (`chat_group.admin`) is preserved; additional admins are stored
+    in `chat_group.admins`.
+    """
+    chat_group = get_object_or_404(ChatGroup, group_name=chatroom_name)
+
+    if not getattr(chat_group, 'is_private', False):
+        return JsonResponse({'ok': False, 'error': 'room_not_private'}, status=400)
+
+    if not _is_room_admin(request.user, chat_group):
+        return JsonResponse({'ok': False, 'error': 'not_room_admin'}, status=403)
+
+    try:
+        member = get_user_model().objects.get(id=int(user_id))
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
+
+    if member == request.user:
+        return JsonResponse({'ok': False, 'error': 'cannot_make_self_admin'}, status=400)
+
+    try:
+        if member not in chat_group.members.all():
+            return JsonResponse({'ok': False, 'error': 'not_a_member'}, status=400)
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'not_a_member'}, status=400)
+
+    try:
+        if member != getattr(chat_group, 'admin', None):
+            chat_group.admins.add(member)
+    except Exception:
+        # Be idempotent: if role actually exists despite an exception,
+        # treat as success so UI does not show a false failure.
+        try:
+            if member == getattr(chat_group, 'admin', None):
+                pass
+            elif chat_group.admins.filter(id=member.id).exists():
+                pass
+            else:
+                return JsonResponse({'ok': False, 'error': 'make_admin_failed'}, status=500)
+        except Exception:
+            return JsonResponse({'ok': False, 'error': 'make_admin_failed'}, status=500)
+
+    # Chat tag: "X is now an admin" ("You are now an admin" for the promoted user)
+    _create_and_broadcast_system_event_message(chat_group, member, '[SYSTEM_ADMIN_ADDED]')
+
+    # Realtime: broadcast updated admin list.
+    try:
+        admins = _room_admins_payload(chat_group)
+
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            chatroom_channel_group_name(chat_group),
+            {
+                'type': 'room_settings_handler',
+                'only_admins_can_send': bool(getattr(chat_group, 'only_admins_can_send', False)),
+                'admins': admins,
+            },
+        )
+    except Exception:
+        pass
+
+    return JsonResponse({'ok': True, 'adminUserId': int(member.id)})
+
+
+@login_required
+@require_POST
+def chatroom_member_remove_admin_view(request, chatroom_name, user_id):
+    """Remove a member from additional room admins (admin/staff only).
+
+    This does NOT remove the user from the group; it only removes them from
+    `chat_group.admins`. The room owner (`chat_group.admin`) cannot be removed.
+    """
+    chat_group = get_object_or_404(ChatGroup, group_name=chatroom_name)
+
+    if not getattr(chat_group, 'is_private', False):
+        return JsonResponse({'ok': False, 'error': 'room_not_private'}, status=400)
+
+    if not _is_room_admin(request.user, chat_group):
+        return JsonResponse({'ok': False, 'error': 'not_room_admin'}, status=403)
+
+    try:
+        member = get_user_model().objects.get(id=int(user_id))
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
+
+    # Never remove the owner.
+    if member == getattr(chat_group, 'admin', None):
+        return JsonResponse({'ok': False, 'error': 'cannot_remove_owner_admin'}, status=400)
+
+    # Must be a current member (avoid weird states).
+    try:
+        if member not in chat_group.members.all() and not request.user.is_staff:
+            return JsonResponse({'ok': False, 'error': 'not_a_member'}, status=400)
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'not_a_member'}, status=400)
+
+    try:
+        chat_group.admins.remove(member)
+    except Exception:
+        # Be idempotent: if role is already removed despite an exception,
+        # treat as success so UI stays consistent with DB state.
+        try:
+            if not chat_group.admins.filter(id=member.id).exists():
+                pass
+            else:
+                return JsonResponse({'ok': False, 'error': 'remove_admin_failed'}, status=500)
+        except Exception:
+            return JsonResponse({'ok': False, 'error': 'remove_admin_failed'}, status=500)
+
+    # Chat tag: "X is no longer an admin" ("You are no longer an admin" for the demoted user)
+    _create_and_broadcast_system_event_message(chat_group, member, '[SYSTEM_ADMIN_REMOVED]')
+
+    # Realtime: broadcast updated admin list.
+    try:
+        admins = _room_admins_payload(chat_group)
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            chatroom_channel_group_name(chat_group),
+            {
+                'type': 'room_settings_handler',
+                'only_admins_can_send': bool(getattr(chat_group, 'only_admins_can_send', False)),
+                'admins': admins,
+            },
+        )
+    except Exception:
+        pass
+
+    return JsonResponse({'ok': True, 'adminUserId': int(member.id), 'removed': True})
+
+
+@login_required
+@require_POST
+def chatroom_member_mute_view(request, chatroom_name, user_id):
+    """Mute or unmute a user in a specific room (admin/staff only)."""
+    chat_group = get_object_or_404(ChatGroup, group_name=chatroom_name)
+
+    if not getattr(chat_group, 'is_private', False):
+        raise Http404()
+
+    if not _is_room_admin(request.user, chat_group):
+        raise Http404()
+
+    try:
+        member = get_user_model().objects.get(id=int(user_id))
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
+
+    if member == request.user:
+        return JsonResponse({'ok': False, 'error': 'cannot_mute_self'}, status=400)
+
+    if member == getattr(chat_group, 'admin', None):
+        return JsonResponse({'ok': False, 'error': 'cannot_mute_admin'}, status=400)
+
+    try:
+        if member not in chat_group.members.all():
+            return JsonResponse({'ok': False, 'error': 'not_a_member'}, status=400)
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'not_a_member'}, status=400)
+
+    seconds = 0
+    try:
+        payload = json.loads((request.body or b'').decode('utf-8') or '{}')
+        seconds = int(payload.get('seconds') or 0)
+    except Exception:
+        try:
+            seconds = int((request.POST.get('seconds') or '0').strip())
+        except Exception:
+            seconds = 0
+
+    allowed = {0, 5 * 60, 30 * 60, 60 * 60}
+    if seconds not in allowed:
+        return JsonResponse({'ok': False, 'error': 'invalid_duration'}, status=400)
+
+    actor_name = getattr(getattr(request.user, 'profile', None), 'name', '') or getattr(request.user, 'username', 'Admin')
+    target_name = getattr(getattr(member, 'profile', None), 'name', '') or getattr(member, 'username', 'user')
+
+    if seconds == 0:
+        clear_room_muted(getattr(chat_group, 'pk', 0) or 0, int(member.id))
+        tag_text = f'{actor_name} unmuted {target_name}'
+        _create_and_broadcast_system_tag_message(chat_group, request.user, tag_text)
+        try:
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                chatroom_channel_group_name(chat_group),
+                {
+                    'type': 'member_mute_updated_handler',
+                    'target_user_id': int(member.id),
+                    'seconds': 0,
+                    'unmuted': True,
+                    'actor_name': actor_name,
+                    'target_name': target_name,
+                    'tag_text': tag_text,
+                },
+            )
+        except Exception:
+            pass
+        return JsonResponse({'ok': True, 'mutedUserId': int(member.id), 'seconds': 0, 'unmuted': True})
+
+    set_room_muted(getattr(chat_group, 'pk', 0) or 0, int(member.id), int(seconds))
+    mute_for = _format_mute_duration_label(seconds)
+    tag_text = f'{actor_name} muted {target_name} for {mute_for}'
+    _create_and_broadcast_system_tag_message(chat_group, request.user, tag_text)
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            chatroom_channel_group_name(chat_group),
+            {
+                'type': 'member_mute_updated_handler',
+                'target_user_id': int(member.id),
+                'seconds': int(seconds),
+                'unmuted': False,
+                'actor_name': actor_name,
+                'target_name': target_name,
+                'tag_text': tag_text,
+            },
+        )
+    except Exception:
+        pass
+    return JsonResponse({'ok': True, 'mutedUserId': int(member.id), 'seconds': int(seconds)})
+
+
+def _room_invite_cache_key(token: str) -> str:
+    token = (token or '').strip()
+    return f"rtchat:room_invite:{token}"
+
+
+@login_required
+@require_POST
+def chatroom_member_invite_view(request, chatroom_name):
+    """Send an invite to join this room to a user.
+
+    Allowed for room admins/staff always, and for regular members only when
+    room setting ``allow_members_invite_others`` is enabled.
+    """
+    chat_group = get_object_or_404(ChatGroup, group_name=chatroom_name)
+
+    if not getattr(chat_group, 'is_private', False):
+        raise Http404()
+
+    is_admin = _is_room_admin(request.user, chat_group)
+    if not is_admin:
+        try:
+            is_member = bool(chat_group.members.filter(id=getattr(request.user, 'id', 0)).exists())
+        except Exception:
+            is_member = False
+        can_member_invite = bool(getattr(chat_group, 'allow_members_invite_others', False))
+        if not (is_member and can_member_invite):
+            return JsonResponse({'ok': False, 'error': 'invite_not_allowed'}, status=403)
+
+    # Parse username from JSON or form.
+    username = ''
+    try:
+        payload = json.loads((request.body or b'').decode('utf-8') or '{}')
+        username = (payload.get('username') or '').strip()
+    except Exception:
+        username = (request.POST.get('username') or '').strip()
+    if username.startswith('@'):
+        username = username[1:]
+    username = username[:150]
+    if not username:
+        return JsonResponse({'ok': False, 'error': 'missing_username'}, status=400)
+
+    try:
+        target = User.objects.select_related('profile').get(username__iexact=username, is_active=True)
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'user_not_found'}, status=404)
+
+    if target.id == request.user.id:
+        return JsonResponse({'ok': False, 'error': 'cannot_invite_self'}, status=400)
+
+    # Already member?
+    try:
+        if target in chat_group.members.all():
+            return JsonResponse({'ok': False, 'error': 'already_member'}, status=400)
+    except Exception:
+        pass
+
+    # Enforce member limit for private rooms.
+    try:
+        current_count = int(chat_group.members.count())
+    except Exception:
+        current_count = 0
+    if current_count >= int(PRIVATE_ROOM_MEMBER_LIMIT):
+        return JsonResponse({'ok': False, 'error': 'member_limit_reached'}, status=400)
+
+    token = shortuuid.uuid()
+    invite_url = reverse('chatroom-invite-accept', args=[token])
+    # Cache payload for 24h.
+    try:
+        cache.set(
+            _room_invite_cache_key(token),
+            {
+                'room_id': int(getattr(chat_group, 'id', 0) or 0),
+                'target_user_id': int(getattr(target, 'id', 0) or 0),
+                'from_user_id': int(getattr(request.user, 'id', 0) or 0),
+            },
+            timeout=24 * 60 * 60,
+        )
+    except Exception:
+        return JsonResponse({'ok': False, 'error': 'invite_create_failed'}, status=500)
+
+    # Persist notification (dropdown) + realtime toast.
+    try:
+        room_title = (
+            getattr(chat_group, 'code_room_name', None)
+            or getattr(chat_group, 'room_code', None)
+            or getattr(chat_group, 'groupchat_name', None)
+            or getattr(chat_group, 'group_name', '')
+        )
+        preview = f"Invited you to join room: {room_title}"[:180]
+
+        try:
+            from a_rtchat.notifications import should_persist_notification
+
+            if should_persist_notification(user_id=target.id, chatroom_name=chat_group.group_name) or bool(getattr(chat_group, 'is_private', False)):
+                Notification.objects.create(
+                    user=target,
+                    from_user=request.user,
+                    type='ping',
+                    chatroom_name=chat_group.group_name,
+                    preview=preview,
+                    url=invite_url,
+                )
+        except Exception:
+            # Still send realtime best-effort.
+            pass
+
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"notify_user_{target.id}",
+            {
+                'type': 'room_invite_notify_handler',
+                'from_username': request.user.username,
+                'chatroom_name': chat_group.group_name,
+                'preview': preview,
+                'url': invite_url,
+            },
+        )
+    except Exception:
+        pass
+
+    return JsonResponse({'ok': True, 'inviteUrl': invite_url})
+
+
+@login_required
+def chatroom_invite_accept_view(request, token):
+    token = (token or '').strip()
+    if not token:
+        raise Http404()
+
+    try:
+        payload = cache.get(_room_invite_cache_key(token))
+    except Exception:
+        payload = None
+    if not payload or not isinstance(payload, dict):
+        messages.error(request, 'Invite expired or invalid.')
+        return redirect('home')
+
+    try:
+        target_user_id = int(payload.get('target_user_id') or 0)
+        room_id = int(payload.get('room_id') or 0)
+    except Exception:
+        target_user_id = 0
+        room_id = 0
+
+    if not room_id or not target_user_id:
+        messages.error(request, 'Invite expired or invalid.')
+        return redirect('home')
+
+    if int(getattr(request.user, 'id', 0) or 0) != target_user_id:
+        raise Http404()
+
+    chat_group = get_object_or_404(ChatGroup, id=room_id)
+    if not getattr(chat_group, 'is_private', False):
+        raise Http404()
+
+    # Enforce limit again.
+    try:
+        if int(chat_group.members.count()) >= int(PRIVATE_ROOM_MEMBER_LIMIT):
+            messages.error(request, 'Room is full.')
+            return redirect('home')
+    except Exception:
+        pass
+
+    try:
+        chat_group.members.add(request.user)
+    except Exception:
+        messages.error(request, 'Could not join room.')
+        return redirect('home')
+
+    # Realtime: notify current members that someone joined.
+    try:
+        u = request.user
+        try:
+            name = getattr(getattr(u, 'profile', None), 'name', '') or getattr(u, 'username', '')
+        except Exception:
+            name = getattr(u, 'username', '')
+
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            chatroom_channel_group_name(chat_group),
+            {
+                'type': 'member_added_handler',
+                'member': {
+                    'id': int(getattr(u, 'id', 0) or 0),
+                    'username': getattr(u, 'username', ''),
+                    'name': (name or getattr(u, 'username', '')),
+                    'avatar': getattr(getattr(u, 'profile', None), 'avatar', ''),
+                },
+                'member_count': int(chat_group.members.count()),
+            },
+        )
+    except Exception:
+        pass
+
+    # Chat tag: "X joined the group" ("You joined" for the joiner)
+    _create_and_broadcast_system_join_message(chat_group, request.user)
+
+    try:
+        cache.delete(_room_invite_cache_key(token))
+    except Exception:
+        pass
+
+    messages.success(request, 'Joined room')
+    return redirect('chatroom', chat_group.group_name)
 
 @login_required
 def chat_file_upload(request, chatroom_name):
@@ -2584,6 +3858,31 @@ def chat_file_upload(request, chatroom_name):
 
     if _is_chat_blocked(request.user):
         return HttpResponse('<div class="text-xs text-red-400">You are blocked from uploading files.</div>', status=403)
+
+    # Admin-only messaging mode (private rooms): block uploads too.
+    try:
+        admin_only = bool(getattr(chat_group, 'is_private', False) and getattr(chat_group, 'only_admins_can_send', False))
+    except Exception:
+        admin_only = False
+    if admin_only and not _is_room_admin(request.user, chat_group):
+        resp = HttpResponse('<div class="text-xs text-red-400">Only admins can send messages.</div>', status=403)
+        resp.headers['X-Vixo-Admin-Only'] = '1'
+        return resp
+
+    slow_retry = _enforce_room_slow_mode(chat_group, request.user)
+    if slow_retry:
+        resp = HttpResponse('<div class="text-xs text-red-400">Slow mode is on. Please wait.</div>', status=429)
+        resp.headers['Retry-After'] = str(slow_retry)
+        return resp
+
+    try:
+        room_muted = get_room_muted_seconds(getattr(chat_group, 'pk', 0) or 0, getattr(request.user, 'id', 0) or 0)
+    except Exception:
+        room_muted = 0
+    if room_muted > 0:
+        resp = HttpResponse('<div class="text-xs text-red-400">You are on cooldown. Please wait.</div>', status=429)
+        resp.headers['Retry-After'] = str(room_muted)
+        return resp
 
     muted = get_muted_seconds(getattr(request.user, 'id', 0))
     if muted > 0:
@@ -2631,8 +3930,10 @@ def chat_file_upload(request, chatroom_name):
     if not room_allows_uploads(chat_group):
         raise Http404()
 
-    if request.user not in chat_group.members.all():
-        raise Http404()
+    if request.user not in chat_group.members.all() and not request.user.is_staff:
+        resp = HttpResponse('<div class="text-xs text-red-400">You are not a member of this group.</div>', status=403)
+        resp.headers['X-Vixo-Not-Member'] = '1'
+        return resp
 
     # If HTMX isn't present for some reason, still allow a normal POST fallback.
     is_htmx = bool(getattr(request, 'htmx', False))
@@ -2900,7 +4201,7 @@ def chat_poll_view(request, chatroom_name):
         raise Http404()
     if chat_group.is_private and request.user not in chat_group.members.all():
         raise Http404()
-    if chat_group.groupchat_name and request.user not in chat_group.members.all():
+    if (not getattr(chat_group, 'is_private', False)) and chat_group.groupchat_name and request.user not in chat_group.members.all():
         if _is_chat_blocked(request.user):
             # Let blocked users read but don't auto-join.
             pass
@@ -3410,14 +4711,42 @@ def admin_user_ban_view(request, user_id: int):
     minutes = min(minutes, 60 * 24 * 365)
 
     until = None
+    admin_ip = ''
+    try:
+        admin_ip = (get_client_ip(request) or '').strip()[:45]
+    except Exception:
+        admin_ip = ''
+
     if minutes > 0:
         until = timezone.now() + timedelta(minutes=minutes)
         profile.chat_banned_until = until
         profile.save(update_fields=['chat_banned_until'])
+        try:
+            ChatBanHistory.objects.create(
+                user=target,
+                action=ChatBanHistory.ACTION_BAN,
+                duration_minutes=minutes,
+                banned_until=until,
+                banned_by=request.user,
+                admin_ip=admin_ip or None,
+            )
+        except Exception:
+            pass
         messages.success(request, f'Banned {target.username} for {minutes} minutes')
     else:
         profile.chat_banned_until = None
         profile.save(update_fields=['chat_banned_until'])
+        try:
+            ChatBanHistory.objects.create(
+                user=target,
+                action=ChatBanHistory.ACTION_UNBAN,
+                duration_minutes=0,
+                banned_until=None,
+                banned_by=request.user,
+                admin_ip=admin_ip or None,
+            )
+        except Exception:
+            pass
         messages.success(request, f'Unbanned {target.username}')
 
     # Realtime: notify the user (all open tabs) that their ban status changed.

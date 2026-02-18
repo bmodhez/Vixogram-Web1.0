@@ -59,4 +59,7 @@ def room_allows_uploads(room) -> bool:
     # Default policy: uploads only in private code rooms + Showcase Your Work.
     # Exception: historically Free Promotion disallowed uploads, but now allowed.
     private_code = bool(getattr(room, 'is_private', False)) and bool(getattr(room, 'is_code_room', False))
-    return private_code or is_showcase_room(room) or is_meme_central_room(room)
+    policy_allowed = private_code or is_showcase_room(room) or is_meme_central_room(room)
+    if not policy_allowed:
+        return False
+    return bool(getattr(room, 'allow_media_uploads', True))

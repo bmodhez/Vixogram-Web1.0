@@ -5,7 +5,7 @@
 {% block body_class %} vixo-profile-page{% endblock %}
 
 {% block content %}
-<wrapper class="block max-w-md mx-auto my-10 px-6">
+<wrapper id="profile_top" class="block max-w-md mx-auto my-10 px-6 pb-24 sm:pb-10">
     <div class="relative rounded-2xl shadow-2xl border border-white/10 overflow-hidden">
         <!-- Full-card background -->
         <div class="absolute inset-0">
@@ -26,7 +26,7 @@
                 </a>
             </div>
 
-            <div class="px-8 pb-8 pt-2">
+            <div class="px-8 pb-8 pt-2 lg:flex lg:flex-col">
                 <div class="flex justify-center">
                     {% if has_active_stories %}
                         <button
@@ -46,10 +46,11 @@
                     {% endif %}
                 </div>
 
+                <div id="profile_overview_section" class="lg:order-2">
                 <div class="text-center mt-4">
 
             <h1 class="text-2xl font-extrabold text-white inline-flex items-center justify-center gap-2">
-                <span>{{ profile.name }}</span>
+                <span class="{% if profile.name_glow_color and profile.name_glow_color != 'none' %}vixo-user-glow-{{ profile.name_glow_color }}{% endif %}">{{ profile.name }}</span>
                 {% if is_verified_badge %}
                     <span
                         class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-500/20 text-sky-300 text-[11px] leading-none"
@@ -78,8 +79,8 @@
 
             {% if show_presence %}
                 <div class="mt-2 flex items-center justify-center gap-2 text-xs text-gray-300" aria-label="Online status">
-                    <span id="presence_dot" class="inline-block h-2.5 w-2.5 rounded-full {% if presence_online %}bg-emerald-400{% else %}bg-gray-500{% endif %}"></span>
-                    <span id="presence_text">{% if presence_online %}Online{% else %}Offline{% endif %}</span>
+                    <span id="presence_dot" class="inline-block h-2.5 w-2.5 rounded-full {% if presence_is_dnd %}bg-red-500{% elif presence_online %}bg-emerald-400{% else %}bg-gray-500{% endif %}"></span>
+                    <span id="presence_text">{% if presence_is_dnd %}DND{% elif presence_online %}Online{% else %}Offline{% endif %}</span>
                 </div>
             {% endif %}
 
@@ -168,7 +169,7 @@
                 </div>
             {% endif %}
 
-            {% if user.is_authenticated and user == profile.user %}
+            {% if is_owner %}
                 <div class="mt-8 flex w-full gap-3">
                     <a href="{% url 'profile-edit' %}"
                        class="flex-1 inline-flex items-center justify-center text-center whitespace-nowrap bg-gradient-to-r from-purple-500 via-indigo-500 to-sky-500 hover:from-purple-400 hover:via-indigo-400 hover:to-sky-400 text-white font-bold py-2 px-4 rounded-lg transition-colors">
@@ -180,6 +181,8 @@
                     </a>
                 </div>
             {% endif %}
+                </div>
+
                 </div>
             </div>
         </div>
@@ -307,4 +310,37 @@
         <script src="{% static 'js/profile_loader.js' %}" defer></script>
     {% endif %}
 </wrapper>
+
+{% if user.is_authenticated %}
+<nav class="lg:hidden fixed left-1/2 -translate-x-1/2 bottom-[max(0.9rem,env(safe-area-inset-bottom))] z-[85] w-[min(20rem,calc(100vw-1.2rem))] rounded-2xl border border-gray-800/90 bg-gray-900/92 backdrop-blur-md shadow-2xl shadow-black/45 px-2 py-1.5" aria-label="Mobile navigation">
+    <div class="grid grid-cols-3 gap-1.5">
+        <a
+            href="{% url 'chatroom' 'public-chat' %}"
+            class="inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-gray-300 hover:text-gray-100"
+            aria-label="Chat"
+        >
+            <span aria-hidden="true">💬</span>
+            <span>Chat</span>
+        </a>
+        <a
+            href="{% url 'chatroom' 'public-chat' %}?tab=groups"
+            class="inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-gray-300 hover:text-gray-100"
+            aria-label="Groups"
+        >
+            <span aria-hidden="true">☰</span>
+            <span>Groups</span>
+        </a>
+        <a
+            href="{% url 'profile' %}"
+            data-mobile-profile-menu-toggle="1"
+            class="inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-gray-100 bg-gray-800/85"
+            aria-current="page"
+            aria-label="Profile"
+        >
+            <span aria-hidden="true">👤</span>
+            <span>Profile</span>
+        </a>
+    </div>
+</nav>
+{% endif %}
 {% endblock %}

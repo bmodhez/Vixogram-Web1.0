@@ -165,6 +165,70 @@ body.vixo-auth-page.vixo-page-leave .vixo-auth-bg {
   background-position: center;
   background-repeat: no-repeat;
 }
+
+@keyframes vixoGearSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes vixoChallengeWiggle {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-1px) rotate(-10deg); }
+  50% { transform: translateY(-2px) rotate(10deg); }
+  75% { transform: translateY(-1px) rotate(-7deg); }
+}
+
+@keyframes vixoGroupSweep {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(120%); }
+}
+
+#vixo_private_settings_btn:hover .vixo-settings-gear {
+  animation: vixoGearSpin 700ms linear;
+}
+
+#challenge_drawer_open:hover .vixo-challenge-icon {
+  animation: vixoChallengeWiggle 650ms ease-in-out infinite;
+}
+
+.vixo-groupchat-link {
+  position: relative;
+  overflow: hidden;
+}
+
+.vixo-groupchat-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(16, 185, 129, 0.05) 32%,
+    rgba(99, 102, 241, 0.18) 50%,
+    rgba(16, 185, 129, 0.05) 68%,
+    transparent 100%
+  );
+  opacity: 0;
+  transform: translateX(-120%);
+}
+
+.vixo-groupchat-link:hover::after {
+  opacity: 1;
+  animation: vixoGroupSweep 650ms ease forwards;
+}
+
+.vixo-groupchat-link.font-semibold::after {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #vixo_private_settings_btn:hover .vixo-settings-gear,
+  #challenge_drawer_open:hover .vixo-challenge-icon,
+  .vixo-groupchat-link:hover::after {
+    animation: none !important;
+  }
+}
 /* Global site tweaks extracted from templates */
 
 /* Smooth scrolling site-wide (anchors/programmatic scroll). */

@@ -10,7 +10,7 @@ class ChatmessageCreateForm(ModelForm):
         widgets = {
             'body': forms.Textarea(attrs={
                 'placeholder': 'Add message ...',
-                'class': 'w-full bg-white/5 text-white border border-white/10 rounded-3xl px-4 pr-12 py-3 leading-6 outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 placeholder:text-gray-400 text-sm sm:text-base placeholder:text-sm sm:placeholder:text-base resize-none',
+                'class': 'w-full bg-white/5 text-white border border-white/10 rounded-3xl px-4 pr-24 py-3 leading-6 outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/30 placeholder:text-gray-400 text-sm sm:text-base placeholder:text-sm sm:placeholder:text-base resize-none break-words whitespace-pre-wrap',
                 'maxlength': '300',
                 'rows': '1',
                 'autofocus': True,
@@ -41,12 +41,15 @@ class NewGroupForm(ModelForm):
 class ChatRoomEditForm(ModelForm):
     class Meta:
         model = ChatGroup
-        fields = ['groupchat_name']
+        fields = ['groupchat_name', 'only_admins_can_send']
         widgets = {
             'groupchat_name' : forms.TextInput(attrs={
                 'class': 'w-full bg-gray-800/70 text-white border border-gray-700 rounded-lg px-4 py-3 outline-none focus:border-emerald-500 text-xl font-bold mb-4',
                 'maxlength' : '300', 
                 }),
+            'only_admins_can_send': forms.CheckboxInput(attrs={
+                'class': 'h-4 w-4 rounded border-gray-700 bg-gray-900 text-emerald-500 focus:ring-emerald-500',
+            }),
         }
 
 

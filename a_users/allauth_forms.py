@@ -94,11 +94,6 @@ class CustomSignupForm(SignupForm):
 
         return cleaned
 
-    def clean_username(self):
-        username = super().clean_username()
-        validate_public_username(username)
-        return username
-
     def clean_email(self):
         email = super().clean_email()
         return _validate_gmail_address(email)

@@ -1,8 +1,25 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block content %}
-<div class="w-full flex justify-center">
-    <div class="w-full max-w-2xl bg-gray-900/60 border border-gray-800 rounded-2xl shadow-2xl p-6">
+{% with urlname=request.resolver_match.url_name|default:'' %}
+{% if urlname|slice:':11' == 'onboarding-' %}
+<div
+    class="vixo-auth-bg vixo-onboarding-bg w-full min-h-[calc(100vh-7rem)] relative flex items-center justify-center px-4 sm:px-6 py-10 sm:pt-20 sm:pb-14 overflow-hidden"
+    data-vixo-onboarding-step="{{ urlname }}"
+    style="--vixo-auth-bg: url('{% static 'bg2.jpeg' %}'); --vixo-auth-overlay: 0.38; --vixo-auth-bg-position-mobile: center; --vixo-auth-bg-corner-size-mobile: 190% auto; --vixo-auth-bg-corner-opacity-mobile: 0.45;"
+>
+    <div class="vixo-onboarding-bg-rotor" aria-hidden="true"></div>
+{% else %}
+<div class="w-full flex justify-center px-4 sm:px-6 pt-10 sm:pt-12">
+{% endif %}
+    <div id="vixo-box-card" data-vixo-step-anim="1" class="relative overflow-hidden mx-auto w-full max-w-2xl bg-white/5 backdrop-blur-2xl border border-white/10 ring-1 ring-white/10 rounded-2xl shadow-2xl shadow-black/40 p-6 transform-gpu scale-95 opacity-0 transition-[transform,opacity] duration-200 ease-out">
+        <div class="vixo-box-break-overlay" aria-hidden="true">
+            <span class="vixo-box-break-line"></span>
+            <span class="vixo-box-break-shard vixo-box-break-shard--a"></span>
+            <span class="vixo-box-break-shard vixo-box-break-shard--b"></span>
+            <span class="vixo-box-break-shard vixo-box-break-shard--c"></span>
+        </div>
         <div class="flex items-start justify-between gap-4 mb-6">
             <div class="min-w-0">
                 <h1 class="text-xl font-extrabold tracking-wide text-white truncate">
@@ -16,4 +33,320 @@
         {% block box_body %}{% endblock %}
     </div>
 </div>
+{% endwith %}
+
+<style>
+    .vixo-auth-bg.vixo-onboarding-bg {
+        isolation: isolate;
+        background-image: linear-gradient(
+            rgba(2, 6, 23, var(--vixo-auth-overlay, 0.38)),
+            rgba(2, 6, 23, var(--vixo-auth-overlay, 0.38))
+        );
+    }
+
+    .vixo-onboarding-bg-rotor {
+        position: absolute;
+        inset: -12%;
+        z-index: 0;
+        pointer-events: none;
+        user-select: none;
+        background-image: var(--vixo-auth-bg);
+        background-repeat: no-repeat;
+        background-size: var(--vixo-auth-bg-size, cover);
+        background-position: var(--vixo-onboarding-bg-pos, center);
+        filter: hue-rotate(var(--vixo-onboarding-hue, 0deg)) saturate(var(--vixo-onboarding-sat, 1)) brightness(var(--vixo-onboarding-bright, 1));
+        transform-origin: 50% 50%;
+        will-change: transform, background-position, filter;
+        transform: scaleX(var(--vixo-onboarding-bg-flip, 1)) scale(1.02);
+        transition:
+            transform 520ms cubic-bezier(0.22, 1, 0.36, 1),
+            background-position 420ms cubic-bezier(0.22, 1, 0.36, 1),
+            filter 420ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    #vixo-box-card {
+        z-index: 1;
+    }
+
+    .vixo-box-break-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 20;
+        pointer-events: none;
+        opacity: 0;
+    }
+
+    .vixo-box-break-line {
+        position: absolute;
+        left: 8%;
+        right: 8%;
+        top: 46%;
+        height: 2px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, transparent, rgba(168, 85, 247, 0.95), rgba(56, 189, 248, 0.92), transparent);
+        box-shadow: 0 0 18px rgba(125, 211, 252, 0.35), 0 0 12px rgba(168, 85, 247, 0.32);
+        transform: rotate(-7deg) scaleX(0.12);
+        transform-origin: center;
+        opacity: 0;
+    }
+
+    .vixo-box-break-shard {
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: linear-gradient(140deg, rgba(168, 85, 247, 0.1), rgba(56, 189, 248, 0.06));
+        opacity: 0;
+        transform: translate3d(0, 0, 0);
+        will-change: transform, opacity;
+    }
+
+    .vixo-box-break-shard--a {
+        clip-path: polygon(0 0, 100% 0, 100% 43%, 0 51%);
+    }
+
+    .vixo-box-break-shard--b {
+        clip-path: polygon(0 44%, 100% 38%, 100% 66%, 0 60%);
+    }
+
+    .vixo-box-break-shard--c {
+        clip-path: polygon(0 63%, 100% 67%, 100% 100%, 0 100%);
+    }
+
+    #vixo-box-card.vixo-box-card--break {
+        animation: vixoBoxBreakOut 3000ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    #vixo-box-card.vixo-box-card--break .vixo-box-break-overlay {
+        opacity: 1;
+    }
+
+    #vixo-box-card.vixo-box-card--break .vixo-box-break-line {
+        animation: vixoBoxCrackLine 1100ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    #vixo-box-card.vixo-box-card--break .vixo-box-break-shard--a {
+        animation: vixoBoxShardA 3000ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    #vixo-box-card.vixo-box-card--break .vixo-box-break-shard--b {
+        animation: vixoBoxShardB 3000ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    #vixo-box-card.vixo-box-card--break .vixo-box-break-shard--c {
+        animation: vixoBoxShardC 3000ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes vixoBoxCrackLine {
+        0% {
+            opacity: 0;
+            transform: rotate(-7deg) scaleX(0.12);
+        }
+        28% {
+            opacity: 1;
+            transform: rotate(-7deg) scaleX(1);
+        }
+        72% {
+            opacity: 0.78;
+            transform: rotate(-7deg) scaleX(1.05);
+        }
+        100% {
+            opacity: 0;
+            transform: rotate(-7deg) scaleX(1.1);
+        }
+    }
+
+    @keyframes vixoBoxShardA {
+        0% { opacity: 0; transform: translate3d(0, 0, 0); }
+        14% { opacity: 0.55; }
+        72% { opacity: 0.42; }
+        100% { opacity: 0; transform: translate3d(-10px, -12px, 0) rotate(-1.4deg); }
+    }
+
+    @keyframes vixoBoxShardB {
+        0% { opacity: 0; transform: translate3d(0, 0, 0); }
+        14% { opacity: 0.42; }
+        72% { opacity: 0.32; }
+        100% { opacity: 0; transform: translate3d(10px, 4px, 0) rotate(1.6deg); }
+    }
+
+    @keyframes vixoBoxShardC {
+        0% { opacity: 0; transform: translate3d(0, 0, 0); }
+        14% { opacity: 0.5; }
+        72% { opacity: 0.36; }
+        100% { opacity: 0; transform: translate3d(-8px, 14px, 0) rotate(-1.2deg); }
+    }
+
+    @keyframes vixoBoxBreakOut {
+        0% {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+            filter: blur(0);
+        }
+        72% {
+            opacity: 0.88;
+            transform: scale(0.985) translateY(6px);
+            filter: blur(0.45px);
+        }
+        100% {
+            opacity: 0;
+            transform: scale(0.94) translateY(16px);
+            filter: blur(1.5px);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .vixo-onboarding-bg-rotor {
+            transform: none !important;
+            transition: none !important;
+        }
+
+        #vixo-box-card.vixo-box-card--break {
+            animation: none !important;
+            opacity: 0 !important;
+            transform: scale(0.95) !important;
+            filter: none !important;
+        }
+
+        #vixo-box-card.vixo-box-card--break .vixo-box-break-line,
+        #vixo-box-card.vixo-box-card--break .vixo-box-break-shard {
+            animation: none !important;
+        }
+    }
+</style>
+
+<script>
+(function () {
+    const card = document.getElementById('vixo-box-card');
+    if (!card) return;
+    const bg = card.closest('.vixo-onboarding-bg');
+
+    let closing = false;
+
+    function sideForStep(step) {
+        const map = {
+            'onboarding-username': 'right',
+            'onboarding-intro': 'left',
+            'onboarding-photo': 'right',
+            'onboarding-about': 'left',
+        };
+        return map[step] || 'left';
+    }
+
+    function sideForHref(href) {
+        try {
+            const u = new URL(href, window.location.href);
+            const p = (u.pathname || '').toLowerCase();
+            if (p.includes('/onboarding/username/')) return 'right';
+            if (p.includes('/onboarding/intro/')) return 'left';
+            if (p.includes('/onboarding/photo/')) return 'right';
+            if (p.includes('/onboarding/about/')) return 'left';
+        } catch {}
+        return null;
+    }
+
+    function getCurrentSide() {
+        if (!bg) return 'left';
+        const step = bg.getAttribute('data-vixo-onboarding-step') || '';
+        return sideForStep(step);
+    }
+
+    function prepareBgEnter() {
+        if (!bg) return;
+        const side = getCurrentSide();
+        const other = side === 'left' ? 'right' : 'left';
+        try {
+            bg.classList.remove('vixo-onboarding-bg--left', 'vixo-onboarding-bg--right', 'vixo-onboarding-bg--enter-left', 'vixo-onboarding-bg--enter-right', 'vixo-onboarding-bg--leave-left', 'vixo-onboarding-bg--leave-right');
+            bg.classList.add('vixo-onboarding-bg--' + side);
+            bg.classList.add('vixo-onboarding-bg--enter-' + side);
+            bg.classList.remove('vixo-onboarding-bg--' + other);
+            window.setTimeout(() => {
+                try { bg.classList.remove('vixo-onboarding-bg--enter-left', 'vixo-onboarding-bg--enter-right'); } catch {}
+            }, 520);
+        } catch {}
+    }
+
+    function animateIn() {
+        prepareBgEnter();
+        try {
+            card.classList.remove('vixo-box-card--break');
+        } catch {}
+        try {
+            window.requestAnimationFrame(() => {
+                try {
+                    card.classList.remove('scale-95', 'opacity-0');
+                    card.classList.add('scale-100', 'opacity-100');
+                } catch {}
+            });
+        } catch {
+            try {
+                card.classList.remove('scale-95', 'opacity-0');
+                card.classList.add('scale-100', 'opacity-100');
+            } catch {}
+        }
+    }
+
+    function animateOut(cb, nextSide) {
+        if (closing) return;
+        closing = true;
+        const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        const leaveMs = reduceMotion ? 210 : 3050;
+        try { document.body.classList.add('vixo-page-leave'); } catch {}
+        if (bg) {
+            const outgoing = nextSide === 'right' ? 'vixo-onboarding-bg--leave-right' : 'vixo-onboarding-bg--leave-left';
+            try {
+                bg.classList.remove('vixo-onboarding-bg--leave-left', 'vixo-onboarding-bg--leave-right');
+                bg.classList.add(outgoing);
+            } catch {}
+        }
+        try {
+            if (reduceMotion) {
+                card.classList.remove('scale-100', 'opacity-100');
+                card.classList.add('scale-95', 'opacity-0');
+            } else {
+                card.classList.remove('scale-100', 'opacity-100');
+                card.classList.add('vixo-box-card--break');
+            }
+        } catch {}
+        window.setTimeout(() => {
+            try { if (cb) cb(); } catch {}
+        }, leaveMs);
+    }
+
+    animateIn();
+
+    // Animate out before navigating via links.
+    card.addEventListener('click', function (ev) {
+        const a = ev.target && ev.target.closest ? ev.target.closest('a') : null;
+        if (!a) return;
+        if (a.hasAttribute('data-no-anim')) return;
+        const href = a.getAttribute('href') || '';
+        if (!href || href.startsWith('#')) return;
+        if (a.getAttribute('target') === '_blank') return;
+        // Only same-origin navigation.
+        try {
+            const url = new URL(href, window.location.href);
+            if (url.origin !== window.location.origin) return;
+        } catch { return; }
+
+        ev.preventDefault();
+        const inferred = sideForHref(href);
+        const nextSide = inferred || (getCurrentSide() === 'left' ? 'right' : 'left');
+        animateOut(() => { window.location.href = href; }, nextSide);
+    }, true);
+
+    // Animate out before submitting forms.
+    card.addEventListener('submit', function (ev) {
+        const form = ev.target;
+        if (!form || form.tagName !== 'FORM') return;
+        if (form.hasAttribute('data-no-anim')) return;
+        if (closing) return;
+        ev.preventDefault();
+        const nextSide = getCurrentSide() === 'left' ? 'right' : 'left';
+        animateOut(() => {
+            try { form.submit(); } catch {}
+        }, nextSide);
+    }, true);
+})();
+</script>
 {% endblock %}

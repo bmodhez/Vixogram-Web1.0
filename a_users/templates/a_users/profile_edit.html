@@ -3,12 +3,14 @@
 {% block body_class %} vixo-profile-page{% endblock %}
 
 {% block content %}
-<wrapper class="block max-w-md mx-auto my-10 px-6">
-    <div class="bg-gray-900/60 backdrop-blur p-8 rounded-2xl shadow-2xl border border-white/10 text-white">
+<wrapper class="block max-w-md lg:max-w-6xl mx-auto my-10 px-6 pb-24 sm:pb-10">
+    <div class="bg-gray-900/60 backdrop-blur p-8 lg:p-7 rounded-2xl shadow-2xl border border-white/10 text-white">
         <h1 class="text-2xl font-extrabold mb-2 text-center bg-gradient-to-r from-purple-400 via-indigo-400 to-sky-400 bg-clip-text text-transparent">Edit profile</h1>
         <p class="text-center text-sm text-gray-400 mb-6">Update your avatar and profile details.</p>
 
-        <div class="mb-6 rounded-xl border border-gray-800 bg-gray-950/30 p-4">
+        <div class="lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
+
+        <div class="mb-6 lg:mb-0 rounded-xl border border-gray-800 bg-gray-950/30 p-4">
             <div class="text-sm font-semibold text-gray-200">Change username</div>
             <p class="mt-1 text-xs text-gray-400">
                 First change is allowed anytime. After that, you can change again only after {{ username_cooldown_days }} days.
@@ -109,23 +111,24 @@
                 </a>
             </div>
         </form>
+        </div>
     </div>
 
         <!-- Avatar crop modal (opens after selecting an image) -->
         <div id="avatar_crop_modal" class="hidden fixed inset-0 z-50" aria-hidden="true">
                 <div class="absolute inset-0 bg-black/70"></div>
-                <div class="relative min-h-screen flex items-center justify-center px-4 py-8">
-                        <div class="w-full max-w-md bg-gray-800 rounded-2xl shadow-2xl border border-gray-700 overflow-hidden">
+            <div class="relative h-[100dvh] overflow-y-auto flex items-start justify-center px-4 pt-6 pb-3 sm:pt-10 sm:pb-6">
+                <div class="w-full max-w-md max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-4rem)] bg-gray-800 rounded-2xl shadow-2xl border border-gray-700 overflow-hidden">
                                 <div class="flex items-center justify-between px-5 py-4 border-b border-gray-700">
                                         <div class="text-white font-bold">Crop image</div>
                                         <button id="avatar_crop_close" type="button" class="text-gray-300 hover:text-white px-2 py-1">✕</button>
                                 </div>
 
-                                <div class="p-5">
+                    <div class="p-5 overflow-y-auto">
                                         <div class="text-xs text-gray-400 mb-3">Drag to position • Use zoom</div>
 
-                                        <div class="mx-auto w-[min(20rem,85vw)] max-w-full">
-                                            <div id="avatar_crop_area" class="relative w-[min(20rem,85vw)] h-[min(20rem,85vw)] max-w-full bg-gray-900/40 border border-gray-700 rounded-2xl overflow-hidden touch-none select-none">
+                        <div class="mx-auto w-[min(18rem,84vw)] sm:w-[min(20rem,85vw)] max-w-full">
+                            <div id="avatar_crop_area" class="relative w-[min(18rem,84vw)] h-[min(18rem,84vw)] sm:w-[min(20rem,85vw)] sm:h-[min(20rem,85vw)] max-w-full bg-gray-900/40 border border-gray-700 rounded-2xl overflow-hidden touch-none select-none">
                                                         <img id="avatar_crop_img" alt="Crop preview" class="absolute left-1/2 top-1/2 will-change-transform pointer-events-none max-w-none max-h-none" />
                                                         <div aria-hidden="true" class="absolute inset-0 ring-1 ring-white/10"></div>
                                                 </div>
@@ -145,6 +148,39 @@
                 </div>
         </div>
 </wrapper>
+
+{% if user.is_authenticated %}
+<nav class="lg:hidden fixed left-1/2 -translate-x-1/2 bottom-[max(0.9rem,env(safe-area-inset-bottom))] z-[85] w-[min(20rem,calc(100vw-1.2rem))] rounded-2xl border border-gray-800/90 bg-gray-900/92 backdrop-blur-md shadow-2xl shadow-black/45 px-2 py-1.5" aria-label="Mobile navigation">
+    <div class="grid grid-cols-3 gap-1.5">
+        <a
+            href="{% url 'chatroom' 'public-chat' %}"
+            class="inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-gray-300 hover:text-gray-100"
+            aria-label="Chat"
+        >
+            <span aria-hidden="true">💬</span>
+            <span>Chat</span>
+        </a>
+        <a
+            href="{% url 'chatroom' 'public-chat' %}?tab=groups"
+            class="inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-gray-300 hover:text-gray-100"
+            aria-label="Groups"
+        >
+            <span aria-hidden="true">☰</span>
+            <span>Groups</span>
+        </a>
+        <a
+            href="{% url 'profile' %}"
+            data-mobile-profile-menu-toggle="1"
+            class="inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-gray-100 bg-gray-800/85"
+            aria-current="page"
+            aria-label="Profile"
+        >
+            <span aria-hidden="true">👤</span>
+            <span>Profile</span>
+        </a>
+    </div>
+</nav>
+{% endif %}
 {% endblock %}
 
 {% block extra_body %}

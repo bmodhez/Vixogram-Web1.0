@@ -27,6 +27,10 @@ def mute_key(user_id: int | str) -> str:
     return make_key('mute', user_id)
 
 
+def room_mute_key(room_id: int | str, user_id: int | str) -> str:
+    return make_key('room_mute', room_id, user_id)
+
+
 def strikes_key(scope: str, user_id: int | str, room: str | None = None) -> str:
     return make_key('strikes', scope, user_id, room)
 
@@ -35,6 +39,23 @@ def get_muted_seconds(user_id: int | str) -> int:
     """Return remaining mute seconds for a user (0 if not muted)."""
     try:
         raw = cache.get(mute_key(user_id))
+    except Exception:
+        raw = None
+    if not raw:
+        return 0
+    try:
+        muted_until = float(raw)
+    except Exception:
+        return 0
+    now = timezone.now().timestamp()
+    remaining = int(muted_until - now)
+    return max(0, remaining)
+
+
+def get_room_muted_seconds(room_id: int | str, user_id: int | str) -> int:
+    """Return remaining mute seconds for a user in a specific room (0 if not muted)."""
+    try:
+        raw = cache.get(room_mute_key(room_id, user_id))
     except Exception:
         raw = None
     if not raw:
@@ -57,6 +78,24 @@ def set_muted(user_id: int | str, seconds: int) -> int:
     except Exception:
         pass
     return seconds
+
+
+def set_room_muted(room_id: int | str, user_id: int | str, seconds: int) -> int:
+    seconds = int(seconds)
+    seconds = max(1, seconds)
+    muted_until = timezone.now().timestamp() + seconds
+    try:
+        cache.set(room_mute_key(room_id, user_id), str(muted_until), timeout=seconds)
+    except Exception:
+        pass
+    return seconds
+
+
+def clear_room_muted(room_id: int | str, user_id: int | str) -> None:
+    try:
+        cache.delete(room_mute_key(room_id, user_id))
+    except Exception:
+        pass
 
 
 def record_abuse_violation(

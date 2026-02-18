@@ -4,6 +4,7 @@ import ipaddress
 from typing import Any
 
 import requests
+from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
@@ -31,6 +32,15 @@ def _safe_str(v: Any, max_len: int = 80) -> str:
     if not s:
         return ''
     return s[:max_len]
+
+
+def _as_bool(v: Any) -> bool:
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    s = _safe_str(v, 16).lower()
+    return s in {'1', 'true', 't', 'yes', 'y', 'on'}
 
 
 def geoip_city_country(ip: str) -> tuple[str, str]:
@@ -78,6 +88,142 @@ def geoip_city_country(ip: str) -> tuple[str, str]:
         return (city, country)
     except Exception:
         return ('', '')
+
+
+def vpn_proxy_status_for_ip(ip: str) -> dict[str, Any]:
+    """Best-effort VPN/proxy detection for an IP.
+
+    Returns a normalized payload:
+      {
+        'blocked': bool,
+        'vpn': bool,
+        'proxy': bool,
+        'tor': bool,
+        'relay': bool,
+        'hosting': bool,
+        'reason': str,
+      }
+
+    Notes:
+    - Uses ipwho.is (no API key).
+    - Caches by IP for a short time to avoid repeated upstream calls.
+    - Private/loopback IPs are treated as not blocked.
+    """
+    ip = (ip or '').strip()
+    base = {
+        'blocked': False,
+        'vpn': False,
+        'proxy': False,
+        'tor': False,
+        'relay': False,
+        'hosting': False,
+        'reason': '',
+    }
+    if not ip or not _is_public_ip(ip):
+        return dict(base)
+
+    try:
+        ttl = int(getattr(settings, 'VPN_PROXY_STATUS_CACHE_SECONDS', 120) or 120)
+    except Exception:
+        ttl = 120
+    ttl = max(30, ttl)
+
+    cache_key = f"vixo:netsec:{ip}"
+    try:
+        cached = cache.get(cache_key)
+        if isinstance(cached, dict) and 'blocked' in cached:
+            return {
+                'blocked': bool(cached.get('blocked')),
+                'vpn': bool(cached.get('vpn')),
+                'proxy': bool(cached.get('proxy')),
+                'tor': bool(cached.get('tor')),
+                'relay': bool(cached.get('relay')),
+                'hosting': bool(cached.get('hosting')),
+                'reason': _safe_str(cached.get('reason'), 40),
+            }
+    except Exception:
+        pass
+
+    out = dict(base)
+    try:
+        resp = requests.get(f"https://ipwho.is/{ip}", timeout=3)
+        if resp.status_code != 200:
+            return out
+        data = resp.json() if resp.content else {}
+        if not isinstance(data, dict) or data.get('success') is not True:
+            return out
+
+        security = data.get('security') if isinstance(data.get('security'), dict) else {}
+        connection = data.get('connection') if isinstance(data.get('connection'), dict) else {}
+
+        vpn = _as_bool(security.get('vpn')) or _as_bool(data.get('vpn'))
+        proxy = _as_bool(security.get('proxy')) or _as_bool(data.get('proxy'))
+        tor = _as_bool(security.get('tor')) or _as_bool(data.get('tor'))
+        relay = _as_bool(security.get('relay')) or _as_bool(security.get('is_relay'))
+
+        conn_type = _safe_str(connection.get('type'), 24).lower()
+        isp = _safe_str(connection.get('isp'), 80).lower()
+        org = _safe_str(connection.get('org'), 80).lower()
+
+        # Best-effort vendor/transport heuristic for providers not explicitly tagged
+        # by upstream security booleans (e.g., some WARP exits).
+        combined = f"{conn_type} {isp} {org}".strip()
+        vpn_hints = (
+            'warp',
+            'vpn',
+            'wireguard',
+            'openvpn',
+            'tunnelbear',
+            'nordvpn',
+            'expressvpn',
+            'surfshark',
+            'protonvpn',
+            'mullvad',
+            'private internet access',
+            'pia',
+        )
+        hinted_vpn = any(h in combined for h in vpn_hints)
+        if hinted_vpn and not (vpn or proxy or tor or relay):
+            vpn = True
+
+        hosting = bool(
+            security.get('hosting')
+            or security.get('datacenter')
+            or ('hosting' in conn_type)
+            or ('data center' in conn_type)
+            or ('datacenter' in conn_type)
+            or ('cloud' in isp)
+        )
+
+        reason = ''
+        if vpn:
+            reason = 'vpn'
+        elif proxy:
+            reason = 'proxy'
+        elif tor:
+            reason = 'tor'
+        elif relay:
+            reason = 'relay'
+        elif hosting:
+            reason = 'hosting'
+
+        out = {
+            'blocked': bool(vpn or proxy or tor or relay),
+            'vpn': bool(vpn),
+            'proxy': bool(proxy),
+            'tor': bool(tor),
+            'relay': bool(relay),
+            'hosting': bool(hosting),
+            'reason': reason,
+        }
+    except Exception:
+        out = dict(base)
+
+    try:
+        cache.set(cache_key, out, timeout=ttl)
+    except Exception:
+        pass
+    return out
 
 
 def _extract_ip_from_headers(headers: list[tuple[bytes, bytes]] | None) -> str:

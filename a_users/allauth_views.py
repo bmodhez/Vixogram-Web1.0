@@ -171,6 +171,7 @@ class WelcomeSignupView(SignupView):
             if sess is not None:
                 sess['show_welcome_popup'] = True
                 sess['welcome_popup_source'] = 'signup'
+                sess['post_auth_chat_tutorial'] = 'signup'
         except Exception:
             pass
 
@@ -193,6 +194,7 @@ class WelcomeLoginView(PRGLoginView):
             if sess is not None:
                 sess['show_welcome_popup'] = True
                 sess['welcome_popup_source'] = 'login'
+                sess['post_auth_chat_tutorial'] = 'login'
         except Exception:
             pass
 

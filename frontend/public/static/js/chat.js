@@ -498,14 +498,8 @@
         const captionInput = document.getElementById('chat_file_caption');
         const sendBtn = document.getElementById('chat_send_btn');
 
-        // If the server rendered the blocked state, the form doesn't exist.
-        // On unblock, reload to restore the form.
-        if (!form) {
-            if (!normalized) {
-                try { window.location.reload(); } catch {}
-            }
-            return;
-        }
+        // If composer form is not present, avoid forcing any page refresh.
+        if (!form) return;
 
         let banner = document.getElementById('chat_blocked_banner');
         if (normalized) {
@@ -1297,35 +1291,88 @@
         });
     })();
 
-    // If server rate-limits message sends (429), show a countdown on the Send button.
+    // Realtime mute/cooldown lock for composer.
     let sendCooldownTimer = null;
-    function startSendCooldown(seconds) {
-        const btn = document.getElementById('chat_send_btn');
-        const input = document.getElementById('id_body');
-        if (!btn || !input) return;
+    let __mutedComposerSavedValue = null;
 
-        if (!btn.dataset.originalText) {
-            btn.dataset.originalText = (btn.textContent || 'Send').trim();
+    function __setMutedUiText(seconds) {
+        const input = document.getElementById('id_body');
+        const mutedRow = document.getElementById('chat_muted_row');
+        const mutedText = document.getElementById('chat_muted_text');
+        const s = Math.max(0, parseInt(seconds || 0, 10) || 0);
+        const label = `You are muted for ${formatSeconds(s)}.`;
+        if (mutedText) mutedText.textContent = label;
+        if (mutedRow) mutedRow.classList.remove('hidden');
+        if (input) input.value = label;
+    }
+
+    function __clearMutedUiText() {
+        const input = document.getElementById('id_body');
+        const mutedRow = document.getElementById('chat_muted_row');
+        const mutedText = document.getElementById('chat_muted_text');
+        if (mutedRow) mutedRow.classList.add('hidden');
+        if (mutedText) mutedText.textContent = '';
+        if (input) {
+            if (__mutedComposerSavedValue !== null) input.value = __mutedComposerSavedValue;
+            __mutedComposerSavedValue = null;
+        }
+    }
+
+    function startSendCooldown(seconds) {
+        const input = document.getElementById('id_body');
+        const sendBtn = document.getElementById('chat_send_btn');
+        const uploadBtn = document.getElementById('chat_upload_btn');
+        const fileInput = document.getElementById('chat_file_input');
+        if (!input || !sendBtn) return;
+
+        const parsed = parseInt(seconds || 0, 10) || 0;
+        if (sendCooldownTimer) {
+            window.clearInterval(sendCooldownTimer);
+            sendCooldownTimer = null;
         }
 
-        let remaining = Math.max(1, Number(seconds || 1));
-        btn.disabled = true;
+        if (parsed <= 0) {
+            __clearMutedUiText();
+            const verifyGate = document.getElementById('verify_gate');
+            const verifyLocked = !!(verifyGate && !verifyGate.classList.contains('hidden'));
+            const blockedBanner = document.getElementById('chat_blocked_banner');
+            const stillBlocked = !!blockedBanner;
+            if (!verifyLocked && !stillBlocked) {
+                input.disabled = false;
+                sendBtn.disabled = false;
+                sendBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+                if (uploadBtn) {
+                    uploadBtn.disabled = false;
+                    uploadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+                if (fileInput) fileInput.disabled = false;
+                try { input.focus(); } catch {}
+            }
+            return;
+        }
+
+        if (__mutedComposerSavedValue === null) {
+            __mutedComposerSavedValue = String(input.value || '');
+        }
+
+        let remaining = Math.max(1, parsed);
         input.disabled = true;
+        sendBtn.disabled = true;
+        sendBtn.classList.add('opacity-70', 'cursor-not-allowed');
+        if (uploadBtn) {
+            uploadBtn.disabled = true;
+            uploadBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+        if (fileInput) fileInput.disabled = true;
 
         const tick = () => {
-            btn.textContent = `Wait ${remaining}s`;
+            __setMutedUiText(remaining);
             remaining -= 1;
             if (remaining < 0) {
-                window.clearInterval(sendCooldownTimer);
-                sendCooldownTimer = null;
-                btn.disabled = false;
-                input.disabled = false;
-                btn.textContent = btn.dataset.originalText || 'Send';
-                try { input.focus(); } catch (e) {}
+                startSendCooldown(0);
             }
         };
 
-        if (sendCooldownTimer) window.clearInterval(sendCooldownTimer);
         tick();
         sendCooldownTimer = window.setInterval(tick, 1000);
     }
@@ -1341,6 +1388,7 @@
 
         const modal = document.getElementById('upload_modal');
         const modalBackdrop = document.getElementById('upload_modal_backdrop');
+        const modalPanel = document.getElementById('upload_modal_panel');
         const modalClose = document.getElementById('upload_modal_close');
         const modalCancel = document.getElementById('upload_modal_cancel');
         const modalSend = document.getElementById('upload_modal_send');
@@ -1358,6 +1406,33 @@
         let cropper = null;
         let previewUrl = null;
         let modalOpen = false;
+
+        function animateModalOpen() {
+            if (!modal) return;
+            if (modalBackdrop) {
+                modalBackdrop.classList.remove('opacity-100');
+                modalBackdrop.classList.add('opacity-0');
+            }
+            if (modalPanel) {
+                modalPanel.classList.remove('opacity-100', 'translate-y-0', 'scale-100');
+                modalPanel.classList.add('opacity-0', 'translate-y-3', 'scale-[0.98]');
+            }
+
+            modal.classList.remove('hidden');
+            window.requestAnimationFrame(() => {
+                window.requestAnimationFrame(() => {
+                    if (!modalOpen) return;
+                    if (modalBackdrop) {
+                        modalBackdrop.classList.remove('opacity-0');
+                        modalBackdrop.classList.add('opacity-100');
+                    }
+                    if (modalPanel) {
+                        modalPanel.classList.remove('opacity-0', 'translate-y-3', 'scale-[0.98]');
+                        modalPanel.classList.add('opacity-100', 'translate-y-0', 'scale-100');
+                    }
+                });
+            });
+        }
 
         function cleanupCropper() {
             if (cropper) {
@@ -1435,6 +1510,14 @@
                 try { modalVideo.load(); } catch {}
             }
             if (modalHint) modalHint.textContent = '';
+            if (modalBackdrop) {
+                modalBackdrop.classList.remove('opacity-100');
+                modalBackdrop.classList.add('opacity-0');
+            }
+            if (modalPanel) {
+                modalPanel.classList.remove('opacity-100', 'translate-y-0', 'scale-100');
+                modalPanel.classList.add('opacity-0', 'translate-y-3', 'scale-[0.98]');
+            }
             if (modal) modal.classList.add('hidden');
 
             if (options.clearFile) {
@@ -1510,7 +1593,7 @@
                 if (modalHint) modalHint.textContent = 'Preview unavailable for this file type.';
             }
 
-            modal.classList.remove('hidden');
+            animateModalOpen();
         }
 
         function syncUploadMode() {
@@ -2963,6 +3046,15 @@
                 return;
             }
 
+            if (payload.type === 'member_mute_updated') {
+                const targetUserId = parseInt(payload.target_user_id || 0, 10) || 0;
+                if (targetUserId && targetUserId === currentUserId) {
+                    if (payload.unmuted) startSendCooldown(0);
+                    else startSendCooldown(parseInt(payload.seconds || 0, 10) || 0);
+                }
+                return;
+            }
+
             if (payload.type === 'verify_required') {
                 showVerifyRequired(payload.reason || 'Verify your email to continue chatting.');
                 return;
@@ -3537,6 +3629,17 @@
         if (callPopupSubtitleEl) callPopupSubtitleEl.textContent = text || '';
     }
 
+    function getPublicCallErrorMessage(error) {
+        const raw = String((error && error.message) ? error.message : (error || '')).toLowerCase();
+        if (raw.includes('permission') || raw.includes('notallowed') || raw.includes('denied')) {
+            return 'Microphone/camera permission is required.';
+        }
+        if (raw.includes('device') || raw.includes('camera') || raw.includes('microphone') || raw.includes('track')) {
+            return 'Could not access your mic/camera. Please check device settings.';
+        }
+        return 'Could not start call. Please try again.';
+    }
+
     function showCallPopup() {
         if (!callPopupEl) return;
         callPopupEl.classList.remove('hidden');
@@ -3702,7 +3805,8 @@
 
             setCallStatus('In call');
         } catch (e) {
-            setCallStatus('Error: ' + (e && e.message ? e.message : String(e)));
+            try { console.error('Call popup start failed:', e); } catch {}
+            setCallStatus(getPublicCallErrorMessage(e));
 
             // Allow retry without refresh.
             try {
@@ -3732,12 +3836,24 @@
     }
 
     async function endCallPopup(reason) {
-        if (!callActive) return;
+        const hadActiveCall = !!callActive;
         try {
             if (reason) setCallStatus(reason);
             // Broadcast end marker (only once is fine; server dedupes)
-            if (callTypeActive) await postCallEvent('end', callTypeActive);
+            if (hadActiveCall && callTypeActive) await postCallEvent('end', callTypeActive);
         } catch {}
+
+        if (!hadActiveCall) {
+            callClient = null;
+            localTracks = { audio: null, video: null };
+            callActive = false;
+            callTypeActive = null;
+            callRoleActive = null;
+            setParticipant('me', 'Waiting…', '—');
+            setParticipant('other', 'Waiting…', '—');
+            hideCallPopup();
+            return;
+        }
 
         try {
             callRemoteAudioTracks.clear();
@@ -3778,6 +3894,14 @@
             endCallPopup('Call ended');
         });
     }
+
+    window.addEventListener('beforeunload', (e) => {
+        if (!callActive) return;
+        const msg = 'Call will end if you reload or leave this page.';
+        e.preventDefault();
+        e.returnValue = msg;
+        return msg;
+    });
 
     if (callMicBtn) {
         callMicBtn.addEventListener('click', async (e) => {
@@ -4021,6 +4145,13 @@
         if (replyBarPreview) replyBarPreview.textContent = '';
     }
 
+    function normalizeReplyPreview(text) {
+        const collapsed = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!collapsed) return '';
+        if (collapsed.length <= 160) return collapsed;
+        return `${collapsed.slice(0, 160)}…`;
+    }
+
     if (replyBarCancel) {
         replyBarCancel.addEventListener('click', function () {
             clearReply();
@@ -4035,7 +4166,7 @@
 
         const msgId = btn.getAttribute('data-reply-to-id') || '';
         const author = btn.getAttribute('data-reply-author') || '';
-        const preview = btn.getAttribute('data-reply-preview') || '';
+        const preview = normalizeReplyPreview(btn.getAttribute('data-reply-preview') || '');
 
         if (replyToIdInput) replyToIdInput.value = msgId;
         if (replyBarAuthor) replyBarAuthor.textContent = author;

@@ -1,0 +1,22 @@
+{% extends 'layouts/box.html' %}
+
+{% block box_title %}Let’s setup your profile{% endblock %}
+
+{% block box_subtitle %}
+  <p class="text-sm text-gray-300 mt-1">A few quick steps and you’re done.</p>
+{% endblock %}
+
+{% block box_body %}
+<div class="space-y-5">
+  <div class="text-sm text-gray-200 leading-relaxed">
+    Add a photo, name and bio so people can recognize you.
+  </div>
+
+  <a
+    href="{% url 'onboarding-photo' %}"
+    class="block w-full text-center bg-gradient-to-r from-purple-500 via-indigo-500 to-sky-500 hover:from-purple-400 hover:via-indigo-400 hover:to-sky-400 text-white font-bold py-3 px-6 rounded-xl transition-colors"
+  >
+    Continue →
+  </a>
+</div>
+{% endblock %}

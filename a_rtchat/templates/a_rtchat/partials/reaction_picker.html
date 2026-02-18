@@ -61,6 +61,15 @@ For UX: click '+' opens the emoji bar.
                         Edit
                     </button>
                 {% endif %}
+                {% if not message.body or message.body|slice:":5" != "[GIF]" %}
+                    <button type="button"
+                        data-copy-message
+                        data-message-id="{{ message.id }}"
+                        data-message-text="{{ message.body|default:message.file_caption|default:message.filename|default:''|escape }}"
+                        class="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-800/60">
+                        Copy
+                    </button>
+                {% endif %}
                 <button type="button"
                     data-delete-message
                     data-message-id="{{ message.id }}"

@@ -14,14 +14,24 @@ class ChatGroup(models.Model):
     group_name = models.CharField(max_length=128, unique=True, blank=True)
     groupchat_name = models.CharField(max_length=128, null=True, blank=True)
     admin = models.ForeignKey(User, related_name='groupchats', blank=True, null=True, on_delete=models.SET_NULL)
+    # Additional admins for this room (the `admin` field remains the room owner/creator).
+    admins = models.ManyToManyField(User, related_name='admin_in_groups', blank=True)
     users_online = models.ManyToManyField(User, related_name='online_in_groups', blank=True)
     members = models.ManyToManyField(User, related_name='chat_groups', blank=True)
     is_private = models.BooleanField(default=False)
+    # When enabled, only the room admin (and staff) can send messages.
+    only_admins_can_send = models.BooleanField(default=False)
+    allow_media_uploads = models.BooleanField(default=True)
+    allow_members_invite_others = models.BooleanField(default=False)
+    slow_mode_seconds = models.PositiveSmallIntegerField(default=0)
     created = models.DateTimeField(auto_now_add=True)
     # Private rooms that can be joined via a shareable code (not listed globally).
     is_code_room = models.BooleanField(default=False)
     room_code = models.CharField(max_length=16, unique=True, null=True, blank=True, db_index=True)
     code_room_name = models.CharField(max_length=128, null=True, blank=True)
+    room_description = models.TextField(blank=True, default='')
+    room_avatar = models.ImageField(upload_to='room_avatars/', null=True, blank=True)
+    announcement_pinned = models.BooleanField(default=False)
     pinned_message = models.TextField(blank=True, default='')
     
     def __str__(self):

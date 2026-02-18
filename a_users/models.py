@@ -11,6 +11,30 @@ import base64
 import hashlib
 
 class Profile(models.Model):
+    NAME_GLOW_NONE = 'none'
+    NAME_GLOW_AURORA = 'aurora'
+    NAME_GLOW_SUNSET = 'sunset'
+    NAME_GLOW_NEON = 'neon'
+    NAME_GLOW_ROSE = 'rose'
+    NAME_GLOW_ELECTRIC = 'electric'
+    NAME_GLOW_TOXIC = 'toxic'
+    NAME_GLOW_ROYAL = 'royal'
+    NAME_GLOW_ICE = 'ice'
+    NAME_GLOW_COSMIC = 'cosmic'
+
+    NAME_GLOW_CHOICES = (
+        (NAME_GLOW_NONE, 'No glow'),
+        (NAME_GLOW_AURORA, 'Aurora'),
+        (NAME_GLOW_SUNSET, 'Sunset'),
+        (NAME_GLOW_NEON, 'Neon'),
+        (NAME_GLOW_ROSE, 'Rose'),
+        (NAME_GLOW_ELECTRIC, 'Electric'),
+        (NAME_GLOW_TOXIC, 'Toxic'),
+        (NAME_GLOW_ROYAL, 'Royal'),
+        (NAME_GLOW_ICE, 'Ice'),
+        (NAME_GLOW_COSMIC, 'Cosmic'),
+    )
+
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     image = models.ImageField(upload_to='avatars/', null=True, blank=True)
     cover_image = models.ImageField(upload_to='profile_covers/', null=True, blank=True)
@@ -27,6 +51,7 @@ class Profile(models.Model):
     is_stealth = models.BooleanField(default=False)
     is_bot = models.BooleanField(default=False)
     is_dnd = models.BooleanField(default=False)
+    name_glow_color = models.CharField(max_length=16, choices=NAME_GLOW_CHOICES, default=NAME_GLOW_NONE)
     referral_points = models.PositiveIntegerField(default=0)
 
     def save(self, *args, **kwargs):
@@ -263,6 +288,39 @@ class UserDevice(models.Model):
 
     def __str__(self):
         return f"UserDevice(user={self.user_id}, last_seen={self.last_seen})"
+
+
+class ChatBanHistory(models.Model):
+    ACTION_BAN = 'ban'
+    ACTION_UNBAN = 'unban'
+    ACTION_CHOICES = (
+        (ACTION_BAN, 'Ban'),
+        (ACTION_UNBAN, 'Unban'),
+    )
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='chat_ban_history')
+    action = models.CharField(max_length=8, choices=ACTION_CHOICES, db_index=True)
+    duration_minutes = models.PositiveIntegerField(default=0)
+    banned_until = models.DateTimeField(null=True, blank=True)
+    banned_by = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='issued_chat_ban_history',
+    )
+    admin_ip = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at'], name='cbh_user_created_idx'),
+            models.Index(fields=['action', '-created_at'], name='cbh_action_created_idx'),
+        ]
+
+    def __str__(self):
+        return f"ChatBanHistory(user={self.user_id}, action={self.action}, at={self.created_at})"
 
 
 class Follow(models.Model):

@@ -9,6 +9,7 @@ import base64
 
 from .models import ChatGroup, CodeRoomJoinRequest, GroupMessage, OneTimeMessageView
 from .retention import trim_chat_group_messages
+from a_users.models import ChatBanHistory
 
 
 class AdminToggleUserBlockTests(TestCase):
@@ -42,12 +43,25 @@ class AdminUserBanTests(TestCase):
 		target.refresh_from_db()
 		self.assertIsNotNone(target.profile.chat_banned_until)
 		self.assertTrue(target.profile.chat_banned_until > timezone.now())
+		self.assertTrue(
+			ChatBanHistory.objects.filter(
+				user=target,
+				action=ChatBanHistory.ACTION_BAN,
+				duration_minutes=10,
+			).exists()
+		)
 
 		resp2 = self.client.post(url, data={'minutes': '0'})
 		self.assertEqual(resp2.status_code, 302)
 
 		target.refresh_from_db()
 		self.assertIsNone(target.profile.chat_banned_until)
+		self.assertTrue(
+			ChatBanHistory.objects.filter(
+				user=target,
+				action=ChatBanHistory.ACTION_UNBAN,
+			).exists()
+		)
 
 
 class PrivateRoomMemberLimitTests(TestCase):
@@ -203,6 +217,56 @@ class CodeRoomWaitingListTests(TestCase):
 
 		jr.refresh_from_db()
 		self.assertGreater(jr.last_seen_at, past)
+
+	def test_waiting_leave_removes_pending_request(self):
+		owner = User.objects.create_user(username='owner_leave', password='pass12345')
+		room = ChatGroup.objects.create(is_private=True, is_code_room=True, admin=owner)
+		room.members.add(owner)
+
+		joiner = User.objects.create_user(username='joiner_leave', password='pass12345')
+		CodeRoomJoinRequest.objects.create(room=room, user=joiner)
+
+		self.client.force_login(joiner)
+		leave_url = reverse('code-room-waiting-leave', args=[room.group_name])
+		resp = self.client.get(f'{leave_url}?next={reverse("home")}')
+		self.assertEqual(resp.status_code, 302)
+		self.assertEqual(resp.url, reverse('home'))
+
+		self.assertFalse(
+			CodeRoomJoinRequest.objects.filter(
+				room=room,
+				user=joiner,
+				admitted_at__isnull=True,
+			).exists()
+		)
+
+
+class PrivateRoomRemovalRealtimeTests(TestCase):
+	def test_removed_member_cannot_send_without_refresh(self):
+		owner = User.objects.create_user(username='owner_rm1', password='pass12345')
+		member = User.objects.create_user(username='member_rm1', password='pass12345')
+		room = ChatGroup.objects.create(is_private=True, is_code_room=True, admin=owner)
+		room.members.add(owner, member)
+
+		# Admin removes member.
+		self.client.force_login(owner)
+		remove_url = reverse('chatroom-member-remove', kwargs={'chatroom_name': room.group_name, 'user_id': member.id})
+		remove_resp = self.client.post(remove_url)
+		self.assertEqual(remove_resp.status_code, 200)
+		room.refresh_from_db()
+		self.assertFalse(room.members.filter(pk=member.pk).exists())
+
+		# Removed user tries to send immediately (HTMX-style request) without page refresh.
+		self.client.force_login(member)
+		send_url = reverse('chatroom', kwargs={'chatroom_name': room.group_name})
+		send_resp = self.client.post(send_url, data={'body': 'hello after removal'}, HTTP_HX_REQUEST='true')
+		self.assertEqual(send_resp.status_code, 403)
+		self.assertEqual(send_resp.headers.get('X-Vixo-Not-Member', ''), '1')
+
+		# No new user-authored message should be persisted.
+		self.assertFalse(
+			GroupMessage.objects.filter(group=room, author=member, body='hello after removal').exists()
+		)
 
 
 class MessageRetentionTests(TestCase):

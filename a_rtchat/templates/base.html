@@ -25,7 +25,7 @@
     <script src="{% static 'js/profile.js' %}"></script>
     <script src="{% static 'js/story_cropper.js' %}" defer></script>
 </head>
-<body class="min-h-screen flex flex-col text-white antialiased tracking-tight bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 {% block body_class %}{% endblock %}{% if request.resolver_match and request.resolver_match.url_name|default:''|slice:':8' == 'account_' %} vixo-auth-page{% endif %}">
+<body class="min-h-screen flex flex-col text-white antialiased tracking-tight bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 {% block body_class %}{% endblock %}{% if request.resolver_match and request.resolver_match.url_name|default:''|slice:':8' == 'account_' or request.resolver_match.url_name|default:''|slice:':11' == 'onboarding-' %} vixo-auth-page{% endif %}">
     <audio id="notif_sound" preload="auto" class="hidden" src="{% static 'notification.mp3' %}"></audio>
     <audio id="incoming_sound" preload="auto" class="hidden" src="{% static 'incoming.wav' %}"></audio>
     {% if request.resolver_match and request.resolver_match.url_name|default:''|slice:':8' == 'account_' %}
@@ -45,7 +45,10 @@
                 <img src="{% static 'vixologo.png' %}" alt="Vixogram" class="vixo-logo h-10 sm:h-12 w-auto max-w-none object-contain object-left" />
             </a>
 
-            {% if user.is_authenticated %}
+            {# Onboarding steps: keep navbar minimal (logo only) until steps complete. #}
+            {% if request.resolver_match and request.resolver_match.url_name|default:''|slice:':11' == 'onboarding-' %}
+                <div class="hidden"></div>
+            {% elif user.is_authenticated %}
                 <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
                     <a
                         href="{% url 'invite-friends' %}"
@@ -98,7 +101,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="relative flex items-center gap-2">
+                    <div class="relative hidden sm:flex items-center gap-2">
                         <button
                             type="button"
                             id="user_menu_btn"
@@ -112,9 +115,9 @@
                             <span id="nav_followreq_badge" class="hidden absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-red-500 text-[10px] leading-5 text-center font-bold text-white"></span>
                         </button>
 
-                        <div id="user_menu" class="hidden fixed left-1/2 -translate-x-1/2 top-24 w-[min(18rem,calc(100vw-2rem))] sm:absolute sm:left-auto sm:translate-x-0 sm:top-full sm:right-0 sm:mt-2 rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl shadow-black/30 max-h-[calc(100vh-8rem)] overflow-x-hidden overflow-y-auto" role="menu">
-                            <a href="{% url 'profile' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
-                                View profile
+                        <div id="user_menu" class="hidden absolute top-full right-0 mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl shadow-black/30 max-h-[calc(100vh-8rem)] overflow-x-hidden overflow-y-auto" role="menu">
+                            <a href="{% url 'profile' %}" data-user-menu-profile="1" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
+                                My profile
                             </a>
                             <a
                                 href="{% url 'story-add' %}"
@@ -182,6 +185,59 @@
         </div>
     </nav>
 
+    {% if user.is_authenticated %}
+    <div id="mobile_profile_menu_backdrop" class="hidden lg:hidden fixed inset-0 z-[88] bg-black/40"></div>
+    <div id="mobile_profile_menu" class="hidden lg:hidden fixed left-1/2 -translate-x-1/2 bottom-[calc(max(0.9rem,env(safe-area-inset-bottom))+4.6rem)] z-[89] w-[min(20rem,calc(100vw-1.2rem))] rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl shadow-black/35 overflow-hidden" role="menu" aria-hidden="true">
+        <a href="{% url 'profile' %}" data-user-menu-profile="1" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out active:translate-y-0">
+            My profile
+        </a>
+        <a
+            href="{% url 'story-add' %}"
+            hx-get="{% url 'story-add' %}?modal=1"
+            hx-target="#global_modal_root"
+            hx-swap="innerHTML"
+            hx-push-url="false"
+            class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out active:translate-y-0"
+        >
+            Add Story
+        </a>
+
+        <button
+            type="button"
+            hx-get="{% url 'follow-requests-modal' %}"
+            hx-target="#global_modal_root"
+            hx-swap="innerHTML"
+            hx-push-url="false"
+            data-user-menu-close="1"
+            class="w-full text-left px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out active:translate-y-0 flex items-center justify-between gap-3"
+            aria-label="Follow requests"
+        >
+            <span>Follow requests</span>
+            <span id="followreq_menu_badge_mobile" class="hidden min-w-5 h-5 px-1 rounded-full bg-red-500 text-[10px] leading-5 text-center font-bold text-white"></span>
+        </button>
+        <a href="{% url 'contact-support' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out active:translate-y-0">
+            Contact Support
+        </a>
+        <a href="{% url 'faq' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out active:translate-y-0">
+            FAQ
+        </a>
+        <button type="button" id="theme_toggle_menu_mobile" class="w-full text-left px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out active:translate-y-0 flex items-center justify-between gap-3" aria-label="Toggle theme">
+            <span class="inline-flex items-center gap-2">
+                <span aria-hidden="true" data-theme-icon>🌙</span>
+                <span>Theme</span>
+            </span>
+            <span class="text-[11px] font-semibold text-gray-400" data-theme-label>Dark</span>
+        </button>
+        <div class="h-px bg-gray-800"></div>
+        <form method="post" action="{% url 'account_logout' %}" data-loading-text="Logging out…" class="m-0">
+            {% csrf_token %}
+            <button type="submit" class="w-full text-left px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out active:translate-y-0">
+                Logout
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
     <div id="global-announcement-banner" class="vixo-global-banner w-full border-b border-red-500/40 bg-red-500/10 {% if not GLOBAL_ANNOUNCEMENT_MESSAGE %}hidden{% endif %}">
         <div class="w-full max-w-7xl mx-auto px-4 sm:px-6 py-1.5">
             <div class="vixo-marquee" aria-label="Global announcement">
@@ -233,10 +289,10 @@
 
     {% with urlname=request.resolver_match.url_name|default:'' %}
     <div class="w-full flex-1">
-        <div class="w-full {% if urlname|slice:':8' == 'account_' %}px-0 py-0{% elif urlname == 'home' or urlname == 'chatroom' or urlname == 'start-chat' or urlname == 'chat-call' %}px-0 sm:px-6 py-0 sm:py-6{% else %}px-4 sm:px-6 py-5 sm:py-6{% endif %}">
-            <div class="vixo-site-grid grid grid-cols-1 {% if urlname|slice:':8' != 'account_' %}{% if user.is_authenticated and user.profile.is_founder_club %}{% else %}xl:grid-cols-[max-content_minmax(0,80rem)_max-content]{% endif %}{% endif %} gap-3 items-start justify-center">
+        <div class="w-full {% if urlname|slice:':8' == 'account_' or urlname|slice:':11' == 'onboarding-' %}px-0 py-0{% elif urlname == 'home' or urlname == 'chatroom' or urlname == 'start-chat' or urlname == 'chat-call' %}px-0 sm:px-6 py-0 sm:py-6{% else %}px-4 sm:px-6 py-5 sm:py-6{% endif %}">
+            <div class="vixo-site-grid grid grid-cols-1 {% if urlname|slice:':8' != 'account_' and urlname|slice:':11' != 'onboarding-' %}{% if user.is_authenticated and user.profile.is_founder_club %}{% else %}xl:grid-cols-[max-content_minmax(0,80rem)_max-content]{% endif %}{% endif %} gap-3 items-start justify-center">
                 <!-- Side ad slots (in-flow so they never overlap content) -->
-                {% if urlname|slice:':8' != 'account_' %}
+                {% if urlname|slice:':8' != 'account_' and urlname|slice:':11' != 'onboarding-' %}
                     {% if user.is_authenticated and user.profile.is_founder_club %}
                         {# Founder Club: no ads #}
                     {% else %}
@@ -258,7 +314,7 @@
                     {% endblock %}
                 </main>
 
-                {% if urlname|slice:':8' != 'account_' %}
+                {% if urlname|slice:':8' != 'account_' and urlname|slice:':11' != 'onboarding-' %}
                     {% if user.is_authenticated and user.profile.is_founder_club %}
                         {# Founder Club: no ads #}
                     {% else %}
@@ -501,7 +557,7 @@
         })();
     </script>
 
-    <div id="confirm-modal" class="fixed inset-0 z-50 hidden" aria-hidden="true" role="dialog" aria-modal="true">
+    <div id="confirm-modal" class="fixed inset-0 z-[1001] hidden" aria-hidden="true" role="dialog" aria-modal="true">
         <div id="confirm-backdrop" class="absolute inset-0 bg-black/60 opacity-0 transition duration-200 ease-out"></div>
         <div class="relative min-h-full flex items-center justify-center p-6">
             <div id="confirm-panel" class="w-full max-w-md rounded-2xl border border-gray-800 bg-gray-900/95 shadow-2xl transform-gpu opacity-0 -translate-y-2 scale-95 transition duration-200 ease-out">
@@ -659,13 +715,13 @@
                                 Explore Premium →
                             </a>
                         {% elif WELCOME_POPUP_SOURCE == 'signup' or request.GET.welcome == 'signup' %}
-                            <button
-                                type="button"
+                            <a
+                                href="{% url 'onboarding-username' %}"
                                 id="welcome-primary"
                                 class="inline-flex items-center justify-center rounded-xl bg-indigo-500/90 hover:bg-indigo-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-black/20 transition"
                             >
-                                Start Chatting →
-                            </button>
+                                Get Started →
+                            </a>
                             <a
                                 href="{% url 'invite-friends' %}"
                                 class="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/10 hover:bg-white/15 px-6 py-3 text-sm font-semibold text-gray-100 transition"
@@ -703,6 +759,67 @@
             const overlay = document.getElementById('welcome-overlay');
             const card = document.getElementById('welcome-card');
             let closing = false;
+            let locationRequested = false;
+
+            const getCookieSafe = (name) => {
+                try {
+                    if (typeof getCookie === 'function') return getCookie(name);
+                } catch {}
+                try {
+                    const n = String(name || '');
+                    if (!n) return '';
+                    const cookies = String(document.cookie || '').split(';');
+                    for (let i = 0; i < cookies.length; i++) {
+                        const c = cookies[i].trim();
+                        if (!c) continue;
+                        if (c.startsWith(n + '=')) return decodeURIComponent(c.slice(n.length + 1));
+                    }
+                    return '';
+                } catch {
+                    return '';
+                }
+            };
+
+            const saveLocationFromWelcome = () => {
+                if (locationRequested) return;
+                locationRequested = true;
+
+                try {
+                    if (!navigator.geolocation || typeof navigator.geolocation.getCurrentPosition !== 'function') {
+                        return;
+                    }
+                } catch {
+                    return;
+                }
+
+                try {
+                    navigator.geolocation.getCurrentPosition(
+                        function success(pos) {
+                            try {
+                                const lat = pos && pos.coords ? pos.coords.latitude : null;
+                                const lng = pos && pos.coords ? pos.coords.longitude : null;
+                                if (typeof lat !== 'number' || typeof lng !== 'number') return;
+
+                                try { window.localStorage.setItem('vixo:last_location', JSON.stringify({ lat: lat, lng: lng, t: Date.now() })); } catch {}
+                                try {
+                                    const csrf = getCookieSafe('csrftoken') || '';
+                                    fetch('{% url "profile-location-save" %}', {
+                                        method: 'POST',
+                                        credentials: 'same-origin',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            ...(csrf ? { 'X-CSRFToken': csrf } : {}),
+                                        },
+                                        body: JSON.stringify({ lat: lat, lng: lng }),
+                                    }).catch(() => {});
+                                } catch {}
+                            } catch {}
+                        },
+                        function error() {},
+                        { enableHighAccuracy: false, timeout: 8000, maximumAge: 600000 }
+                    );
+                } catch {}
+            };
 
             const close = () => {
                 if (closing) return;
@@ -719,6 +836,7 @@
                 window.setTimeout(() => {
                     try { document.body.classList.remove('overflow-hidden'); } catch {}
                     try { modal.remove(); } catch { try { modal.style.display = 'none'; } catch {} }
+                    try { window.dispatchEvent(new CustomEvent('vixo:welcome-closed')); } catch {}
                 }, 210);
             };
 
@@ -737,6 +855,14 @@
                     } catch {}
                 });
             } catch {}
+
+            {% if user.is_authenticated %}
+            {% if WELCOME_POPUP_SOURCE == 'login' or WELCOME_POPUP_SOURCE == 'signup' or request.GET.welcome == 'login' or request.GET.welcome == 'signup' %}
+            try {
+                window.setTimeout(saveLocationFromWelcome, 280);
+            } catch {}
+            {% endif %}
+            {% endif %}
 
             // If popup was triggered by ?welcome=..., remove it so refresh doesn't re-open.
             try {
@@ -1130,6 +1256,293 @@
                     open();
                 });
             });
+        })();
+    </script>
+    {% endif %}
+
+    {% if SHOW_EMAIL_VERIFY_POPUP %}
+    <div id="email-verify-modal" class="fixed inset-0 z-[69] hidden" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="absolute inset-0 bg-black/60 vixo-modal-overlay"></div>
+        <div class="relative min-h-full flex items-center justify-center p-6 pointer-events-none">
+            <div class="w-full max-w-md pointer-events-auto vixo-modal-card">
+                <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-gray-900/70 backdrop-blur shadow-2xl">
+                    <div class="absolute inset-0 bg-gradient-to-br from-indigo-600/20 via-violet-600/10 to-sky-600/20"></div>
+                    <div class="relative p-6">
+                        <div class="text-xl font-extrabold text-white">Verify your email</div>
+                        <div class="mt-2 text-sm text-gray-200/90">Verify your email to avoid interruptions.</div>
+
+                        <div class="mt-5">
+                            <a
+                                href="{% url 'account_email' %}"
+                                class="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 hover:from-emerald-400 hover:via-teal-400 hover:to-sky-400 px-4 py-2.5 text-sm font-extrabold text-white vixo-keep-white"
+                            >
+                                Verify now
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const modal = document.getElementById('email-verify-modal');
+            if (!modal) return;
+
+            const open = () => {
+                try { modal.classList.remove('hidden'); modal.setAttribute('aria-hidden', 'false'); } catch {}
+                try { document.body.classList.add('overflow-hidden'); } catch {}
+            };
+
+            const waitForGone = (id, onDone) => {
+                const el = document.getElementById(id);
+                if (!el) { onDone(); return; }
+                try {
+                    const mo = new MutationObserver(() => {
+                        const cur = document.getElementById(id);
+                        if (!cur) { try { mo.disconnect(); } catch {} onDone(); }
+                    });
+                    mo.observe(document.body, { childList: true, subtree: true });
+
+                    window.setTimeout(() => {
+                        try {
+                            const cur2 = document.getElementById(id);
+                            if (!cur2) return;
+                            const hidden = cur2.getAttribute('aria-hidden') === 'true' || cur2.classList.contains('hidden') || cur2.style.display === 'none';
+                            if (hidden) { try { mo.disconnect(); } catch {} onDone(); }
+                        } catch {}
+                    }, 11000);
+                } catch {
+                    onDone();
+                }
+            };
+
+            waitForGone('welcome-modal', () => {
+                waitForGone('location-modal', () => {
+                    waitForGone('notifications-modal', () => {
+                        open();
+                    });
+                });
+            });
+        })();
+    </script>
+    {% endif %}
+
+    {% if VPN_PROXY_GUARD_ENABLED %}
+    <div
+        id="vpn-proxy-modal"
+        class="fixed inset-0 z-[120] {% if not VPN_PROXY_BLOCKED %}hidden{% endif %}"
+        aria-hidden="{% if VPN_PROXY_BLOCKED %}false{% else %}true{% endif %}"
+        role="alertdialog"
+        aria-modal="true"
+        data-status-url="{{ VPN_PROXY_STATUS_URL }}"
+        data-report-url="{{ VPN_PROXY_REPORT_URL }}"
+        data-check-seconds="{{ VPN_PROXY_CHECK_INTERVAL_SECONDS|default:5 }}"
+        data-warning="{{ VPN_PROXY_WARNING_MESSAGE|escapejs }}"
+    >
+        <div class="absolute inset-0 bg-black/80"></div>
+        <div class="relative min-h-full flex items-center justify-center p-5 sm:p-8">
+            <div class="w-full max-w-md rounded-2xl border border-red-500/50 bg-red-950/90 shadow-2xl shadow-red-900/30 overflow-hidden">
+                <div class="px-5 py-4 border-b border-red-500/30 bg-red-500/15">
+                    <div class="text-base font-extrabold text-red-100">Security warning</div>
+                </div>
+                <div class="px-5 py-4 text-sm leading-6 text-red-100/95">
+                    <p>VPN or proxy connections are not allowed on Vixogram.</p>
+                    <p class="mt-1.5">Please disable your VPN to continue using all features.</p>
+                </div>
+                <div class="px-5 py-4 border-t border-red-500/30 flex items-center justify-end">
+                    <button
+                        type="button"
+                        id="vpn-proxy-exit"
+                        class="inline-flex items-center justify-center rounded-lg bg-red-500 hover:bg-red-400 px-4 py-2 text-sm font-bold text-white transition-colors"
+                    >
+                        Exit
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const modal = document.getElementById('vpn-proxy-modal');
+            if (!modal) return;
+
+            const exitBtn = document.getElementById('vpn-proxy-exit');
+            const statusUrl = String(modal.getAttribute('data-status-url') || '/api/security/network-status/').trim();
+            const reportUrl = String(modal.getAttribute('data-report-url') || '/api/security/network-client-report/').trim();
+            const fallbackMsg = String(modal.getAttribute('data-warning') || '').trim() || 'VPN or proxy connections are not allowed on Vixogram. Please disable your VPN to continue using all features.';
+            const pollSec = Math.max(3, Number(modal.getAttribute('data-check-seconds') || '5') || 5);
+            let openState = modal.getAttribute('aria-hidden') === 'false';
+            let clientProbeRunning = false;
+            let clientProbeBlocked = false;
+            let lastReportedBlocked = null;
+
+            function asBool(v) {
+                if (typeof v === 'boolean') return v;
+                if (typeof v === 'number') return v !== 0;
+                const s = String(v || '').trim().toLowerCase();
+                return s === '1' || s === 'true' || s === 'yes' || s === 'on';
+            }
+
+            function openModal() {
+                if (openState) return;
+                openState = true;
+                try { modal.classList.remove('hidden'); } catch {}
+                try { modal.setAttribute('aria-hidden', 'false'); } catch {}
+            }
+
+            function closeModal() {
+                if (!openState) return;
+                openState = false;
+                try { modal.classList.add('hidden'); } catch {}
+                try { modal.setAttribute('aria-hidden', 'true'); } catch {}
+            }
+
+            function showBlockedWarning(message) {
+                openModal();
+                try {
+                    document.body.dispatchEvent(new CustomEvent('vixo:toast', {
+                        detail: {
+                            message: String(message || fallbackMsg),
+                            kind: 'error',
+                            durationMs: 4500,
+                        },
+                    }));
+                } catch {}
+            }
+
+            function getCsrfToken() {
+                try {
+                    const parts = String(document.cookie || '').split(';');
+                    for (let i = 0; i < parts.length; i += 1) {
+                        const p = String(parts[i] || '').trim();
+                        if (p.indexOf('csrftoken=') === 0) return decodeURIComponent(p.substring('csrftoken='.length));
+                    }
+                } catch {}
+                return '';
+            }
+
+            async function reportClientBlocked(blocked, source) {
+                const next = !!blocked;
+                if (!reportUrl) return;
+                if (lastReportedBlocked === next) return;
+                lastReportedBlocked = next;
+                try {
+                    const csrf = getCsrfToken();
+                    await fetch(reportUrl, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        cache: 'no-store',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(csrf ? { 'X-CSRFToken': csrf } : {}),
+                        },
+                        body: JSON.stringify({ blocked: next, source: String(source || '') }),
+                    });
+                } catch {
+                    // Ignore report failures.
+                }
+            }
+
+            function detectClientVpnProxy(payload) {
+                const data = (payload && typeof payload === 'object') ? payload : {};
+                const security = (data.security && typeof data.security === 'object') ? data.security : {};
+                const connection = (data.connection && typeof data.connection === 'object') ? data.connection : {};
+
+                let vpn = asBool(security.vpn) || asBool(data.vpn);
+                const proxy = asBool(security.proxy) || asBool(data.proxy);
+                const tor = asBool(security.tor) || asBool(data.tor);
+                const relay = asBool(security.relay) || asBool(security.is_relay);
+
+                const combined = [connection.type, connection.isp, connection.org]
+                    .map(function (x) { return String(x || '').toLowerCase(); })
+                    .join(' ');
+                const hints = ['warp', 'vpn', 'wireguard', 'openvpn', 'nordvpn', 'expressvpn', 'surfshark', 'protonvpn', 'mullvad'];
+                if (!vpn && !proxy && !tor && !relay && hints.some(function (h) { return combined.indexOf(h) !== -1; })) {
+                    vpn = true;
+                }
+
+                return !!(vpn || proxy || tor || relay);
+            }
+
+            async function refreshClientProbe() {
+                if (clientProbeRunning) return;
+                clientProbeRunning = true;
+                try {
+                    const resp = await fetch('https://ipwho.is/?security=1', {
+                        method: 'GET',
+                        cache: 'no-store',
+                    });
+                    if (!resp.ok) return;
+                    const data = await resp.json();
+                    const blocked = detectClientVpnProxy(data);
+                    clientProbeBlocked = blocked;
+                    if (blocked) {
+                        showBlockedWarning(fallbackMsg);
+                    }
+                } catch {
+                    // Ignore failures from third-party probe.
+                } finally {
+                    clientProbeRunning = false;
+                }
+            }
+
+            async function refreshStatus() {
+                try {
+                    const resp = await fetch(statusUrl, {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        cache: 'no-store',
+                        headers: { 'Accept': 'application/json' },
+                    });
+                    if (!resp.ok) return;
+                    const data = await resp.json();
+                    if (data && data.blocked) {
+                        clientProbeBlocked = false;
+                        await reportClientBlocked(true, 'server');
+                        showBlockedWarning(data.message || fallbackMsg);
+                    } else {
+                        await refreshClientProbe();
+                        await reportClientBlocked(clientProbeBlocked, 'client');
+                        if (!clientProbeBlocked) {
+                            closeModal();
+                        }
+                    }
+                } catch {
+                    // Ignore transient network issues.
+                }
+            }
+
+            function exitSite() {
+                try { window.open('', '_self'); } catch {}
+                try { window.close(); } catch {}
+                window.setTimeout(() => {
+                    try {
+                        if (!window.closed) {
+                            window.location.replace('about:blank');
+                        }
+                    } catch {}
+                }, 120);
+            }
+
+            if (exitBtn) {
+                exitBtn.addEventListener('click', function (e) {
+                    try { e.preventDefault(); } catch {}
+                    exitSite();
+                });
+            }
+
+            if (openState) {
+                showBlockedWarning(fallbackMsg);
+            }
+
+            window.setInterval(refreshStatus, pollSec * 1000);
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible') refreshStatus();
+            });
+            window.setTimeout(refreshStatus, 1000);
         })();
     </script>
     {% endif %}

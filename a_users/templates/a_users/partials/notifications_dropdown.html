@@ -1,12 +1,13 @@
 <div class="hidden" data-notif-unread="{{ unread_count|default:0 }}"></div>
 
 {% if notifications %}
-    <div class="space-y-2">
+    <div class="space-y-2" data-notif-list>
         {% for n in notifications %}
             <a
                 href="{{ n.url|default:'#' }}"
                 class="block rounded-xl border border-gray-800 bg-gray-900/60 hover:bg-gray-900/80 transition px-3 py-2"
                 data-notif-id="{{ n.id }}"
+                data-notif-item
                 data-notif-read="{% if n.is_read %}1{% else %}0{% endif %}"
                 data-notif-mark-url="{% url 'notifications-mark-read' n.id %}"
             >
@@ -23,6 +24,11 @@
                 </div>
             </a>
         {% endfor %}
+    </div>
+    <div class="mt-3 hidden items-center justify-center gap-2" data-notif-pager>
+        <button type="button" data-notif-page-prev class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-gray-800 hover:bg-gray-700 text-white transition-colors" aria-label="Previous notifications">←</button>
+        <span data-notif-page-status class="text-[11px] text-gray-400">1 / 1</span>
+        <button type="button" data-notif-page-next class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-gray-800 hover:bg-gray-700 text-white transition-colors" aria-label="Next notifications">→</button>
     </div>
 {% else %}
     <div class="text-xs text-gray-400">No notifications.</div>

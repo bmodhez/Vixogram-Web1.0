@@ -45,6 +45,7 @@
     const hidden = root.querySelector('#story_cropped_image_data');
     const resetBtn = root.querySelector('#story_reset_crop');
     const form = input && input.closest ? input.closest('form') : null;
+    const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
 
     if (!input || !selectBtn || !img || !wrap || !hidden || !form) return;
     if (form.dataset.storyCropperBound === '1') return;
@@ -53,6 +54,14 @@
     // If CropperJS isn't available (CDN blocked/offline), we still allow uploads.
     let cropper = null;
     let lastObjectUrl = null;
+
+    const updateSubmitState = () => {
+      if (!submitBtn) return;
+      const hasFile = !!(input.files && input.files[0]);
+      submitBtn.disabled = !hasFile;
+      submitBtn.classList.toggle('opacity-60', !hasFile);
+      submitBtn.classList.toggle('cursor-not-allowed', !hasFile);
+    };
 
     const destroy = () => {
       try {
@@ -81,6 +90,7 @@
         if (fileName) fileName.textContent = 'No image selected';
         wrap.classList.add('hidden');
         destroy();
+        updateSubmitState();
         return;
       }
 
@@ -140,7 +150,11 @@
       } catch (e) {
         // Ignore
       }
+
+      updateSubmitState();
     });
+
+    updateSubmitState();
 
     if (resetBtn) {
       resetBtn.addEventListener('click', (e) => {
@@ -163,6 +177,12 @@
           }
 
           const f = input.files && input.files[0];
+          if (!f) {
+            e.preventDefault();
+            e.stopPropagation();
+            updateSubmitState();
+            return;
+          }
           if (!f || !cropper || typeof cropper.getCroppedCanvas !== 'function') {
             hidden.value = '';
             return;

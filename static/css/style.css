@@ -87,6 +87,253 @@ body {
   font-weight: 700;
 }
 
+/* Chat: superuser name + verified tick (thunder flicker effect) */
+.vixo-superuser-name-shock {
+  color: rgb(240 249 255);
+  display: inline;
+  background: transparent !important;
+  --vixo-glow-a: rgba(125, 211, 252, 1);
+  --vixo-glow-b: rgba(56, 189, 248, 0.95);
+  --vixo-glow-c: rgba(59, 130, 246, 0.84);
+  text-shadow:
+    0 0 2px var(--vixo-glow-a),
+    0 0 10px var(--vixo-glow-b),
+    0 0 18px var(--vixo-glow-c),
+    0 0 26px var(--vixo-glow-c);
+  animation: vixoNameGlowPulse 2.35s ease-in-out infinite;
+}
+
+.vixo-user-glow-aurora,
+.vixo-user-glow-sunset,
+.vixo-user-glow-neon,
+.vixo-user-glow-rose,
+.vixo-user-glow-electric,
+.vixo-user-glow-toxic,
+.vixo-user-glow-royal,
+.vixo-user-glow-ice,
+.vixo-user-glow-cosmic {
+  display: inline;
+  background: transparent !important;
+  text-decoration: none;
+  text-shadow:
+    0 0 2px var(--vixo-glow-a, rgba(255, 255, 255, 0.96)),
+    0 0 10px var(--vixo-glow-b, rgba(255, 255, 255, 0.9)),
+    0 0 18px var(--vixo-glow-c, rgba(255, 255, 255, 0.78)),
+    0 0 26px var(--vixo-glow-c, rgba(255, 255, 255, 0.66));
+  animation: vixoNameGlowPulse 2.35s ease-in-out infinite;
+}
+
+.vixo-user-glow-aurora {
+  color: #d9fff4;
+  --vixo-glow-a: rgba(16, 185, 129, 0.96);
+  --vixo-glow-b: rgba(56, 189, 248, 0.92);
+  --vixo-glow-c: rgba(99, 102, 241, 0.76);
+}
+
+.vixo-user-glow-sunset {
+  color: #ffe3d1;
+  --vixo-glow-a: rgba(249, 115, 22, 0.97);
+  --vixo-glow-b: rgba(244, 63, 94, 0.9);
+  --vixo-glow-c: rgba(250, 204, 21, 0.72);
+}
+
+.vixo-user-glow-neon {
+  color: #e6f7ff;
+  --vixo-glow-a: rgba(34, 211, 238, 0.99);
+  --vixo-glow-b: rgba(96, 165, 250, 0.92);
+  --vixo-glow-c: rgba(167, 139, 250, 0.74);
+}
+
+.vixo-user-glow-rose {
+  color: #ffe9f1;
+  --vixo-glow-a: rgba(251, 113, 133, 0.98);
+  --vixo-glow-b: rgba(244, 114, 182, 0.9);
+  --vixo-glow-c: rgba(251, 191, 36, 0.68);
+}
+
+.vixo-user-glow-electric {
+  color: #e6eeff;
+  --vixo-glow-a: rgba(37, 99, 235, 0.98);
+  --vixo-glow-b: rgba(14, 165, 233, 0.94);
+  --vixo-glow-c: rgba(56, 189, 248, 0.75);
+}
+
+.vixo-user-glow-toxic {
+  color: #efffd7;
+  --vixo-glow-a: rgba(132, 204, 22, 0.98);
+  --vixo-glow-b: rgba(34, 197, 94, 0.9);
+  --vixo-glow-c: rgba(163, 230, 53, 0.72);
+}
+
+.vixo-user-glow-royal {
+  color: #f1e8ff;
+  --vixo-glow-a: rgba(124, 58, 237, 0.97);
+  --vixo-glow-b: rgba(168, 85, 247, 0.92);
+  --vixo-glow-c: rgba(236, 72, 153, 0.74);
+}
+
+.vixo-user-glow-ice {
+  color: #eaffff;
+  --vixo-glow-a: rgba(6, 182, 212, 0.96);
+  --vixo-glow-b: rgba(56, 189, 248, 0.9);
+  --vixo-glow-c: rgba(147, 197, 253, 0.76);
+}
+
+.vixo-user-glow-cosmic {
+  color: #f7e8ff;
+  --vixo-glow-a: rgba(217, 70, 239, 0.98);
+  --vixo-glow-b: rgba(139, 92, 246, 0.92);
+  --vixo-glow-c: rgba(59, 130, 246, 0.76);
+}
+
+.vixo-glow-swatch {
+  display: block;
+  width: 100%;
+  height: 1.05rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.vixo-glow-swatch-aurora {
+  background: linear-gradient(90deg, #34d399, #22d3ee, #6366f1);
+}
+
+.vixo-glow-swatch-sunset {
+  background: linear-gradient(90deg, #fb923c, #f43f5e, #facc15);
+}
+
+.vixo-glow-swatch-neon {
+  background: linear-gradient(90deg, #22d3ee, #60a5fa, #a78bfa);
+}
+
+.vixo-glow-swatch-rose {
+  background: linear-gradient(90deg, #fb7185, #f472b6, #fbbf24);
+}
+
+.vixo-glow-swatch-electric {
+  background: linear-gradient(90deg, #2563eb, #0ea5e9, #38bdf8);
+}
+
+.vixo-glow-swatch-toxic {
+  background: linear-gradient(90deg, #84cc16, #22c55e, #a3e635);
+}
+
+.vixo-glow-swatch-royal {
+  background: linear-gradient(90deg, #7c3aed, #a855f7, #ec4899);
+}
+
+.vixo-glow-swatch-ice {
+  background: linear-gradient(90deg, #06b6d4, #38bdf8, #93c5fd);
+}
+
+.vixo-glow-swatch-cosmic {
+  background: linear-gradient(90deg, #d946ef, #8b5cf6, #3b82f6);
+}
+
+.vixo-superuser-verified-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  border: 1px solid rgb(125 211 252 / 0.75);
+  background: rgb(14 165 233 / 0.22);
+  color: rgb(224 242 254);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow:
+    0 0 0 rgba(56, 189, 248, 0),
+    0 0 0 rgba(56, 189, 248, 0);
+  animation: vixoSuperuserTickShock 1.05s steps(1, end) infinite;
+}
+
+@keyframes vixoNameGlowPulse {
+  0%,
+  100% {
+    opacity: 0.98;
+    text-shadow:
+      0 0 2px var(--vixo-glow-a),
+      0 0 10px var(--vixo-glow-b),
+      0 0 18px var(--vixo-glow-c),
+      0 0 26px var(--vixo-glow-c);
+  }
+  46% {
+    opacity: 1;
+    text-shadow:
+      0 0 3px var(--vixo-glow-a),
+      0 0 14px var(--vixo-glow-b),
+      0 0 24px var(--vixo-glow-c),
+      0 0 34px var(--vixo-glow-c);
+  }
+  52% {
+    opacity: 0.94;
+    text-shadow:
+      0 0 2px var(--vixo-glow-a),
+      0 0 11px var(--vixo-glow-b),
+      0 0 20px var(--vixo-glow-c),
+      0 0 30px var(--vixo-glow-c);
+  }
+  56% {
+    opacity: 1;
+    text-shadow:
+      0 0 4px var(--vixo-glow-a),
+      0 0 16px var(--vixo-glow-b),
+      0 0 28px var(--vixo-glow-c),
+      0 0 40px var(--vixo-glow-c);
+  }
+  60% {
+    opacity: 0.96;
+    text-shadow:
+      0 0 3px var(--vixo-glow-a),
+      0 0 12px var(--vixo-glow-b),
+      0 0 22px var(--vixo-glow-c),
+      0 0 32px var(--vixo-glow-c);
+  }
+}
+
+@keyframes vixoSuperuserTickShock {
+  0%, 6%, 10%, 16%, 27%, 31%, 43%, 100% {
+    opacity: 1;
+    box-shadow:
+      0 0 0 rgba(56, 189, 248, 0),
+      0 0 0 rgba(56, 189, 248, 0);
+    transform: translate3d(0, 0, 0);
+  }
+  7%, 11%, 17%, 28%, 44% {
+    opacity: 0.86;
+    box-shadow:
+      0 0 10px rgba(56, 189, 248, 0.8),
+      0 0 18px rgba(56, 189, 248, 0.65);
+    transform: translate3d(0.3px, -0.3px, 0) scale(1.03);
+  }
+  8%, 12%, 18%, 29%, 45% {
+    opacity: 1;
+    box-shadow:
+      0 0 15px rgba(56, 189, 248, 1),
+      0 0 26px rgba(59, 130, 246, 0.9);
+    transform: translate3d(-0.5px, 0.4px, 0) scale(1.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vixo-user-glow-aurora,
+  .vixo-user-glow-sunset,
+  .vixo-user-glow-neon,
+  .vixo-user-glow-rose,
+  .vixo-user-glow-electric,
+  .vixo-user-glow-toxic,
+  .vixo-user-glow-royal,
+  .vixo-user-glow-ice,
+  .vixo-user-glow-cosmic,
+  .vixo-superuser-name-shock,
+  .vixo-superuser-verified-badge {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
 /* Ensure global confirm/prompt always appear above any HTMX/global modals.
    (Profile modal uses z-[60], while confirm/prompt were z-50 in markup.) */
 #confirm-modal,
@@ -229,6 +476,104 @@ body {
   );
 }
 
+/* Onboarding background: alternate left/right light side per step with smooth switch animation. */
+.vixo-auth-bg.vixo-onboarding-bg {
+  --vixo-onboarding-bg-pos: 22% center;
+  --vixo-onboarding-bg-flip: 1;
+  --vixo-onboarding-hue: 0deg;
+  --vixo-onboarding-sat: 1;
+  --vixo-onboarding-bright: 1;
+  background-position: var(--vixo-onboarding-bg-pos);
+  filter: hue-rotate(var(--vixo-onboarding-hue)) saturate(var(--vixo-onboarding-sat)) brightness(var(--vixo-onboarding-bright));
+  transition:
+    background-position 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: background-position, filter;
+}
+
+.vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--left {
+  --vixo-onboarding-bg-pos: 22% center;
+  --vixo-onboarding-bg-flip: 1;
+  --vixo-onboarding-hue: 0deg;
+  --vixo-onboarding-sat: 1;
+  --vixo-onboarding-bright: 1;
+}
+
+.vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--right {
+  --vixo-onboarding-bg-pos: 78% center;
+  --vixo-onboarding-bg-flip: -1;
+  --vixo-onboarding-hue: 185deg;
+  --vixo-onboarding-sat: 1.08;
+  --vixo-onboarding-bright: 1.01;
+}
+
+.vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--enter-left {
+  animation: vixoOnboardingBgEnterLeft 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--enter-right {
+  animation: vixoOnboardingBgEnterRight 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--leave-left {
+  animation: vixoOnboardingBgLeaveLeft 230ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--leave-right {
+  animation: vixoOnboardingBgLeaveRight 230ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes vixoOnboardingBgEnterLeft {
+  0% {
+    background-position: 78% center;
+    filter: hue-rotate(185deg) brightness(0.92) saturate(0.92);
+  }
+  100% {
+    background-position: 22% center;
+    filter: hue-rotate(0deg) brightness(1) saturate(1);
+  }
+}
+
+@keyframes vixoOnboardingBgEnterRight {
+  0% {
+    background-position: 22% center;
+    filter: hue-rotate(0deg) brightness(0.92) saturate(0.92);
+  }
+  100% {
+    background-position: 78% center;
+    filter: hue-rotate(185deg) brightness(1.01) saturate(1.08);
+  }
+}
+
+@keyframes vixoOnboardingBgLeaveLeft {
+  0% {
+    background-position: 22% center;
+    filter: hue-rotate(0deg) brightness(1) saturate(1);
+  }
+  100% {
+    background-position: 36% center;
+    filter: hue-rotate(95deg) brightness(0.9) saturate(0.86);
+  }
+}
+
+@keyframes vixoOnboardingBgLeaveRight {
+  0% {
+    background-position: 78% center;
+    filter: hue-rotate(185deg) brightness(1.01) saturate(1.08);
+  }
+  100% {
+    background-position: 64% center;
+    filter: hue-rotate(90deg) brightness(0.9) saturate(0.86);
+  }
+}
+
+@media (max-width: 767px) {
+  .vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--left,
+  .vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--right {
+    --vixo-onboarding-bg-pos: center;
+  }
+}
+
 /* Auth page watermark (decorative, behind the card) */
 .vixo-auth-watermark {
   position: absolute;
@@ -353,6 +698,88 @@ body {
   white-space: nowrap;
 }
 
+/* Auth pages: floating chat message bubbles (decorative). */
+.vixo-auth-bubbles {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: min(58%, 760px);
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.vixo-auth-bubble {
+  position: absolute;
+  left: var(--bubble-left, 12%);
+  top: var(--bubble-top, 18%);
+  max-width: min(16rem, 58vw);
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.95rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(120deg, rgba(17, 24, 39, 0.78), rgba(76, 29, 149, 0.55));
+  box-shadow:
+    0 12px 28px rgba(2, 6, 23, 0.28),
+    0 0 0 1px rgba(255, 255, 255, 0.07) inset;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+  transition: opacity 260ms ease, transform 260ms ease;
+  will-change: opacity, transform;
+}
+
+.vixo-auth-bubble.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  animation: vixoAuthBubbleFloat 3.8s ease-in-out infinite;
+}
+
+.vixo-auth-bubble__name {
+  display: block;
+  margin-bottom: 0.15rem;
+  font-size: 0.68rem;
+  line-height: 1.05;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgba(196, 181, 253, 0.95);
+}
+
+.vixo-auth-bubble__text {
+  display: block;
+  font-size: 0.95rem;
+  line-height: 1.3;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.97);
+}
+
+@keyframes vixoAuthBubbleFloat {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-7px) scale(1.015);
+  }
+}
+
+@media (max-width: 767px) {
+  .vixo-auth-bubbles {
+    inset: 0;
+    width: 100%;
+    height: 54%;
+  }
+
+  .vixo-auth-bubble {
+    max-width: min(13rem, 66vw);
+    padding: 0.52rem 0.7rem;
+  }
+
+  .vixo-auth-bubble__text {
+    font-size: 0.86rem;
+  }
+}
+
 /* Auth login card: shake on invalid credentials (non-field errors). */
 .vixo-auth-card--shake {
   animation: vixoAuthCardShake 420ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
@@ -441,6 +868,23 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .vixo-auth-watermark__text {
     animation: none;
+  }
+
+  .vixo-auth-bg.vixo-onboarding-bg {
+    transition: none;
+  }
+
+  .vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--enter-left,
+  .vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--enter-right,
+  .vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--leave-left,
+  .vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--leave-right {
+    animation: none;
+  }
+
+  .vixo-auth-bubble,
+  .vixo-auth-bubble.is-visible {
+    animation: none;
+    transition: none;
   }
 
   .vixo-auth-card--shake {
@@ -560,6 +1004,214 @@ body.vixo-auth-page.vixo-page-leave .vixo-auth-bg {
     radial-gradient(800px circle at 18% 10%, rgba(99, 102, 241, 0.10), transparent 60%),
     radial-gradient(700px circle at 82% 30%, rgba(168, 85, 247, 0.10), transparent 60%);
 }
+
+@keyframes vixoGearSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes vixoChallengeWiggle {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-1px) rotate(-10deg); }
+  50% { transform: translateY(-2px) rotate(10deg); }
+  75% { transform: translateY(-1px) rotate(-7deg); }
+}
+
+@keyframes vixoGroupSweep {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(120%); }
+}
+
+#vixo_private_settings_btn:hover .vixo-settings-gear {
+  animation: vixoGearSpin 700ms linear;
+}
+
+#challenge_drawer_open:hover .vixo-challenge-icon {
+  animation: vixoChallengeWiggle 650ms ease-in-out infinite;
+}
+
+.vixo-groupchat-link {
+  position: relative;
+  overflow: hidden;
+}
+
+.vixo-groupchat-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(16, 185, 129, 0.05) 32%,
+    rgba(99, 102, 241, 0.18) 50%,
+    rgba(16, 185, 129, 0.05) 68%,
+    transparent 100%
+  );
+  opacity: 0;
+  transform: translateX(-120%);
+}
+
+.vixo-groupchat-link:hover::after {
+  opacity: 1;
+  animation: vixoGroupSweep 650ms ease forwards;
+}
+
+.vixo-groupchat-link.font-semibold::after {
+  display: none;
+}
+
+.vixo-settings-pane {
+  color: #e5e7eb;
+}
+
+.vixo-settings-card {
+  border: 1px solid rgba(129, 140, 248, 0.2);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(17, 24, 39, 0.92), rgba(17, 24, 39, 0.8)),
+    radial-gradient(120% 140% at 0% 0%, rgba(139, 92, 246, 0.28), transparent 55%),
+    radial-gradient(120% 140% at 100% 100%, rgba(34, 197, 94, 0.2), transparent 60%);
+  box-shadow: 0 14px 40px rgba(2, 6, 23, 0.55);
+  padding: 12px;
+  display: grid;
+  gap: 9px;
+}
+
+.vixo-settings-title {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #f3f4f6;
+}
+
+.vixo-settings-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(75, 85, 99, 0.7);
+  border-radius: 10px;
+  background: rgba(17, 24, 39, 0.72);
+  padding: 8px 10px;
+}
+
+.vixo-settings-field-icon {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.vixo-settings-input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #f3f4f6;
+  font-size: 12px;
+  line-height: 1.2;
+  outline: 0;
+}
+
+.vixo-settings-input::placeholder {
+  color: #9ca3af;
+}
+
+.vixo-settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid rgba(75, 85, 99, 0.55);
+  border-radius: 10px;
+  background: rgba(17, 24, 39, 0.58);
+  padding: 8px 10px;
+}
+
+.vixo-settings-row-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #e5e7eb;
+}
+
+.vixo-settings-social-wrap {
+  border: 1px solid rgba(75, 85, 99, 0.55);
+  border-radius: 10px;
+  background: rgba(17, 24, 39, 0.58);
+  padding: 8px 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.vixo-settings-social-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #d1d5db;
+}
+
+.vixo-settings-social-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vixo-settings-slow-chips {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.vixo-settings-slow-chip {
+  border: 1px solid rgba(75, 85, 99, 0.8);
+  border-radius: 8px;
+  background: rgba(17, 24, 39, 0.78);
+  color: #d1d5db;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 5px 4px;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.vixo-settings-slow-chip.is-active {
+  border-color: rgba(129, 140, 248, 0.8);
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.26), rgba(34, 197, 94, 0.22));
+  color: #f9fafb;
+}
+
+.vixo-settings-link-reset {
+  height: 28px;
+  width: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(75, 85, 99, 0.8);
+  background: rgba(17, 24, 39, 0.78);
+  color: #d1d5db;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vixo-settings-save-btn {
+  width: 100%;
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #ffffff;
+  background: linear-gradient(90deg, #8b5cf6, #6366f1 55%, #22c55e);
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.35);
+}
+
+.vixo-settings-save-btn:hover {
+  filter: brightness(1.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #vixo_private_settings_btn:hover .vixo-settings-gear,
+  #challenge_drawer_open:hover .vixo-challenge-icon,
+  .vixo-groupchat-link:hover::after {
+    animation: none !important;
+  }
+}
 /* Global site tweaks extracted from templates */
 
 /* Smooth scrolling site-wide (anchors/programmatic scroll). */
@@ -573,6 +1225,19 @@ html { scroll-behavior: smooth; }
 
 body {
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Chat text wrapping (handles very long no-space text like nnnnnnn...). */
+.vixo-msg-text {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+#id_body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* Inputs with a leading icon (used on auth forms). */
@@ -731,6 +1396,80 @@ html.vixo-chat-page *::-webkit-scrollbar-track {
   background: transparent !important;
 }
 
+/* Chat room list card UI (mobile-first, app-like) */
+#chat_sidebar_panel .vixo-chat-room-link {
+  width: 100%;
+  padding: 0.62rem 0.72rem;
+  background: rgba(17, 24, 39, 0.6);
+  border-color: rgba(55, 65, 81, 0.75);
+}
+
+#chat_sidebar_panel .vixo-chat-room-link:hover {
+  background: rgba(31, 41, 55, 0.82);
+  border-color: rgba(75, 85, 99, 0.95);
+}
+
+#chat_sidebar_panel .vixo-chat-room-link-idle {
+  color: rgb(209 213 219);
+}
+
+#chat_sidebar_panel .vixo-chat-room-link-active {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.33), rgba(16, 185, 129, 0.2));
+  border-color: rgba(129, 140, 248, 0.95);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.24);
+  color: rgb(236 253 245);
+}
+
+#chat_sidebar_panel .vixo-chat-room-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(75, 85, 99, 0.9);
+  background: linear-gradient(180deg, rgba(55, 65, 81, 0.9), rgba(31, 41, 55, 0.85));
+  color: rgb(243 244 246);
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+#chat_sidebar_panel .vixo-chat-room-title {
+  display: block;
+  color: rgb(243 244 246);
+  font-size: 0.9rem;
+  line-height: 1.1rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#chat_sidebar_panel .vixo-chat-room-subtitle {
+  display: block;
+  margin-top: 0.12rem;
+  color: rgb(156 163 175);
+  font-size: 0.72rem;
+  line-height: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1023px) {
+  #chat_sidebar.fixed #chat_sidebar_panel {
+    width: 100% !important;
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    background: linear-gradient(180deg, rgba(3, 7, 18, 0.96), rgba(17, 24, 39, 0.94)) !important;
+    border-color: rgba(55, 65, 81, 0.95) !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+}
+
 /* Chat composer: keep it visible on mobile browser UI/safe areas.
    This moves the sticky bar slightly up and adds safe-area padding so it doesn't sit under the home indicator. */
 #chat_composer_bar {
@@ -743,13 +1482,120 @@ html.vixo-chat-page *::-webkit-scrollbar-track {
 @media (max-width: 639px) {
   html.vixo-chat-page #chat_window,
   html.vixo-chat-page #chat_sidebar_panel {
-    height: calc(100dvh - var(--vixo-chat-top-offset, 96px)) !important;
+    height: calc(100dvh - var(--vixo-chat-top-offset, 96px) - (env(safe-area-inset-bottom) + 4.8rem)) !important;
   }
 }
 
 @media (max-width: 639px) {
   #chat_composer_bar {
-    bottom: calc(env(safe-area-inset-bottom) + 8px);
+    bottom: calc(env(safe-area-inset-bottom) + 2px);
+  }
+}
+
+@media (max-width: 1023px) {
+  html.vixo-chat-page.vixo-mobile-groups-open,
+  body.vixo-chat-page.vixo-mobile-groups-open {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+    overscroll-behavior: none !important;
+  }
+
+  #chat_window,
+  #chat_container,
+  #chat_sidebar_panel {
+    overscroll-behavior: contain !important;
+  }
+
+  #chat_mobile_nav {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  #chat_mobile_nav .chat-mobile-tab,
+  #chat_mobile_tab_profile,
+  #chat_mobile_tab_groups,
+  #chat_mobile_tab_chat {
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  #chat_mobile_nav_tabs {
+    position: relative;
+    isolation: isolate;
+  }
+
+  #chat_mobile_tab_indicator {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: calc(100% / 3);
+    border-radius: 0.75rem;
+    background: rgba(31, 41, 55, 0.88);
+    transform: translateX(0);
+    transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #chat_mobile_nav .chat-mobile-tab {
+    position: relative;
+    z-index: 1;
+    background: transparent !important;
+    transition: color 180ms ease;
+  }
+
+  #chat_mobile_nav .chat-mobile-tab.is-active {
+    background: transparent !important;
+  }
+
+  #chat_mobile_nav[data-active-tab='chat'] #chat_mobile_tab_indicator {
+    transform: translateX(0%);
+  }
+
+  #chat_mobile_nav[data-active-tab='groups'] #chat_mobile_tab_indicator {
+    transform: translateX(100%);
+  }
+
+  #chat_mobile_nav[data-active-tab='profile'] #chat_mobile_tab_indicator {
+    transform: translateX(200%);
+  }
+
+  #chat_sidebar.fixed {
+    padding-top: var(--vixo-chat-top-offset, 96px) !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 4.8rem) !important;
+    align-items: stretch !important;
+    justify-content: stretch !important;
+  }
+
+  #chat_sidebar.fixed #chat_sidebar_panel {
+    height: 100% !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  #chat_sidebar_panel {
+    width: 20rem !important;
+    max-width: 20rem !important;
+    border-radius: 1rem !important;
+  }
+
+  #chat_sidebar_panel [data-chat-list-item] {
+    min-height: 2.5rem;
+    border-radius: 0.75rem;
   }
 }
 
@@ -872,6 +1718,14 @@ html.vixo-chat-page *::-webkit-scrollbar-track {
 .theme-light .text-gray-100\/80 { color: rgb(15 23 42 / 0.80) !important; }
 .theme-light .text-gray-400\/70 { color: rgb(100 116 139 / 0.75) !important; }
 .theme-light .text-gray-400\/60 { color: rgb(100 116 139 / 0.65) !important; }
+
+/* Chat message header names sit on dark chat background; keep them bright in light theme. */
+.theme-light .vixo-chat-bg .vixo-msg [data-message-header] .text-gray-100,
+.theme-light .vixo-chat-bg .vixo-msg [data-message-header] .text-gray-200,
+.theme-light .vixo-chat-bg .vixo-msg [data-message-header] .text-gray-200\/80,
+.theme-light .vixo-chat-bg .vixo-msg [data-message-header] .text-gray-200\/70 {
+  color: rgb(226 232 240) !important;
+}
 
 /* Keep accent text readable on light */
 .theme-light .text-emerald-300 { color: rgb(4 120 87) !important; } /* emerald-700 */

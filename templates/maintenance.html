@@ -14,13 +14,35 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .vixo-contact-panel {
+            max-height: 0;
+            opacity: 0;
+            transform: translateY(-8px);
+            overflow: hidden;
+            pointer-events: none;
+            transition: max-height 320ms ease, opacity 240ms ease, transform 320ms ease;
+        }
+
+        .vixo-contact-panel.is-open {
+            max-height: 520px;
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .vixo-contact-panel {
+                transition: none !important;
+            }
+        }
+    </style>
 </head>
 <body class="min-h-screen text-white antialiased tracking-tight bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950">
     <div class="min-h-screen flex items-center justify-center px-6 py-10">
         <div class="w-full max-w-lg">
             <div class="flex items-center justify-center mb-6">
-                <img src="{% static 'logo.png' %}" alt="Vixogram" class="h-10 w-auto" onerror="this.style.display='none'" />
-                <div class="ml-3 text-2xl font-extrabold">Vixogram</div>
+                <img src="{% static 'vixologo.png' %}" alt="Vixogram" class="h-12 w-auto" onerror="this.src='{% static 'logo.png' %}'" />
             </div>
 
             <div class="relative overflow-hidden rounded-3xl border border-white/10 bg-gray-900/70 backdrop-blur shadow-2xl">
@@ -39,6 +61,45 @@
                     <div class="mt-6 inline-flex items-center gap-2 text-[13px] text-gray-300 bg-white/5 border border-white/10 rounded-full px-4 py-2">
                         <span class="inline-flex h-2 w-2 rounded-full bg-sky-400 animate-pulse" aria-hidden="true"></span>
                         <span>Vixogram is under maintenance. Please come back later.</span>
+                    </div>
+
+                    <div class="mt-6">
+                        <button
+                            id="vixo_contact_toggle"
+                            type="button"
+                            class="inline-flex items-center justify-center rounded-xl border border-emerald-400/35 bg-emerald-500/15 hover:bg-emerald-500/20 text-emerald-200 px-5 py-2.5 text-sm font-semibold transition"
+                            aria-expanded="false"
+                            aria-controls="vixo_contact_panel"
+                        >
+                            Contact Us
+                        </button>
+                    </div>
+
+                    <div id="vixo_contact_panel" class="vixo-contact-panel mt-4 rounded-2xl border border-white/10 bg-black/20 p-4 sm:p-5 text-left" aria-hidden="true">
+                        <div class="text-sm font-semibold text-white">Quick Contact Form</div>
+                        <div class="mt-1 text-xs text-gray-400">Fill details and tap Send — your mail app will open with prefilled message.</div>
+
+                        <form id="vixo_contact_form" class="mt-4 space-y-3">
+                            <div>
+                                <label for="vixo_contact_name" class="block text-xs font-medium text-gray-300 mb-1">Name</label>
+                                <input id="vixo_contact_name" type="text" class="w-full rounded-lg border border-white/10 bg-gray-900/70 text-sm text-white px-3 py-2 outline-none focus:border-emerald-400/50" placeholder="Your name" required />
+                            </div>
+                            <div>
+                                <label for="vixo_contact_email" class="block text-xs font-medium text-gray-300 mb-1">Email</label>
+                                <input id="vixo_contact_email" type="email" class="w-full rounded-lg border border-white/10 bg-gray-900/70 text-sm text-white px-3 py-2 outline-none focus:border-emerald-400/50" placeholder="you@example.com" required />
+                            </div>
+                            <div>
+                                <label for="vixo_contact_message" class="block text-xs font-medium text-gray-300 mb-1">Message</label>
+                                <textarea id="vixo_contact_message" rows="4" class="w-full rounded-lg border border-white/10 bg-gray-900/70 text-sm text-white px-3 py-2 outline-none focus:border-emerald-400/50 resize-y" placeholder="How can we help?" required></textarea>
+                            </div>
+
+                            <div class="flex items-center justify-between gap-3 pt-1">
+                                <div class="text-[11px] text-gray-500">Support: vixogramconnect@gmail.com</div>
+                                <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold px-4 py-2 transition">
+                                    Send
+                                </button>
+                            </div>
+                        </form>
                     </div>
 
                     <noscript>
@@ -128,6 +189,35 @@
             }
 
             window.setTimeout(poll, 1200);
+        })();
+
+        (function initMaintenanceContactForm() {
+            const toggleBtn = document.getElementById('vixo_contact_toggle');
+            const panel = document.getElementById('vixo_contact_panel');
+            const form = document.getElementById('vixo_contact_form');
+            if (!toggleBtn || !panel || !form) return;
+
+            const supportEmail = 'vixogramconnect@gmail.com';
+
+            toggleBtn.addEventListener('click', function () {
+                const isOpen = panel.classList.contains('is-open');
+                panel.classList.toggle('is-open', !isOpen);
+                panel.setAttribute('aria-hidden', isOpen ? 'true' : 'false');
+                toggleBtn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+            });
+
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                const name = (document.getElementById('vixo_contact_name')?.value || '').trim();
+                const email = (document.getElementById('vixo_contact_email')?.value || '').trim();
+                const message = (document.getElementById('vixo_contact_message')?.value || '').trim();
+
+                if (!name || !email || !message) return;
+
+                const subject = encodeURIComponent('Maintenance page contact request');
+                const body = encodeURIComponent(`Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`);
+                window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+            });
         })();
     </script>
 </body>

@@ -41,6 +41,17 @@
     const setStatus = (t) => { if (statusEl) statusEl.textContent = t; };
     const setPhase = (t) => { if (phaseEl) phaseEl.textContent = t; };
 
+    function getPublicCallErrorMessage(error) {
+        const raw = String((error && error.message) ? error.message : (error || '')).toLowerCase();
+        if (raw.includes('permission') || raw.includes('notallowed') || raw.includes('denied')) {
+            return 'Microphone/camera permission is required.';
+        }
+        if (raw.includes('device') || raw.includes('camera') || raw.includes('microphone') || raw.includes('track')) {
+            return 'Could not access your mic/camera. Please check device settings.';
+        }
+        return 'Could not start call. Please try again.';
+    }
+
     const endBackEl = document.getElementById('call_end_back');
 
     let joinedUid = null;
@@ -738,7 +749,8 @@
         } catch (e) {
             hideLoading();
             setPhase('Error');
-            setStatus('Error: ' + (e && e.message ? e.message : String(e)));
+            try { console.error('Call page start failed:', e); } catch {}
+            setStatus(getPublicCallErrorMessage(e));
         }
     })();
 
@@ -840,6 +852,16 @@
             hangupAndExit('Call ended', { redirectDelayMs: 0, sendEndEvent: true });
         });
     }
+
+    window.addEventListener('beforeunload', (e) => {
+        const hasActiveCall = (joinedUid !== null) || !!localTracks.audio || !!localTracks.video;
+        if (!hasActiveCall) return;
+        sendEndEventBestEffort();
+        const msg = 'Call will end if you reload or leave this page.';
+        e.preventDefault();
+        e.returnValue = msg;
+        return msg;
+    });
 
     // When user leaves the call page, ensure remote side ends too.
     window.addEventListener('pagehide', () => {

@@ -14,6 +14,7 @@ from .username_policy import validate_public_username
 
 
 BIO_MAX_LENGTH = 200
+ONBOARDING_BIO_MAX_LENGTH = 120
 
 
 def mask_bio_text(value: str) -> str:
@@ -122,6 +123,75 @@ class ProfileForm(forms.ModelForm):
         masked = mask_bio_text(bio_str)
         if masked is not None and len(masked) > BIO_MAX_LENGTH:
             raise forms.ValidationError(f'Bio must be {BIO_MAX_LENGTH} characters or less.')
+
+        return masked
+
+
+class OnboardingAvatarForm(forms.ModelForm):
+    class Meta:
+        model = Profile
+        fields = ['image']
+        widgets = {
+            'image': forms.FileInput(attrs={
+                'id': 'onboarding_avatar_input',
+                'class': 'sr-only',
+                'accept': 'image/*',
+            }),
+        }
+
+    def clean_image(self):
+        f = self.cleaned_data.get('image')
+        if not f:
+            return f
+
+        try:
+            if hasattr(f, 'size') and int(f.size) > 2 * 1024 * 1024:
+                raise forms.ValidationError('Avatar image must be under 2MB.')
+        except forms.ValidationError:
+            raise
+        except Exception:
+            pass
+
+        ct = getattr(f, 'content_type', '') or ''
+        if ct and not str(ct).lower().startswith('image/'):
+            raise forms.ValidationError('Please upload a valid image file.')
+
+        return f
+
+
+class OnboardingAboutForm(forms.ModelForm):
+    class Meta:
+        model = Profile
+        fields = ['displayname', 'info']
+        labels = {
+            'displayname': 'Name (optional)',
+            'info': 'Bio',
+        }
+        widgets = {
+            'displayname': forms.TextInput(attrs={
+                'placeholder': 'Name (optional)',
+                'class': 'w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 outline-none focus:border-emerald-500',
+            }),
+            'info': forms.Textarea(attrs={
+                'rows': 3,
+                'placeholder': 'Bio (max 120 chars)',
+                'maxlength': str(ONBOARDING_BIO_MAX_LENGTH),
+                'class': 'w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 outline-none focus:border-emerald-500',
+            }),
+        }
+
+    def clean_info(self):
+        bio = self.cleaned_data.get('info')
+        if bio is None:
+            return bio
+
+        bio_str = str(bio)
+        if len(bio_str) > ONBOARDING_BIO_MAX_LENGTH:
+            raise forms.ValidationError(f'Bio must be {ONBOARDING_BIO_MAX_LENGTH} characters or less.')
+
+        masked = mask_bio_text(bio_str)
+        if masked is not None and len(masked) > ONBOARDING_BIO_MAX_LENGTH:
+            raise forms.ValidationError(f'Bio must be {ONBOARDING_BIO_MAX_LENGTH} characters or less.')
 
         return masked
 

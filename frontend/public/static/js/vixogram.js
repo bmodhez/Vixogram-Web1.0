@@ -582,6 +582,32 @@
       else close();
     });
 
+    dropdown.addEventListener('click', (e) => {
+      const t = e && e.target;
+      if (!(t instanceof HTMLElement)) return;
+      const profileLink = t.closest('a[data-user-menu-profile="1"]');
+      if (!profileLink) return;
+      try {
+        const href = String(profileLink.getAttribute('href') || '').trim();
+        if (!href) return;
+        const url = new URL(href, window.location.origin);
+        if (url.pathname === window.location.pathname) {
+          e.preventDefault();
+          const targetId = (url.hash || '#profile_top').replace(/^#/, '');
+          const target = document.getElementById(targetId);
+          if (target && typeof target.scrollIntoView === 'function') {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }
+      } catch {
+        // ignore malformed URLs
+      } finally {
+        close();
+      }
+    }, true);
+
     if (closeBtn) closeBtn.addEventListener('click', (e) => { e.preventDefault(); close(); });
 
     document.addEventListener('click', (e) => {
@@ -617,6 +643,13 @@
       if (dropdown.classList.contains('hidden')) return;
       const inside = e.target && e.target.closest ? e.target.closest('#user_menu, #user_menu_btn') : null;
       if (!inside) close();
+    }, true);
+
+    dropdown.addEventListener('click', (e) => {
+      const t = e && e.target;
+      if (!(t instanceof HTMLElement)) return;
+      const closeEl = t.closest('[data-user-menu-close="1"], a[href], button, [role="menuitem"], input[type="submit"]');
+      if (closeEl) close();
     }, true);
   }
 
@@ -1879,6 +1912,17 @@
           container.appendChild(toast);
           animateToastIn(toast);
 
+          try { window.__refreshNotifDropdownIfOpen && window.__refreshNotifDropdownIfOpen(); } catch {}
+        }
+
+        if (payload.type === 'follow_request') {
+          const n = parseInt(String(payload.pending_count ?? ''), 10);
+          if (Number.isFinite(n)) {
+            followReqPending = Math.max(0, n);
+          } else {
+            followReqPending = Math.min(999, (followReqPending || 0) + 1);
+          }
+          updateFollowReqBadges();
           try { window.__refreshNotifDropdownIfOpen && window.__refreshNotifDropdownIfOpen(); } catch {}
         }
 

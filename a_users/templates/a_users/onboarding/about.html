@@ -1,0 +1,33 @@
+{% extends 'layouts/box.html' %}
+
+{% block box_title %}Tell us about yourself{% endblock %}
+
+{% block box_subtitle %}
+  <p class="text-sm text-gray-300 mt-1">Bio (max 120 chars). Name is optional.</p>
+{% endblock %}
+
+{% block box_body %}
+<form method="post" class="space-y-4" novalidate>
+  {% csrf_token %}
+
+  <div>
+    <label class="block text-sm font-semibold text-gray-200 mb-2">Name (optional)</label>
+    {{ form.displayname }}
+    {% if form.displayname.errors %}
+      <div class="mt-2 text-xs text-red-400">{{ form.displayname.errors|first }}</div>
+    {% endif %}
+  </div>
+
+  <div>
+    <label class="block text-sm font-semibold text-gray-200 mb-2">Bio (max 120 chars)</label>
+    {{ form.info }}
+    {% if form.info.errors %}
+      <div class="mt-2 text-xs text-red-400">{{ form.info.errors|first }}</div>
+    {% endif %}
+  </div>
+
+  <button type="submit" class="w-full bg-gradient-to-r from-purple-500 via-indigo-500 to-sky-500 hover:from-purple-400 hover:via-indigo-400 hover:to-sky-400 text-white font-bold py-3 px-6 rounded-xl transition-colors">
+    Next →
+  </button>
+</form>
+{% endblock %}

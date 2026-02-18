@@ -21,6 +21,8 @@ from .forms import ReportUserForm
 from .forms import ProfilePrivacyForm
 from .forms import SupportEnquiryForm
 from .forms import UsernameChangeForm
+from .forms import OnboardingAvatarForm
+from .forms import OnboardingAboutForm
 from .forms import StoryForm
 
 try:
@@ -217,8 +219,10 @@ def profile_view(request, username=None):
 
     is_following = False
     is_follow_requested = False
+    follows_you = False
     if request.user.is_authenticated and request.user != profile_user:
         is_following = Follow.objects.filter(follower=request.user, following=profile_user).exists()
+        follows_you = Follow.objects.filter(follower=profile_user, following=request.user).exists()
         try:
             is_follow_requested = FollowRequest.objects.filter(from_user=request.user, to_user=profile_user).exists()
         except Exception:
@@ -231,6 +235,7 @@ def profile_view(request, username=None):
     # Presence visibility
     is_bot = bool(getattr(user_profile, 'is_bot', False))
     is_stealth = bool(getattr(user_profile, 'is_stealth', False))
+    is_dnd = bool(getattr(user_profile, 'is_dnd', False))
     show_presence = bool(not is_bot)
     visible_online = False
     try:
@@ -298,6 +303,7 @@ def profile_view(request, username=None):
         'following_count': following_count,
         'is_verified_badge': is_verified_badge,
         'is_following': is_following,
+        'follows_you': bool(follows_you),
         'is_follow_requested': bool(is_follow_requested),
         'show_follow_lists': show_follow_lists,
         'follow_lists_locked_reason': follow_lists_locked_reason,
@@ -305,6 +311,7 @@ def profile_view(request, username=None):
         'is_private': is_private,
         'show_presence': show_presence,
         'presence_online': visible_online,
+        'presence_is_dnd': bool(is_dnd),
         'has_active_stories': bool(has_active_stories),
         'can_view_stories': bool(can_view_stories),
         'active_story_version': str(active_story_version or ''),
@@ -316,6 +323,7 @@ def profile_view(request, username=None):
             'profileUsername': getattr(profile_user, 'username', ''),
             'isOwner': bool(is_owner),
             'presenceOnline': bool(visible_online),
+            'presenceIsDnd': bool(is_dnd),
             'presenceWsEnabled': bool(show_presence and (is_owner or not is_stealth)),
         }
     except Exception:
@@ -323,6 +331,7 @@ def profile_view(request, username=None):
             'profileUsername': getattr(profile_user, 'username', ''),
             'isOwner': bool(is_owner),
             'presenceOnline': bool(visible_online),
+            'presenceIsDnd': bool(is_dnd),
             'presenceWsEnabled': False,
         }
 
@@ -804,6 +813,7 @@ def profile_config_view(request, username=None):
     user_profile = getattr(profile_user, 'profile', None)
     is_bot = bool(getattr(user_profile, 'is_bot', False))
     is_stealth = bool(getattr(user_profile, 'is_stealth', False))
+    is_dnd = bool(getattr(user_profile, 'is_dnd', False))
     show_presence = bool(not is_bot)
 
     visible_online = False
@@ -824,6 +834,7 @@ def profile_config_view(request, username=None):
         'isOwner': is_owner,
         'showPresence': show_presence,
         'presenceOnline': visible_online,
+        'presenceIsDnd': bool(is_dnd),
         'presenceWsEnabled': presence_ws_enabled,
     })
 
@@ -1216,6 +1227,44 @@ def username_availability_view(request):
     """
 
     desired = (request.GET.get('u') or '').strip()
+    if desired.startswith('@'):
+        desired = desired[1:].strip()
+
+    def _suggest_usernames(seed: str) -> list[str]:
+        seed = (seed or '').strip()
+        if seed.startswith('@'):
+            seed = seed[1:].strip()
+        seed = seed.replace(' ', '')
+        seed = seed.lower()
+        # Keep only allowed set for our UsernameChangeForm policy.
+        try:
+            import re as _re
+
+            seed = _re.sub(r'[^a-z0-9_]+', '_', seed)
+            seed = _re.sub(r'_+', '_', seed).strip('_')
+        except Exception:
+            pass
+        if not seed:
+            seed = 'vixo'
+        seed = seed[:18]
+
+        out: list[str] = []
+        try:
+            import random as _random
+
+            for _ in range(30):
+                if len(out) >= 5:
+                    break
+                cand = f"{seed}_{_random.randint(10, 9999)}"
+                try:
+                    form2 = UsernameChangeForm({'username': cand}, user=request.user, profile=profile)
+                    if form2.is_valid():
+                        out.append(cand)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return out
 
     # Basic rate limit (best-effort)
     try:
@@ -1246,7 +1295,7 @@ def username_availability_view(request):
         return JsonResponse({'available': False, 'reason': 'cooldown', 'message': msg})
 
     if not desired:
-        return JsonResponse({'available': False, 'reason': 'empty'})
+        return JsonResponse({'available': False, 'reason': 'empty', 'suggestions': _suggest_usernames('vixo')})
 
     if not form.is_valid():
         err = ''
@@ -1254,9 +1303,151 @@ def username_availability_view(request):
             err = form.errors.get('username', [''])[0]
         except Exception:
             err = 'Invalid username.'
-        return JsonResponse({'available': False, 'reason': 'invalid', 'message': str(err)})
+        return JsonResponse({'available': False, 'reason': 'invalid', 'message': str(err), 'suggestions': _suggest_usernames(desired)})
 
-    return JsonResponse({'available': True})
+    return JsonResponse({'available': True, 'suggestions': []})
+
+
+@login_required
+def onboarding_username_view(request):
+    # Keep other permission popups deferred during onboarding.
+    try:
+        request.session['onboarding_in_progress'] = True
+    except Exception:
+        pass
+
+    profile = get_object_or_404(Profile, user=request.user)
+
+    # If this session does not require username onboarding, skip.
+    try:
+        if not bool(request.session.get('onboarding_needs_username')):
+            return redirect('onboarding-intro')
+    except Exception:
+        pass
+
+    username_form = UsernameChangeForm(user=request.user, profile=profile)
+    try:
+        username_form.fields['username'].widget.attrs.update({
+            'placeholder': 'bhavin',
+            'class': 'w-full bg-gray-800/60 border border-gray-700 text-gray-100 rounded-xl pl-10 pr-4 py-3 placeholder-gray-400 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30',
+            'autocomplete': 'off',
+            'autocapitalize': 'none',
+            'spellcheck': 'false',
+        })
+    except Exception:
+        pass
+
+    if request.method == 'POST':
+        desired = (request.POST.get('username') or '').strip()
+        if desired.startswith('@'):
+            desired = desired[1:].strip()
+
+        username_form = UsernameChangeForm({'username': desired}, user=request.user, profile=profile)
+        can_change, next_at = username_form.can_change_now()
+        if not can_change:
+            if next_at:
+                messages.error(request, f'You can change your username again after {next_at:%b %d, %Y}.')
+            else:
+                messages.error(request, 'You cannot change your username right now.')
+        elif username_form.is_valid():
+            new_username = username_form.cleaned_data['username']
+            old_username = request.user.username
+            try:
+                request.user.username = new_username
+                request.user.save(update_fields=['username'])
+                profile.username_change_count = int(getattr(profile, 'username_change_count', 0) or 0) + 1
+                profile.username_last_changed_at = timezone.now()
+                profile.save(update_fields=['username_change_count', 'username_last_changed_at'])
+                try:
+                    request.session.pop('onboarding_needs_username', None)
+                except Exception:
+                    pass
+                return redirect('onboarding-intro')
+            except Exception:
+                messages.error(request, 'Failed to update username. Please try again.')
+
+    return render(request, 'a_users/onboarding/username.html', {
+        'username_form': username_form,
+    })
+
+
+@login_required
+def onboarding_intro_view(request):
+    try:
+        request.session['onboarding_in_progress'] = True
+    except Exception:
+        pass
+
+    # Simple interstitial screen before the profile setup steps.
+    return render(request, 'a_users/onboarding/intro.html', {})
+
+
+@login_required
+def onboarding_photo_view(request):
+    try:
+        request.session['onboarding_in_progress'] = True
+    except Exception:
+        pass
+
+    profile = get_object_or_404(Profile, user=request.user)
+    form = OnboardingAvatarForm(instance=profile)
+
+    if request.method == 'POST':
+        action = (request.POST.get('action') or '').strip().lower()
+        if action == 'skip':
+            return redirect('onboarding-about')
+
+        form = OnboardingAvatarForm(request.POST, request.FILES, instance=profile)
+        if action == 'upload' and not request.FILES.get('image'):
+            try:
+                form.add_error('image', 'Please select a photo first.')
+            except Exception:
+                messages.error(request, 'Please select a photo first.')
+            return render(request, 'a_users/onboarding/photo.html', {
+                'form': form,
+                'profile': profile,
+            })
+
+        if form.is_valid():
+            try:
+                form.save()
+                return redirect('onboarding-about')
+            except Exception:
+                messages.error(request, 'Could not save your photo right now. Please try again.')
+
+    return render(request, 'a_users/onboarding/photo.html', {
+        'form': form,
+        'profile': profile,
+    })
+
+
+@login_required
+def onboarding_about_view(request):
+    try:
+        request.session['onboarding_in_progress'] = True
+    except Exception:
+        pass
+
+    profile = get_object_or_404(Profile, user=request.user)
+    form = OnboardingAboutForm(instance=profile)
+
+    if request.method == 'POST':
+        form = OnboardingAboutForm(request.POST, instance=profile)
+        if form.is_valid():
+            try:
+                form.save()
+                # Onboarding complete: allow other popups to show now.
+                try:
+                    request.session.pop('onboarding_in_progress', None)
+                except Exception:
+                    pass
+                return redirect('home')
+            except Exception:
+                messages.error(request, 'Could not save your profile right now. Please try again.')
+
+    return render(request, 'a_users/onboarding/about.html', {
+        'form': form,
+    })
 
 
 @login_required
@@ -1333,6 +1524,11 @@ def profile_settings_view(request):
     profile = get_object_or_404(Profile, user=request.user)
     form = ProfilePrivacyForm(instance=profile)
     username_form = UsernameChangeForm(user=request.user, profile=profile)
+    glow_choices = [
+        (value, label)
+        for value, label in getattr(Profile, 'NAME_GLOW_CHOICES', ())
+        if value != getattr(Profile, 'NAME_GLOW_NONE', 'none')
+    ]
 
     is_htmx = str(request.headers.get('HX-Request') or '').lower() == 'true'
 
@@ -1409,9 +1605,28 @@ def profile_settings_view(request):
                 messages.error(request, 'Failed to update username. Please try again.')
             return redirect('profile-settings')
 
+    if request.method == 'POST' and (request.POST.get('action') or '').strip().lower() == 'glow':
+        if not bool(getattr(profile, 'is_founder_club', False)):
+            messages.error(request, 'Glow colors are available only for Founder Club members.')
+            return redirect('profile-settings')
+
+        selected = str(request.POST.get('name_glow_color') or '').strip().lower()
+        allowed_values = {v for v, _ in getattr(Profile, 'NAME_GLOW_CHOICES', ())}
+        if selected not in allowed_values:
+            selected = getattr(Profile, 'NAME_GLOW_NONE', 'none')
+
+        try:
+            profile.name_glow_color = selected
+            profile.save(update_fields=['name_glow_color'])
+            messages.success(request, 'Glow color updated.')
+        except Exception:
+            messages.error(request, 'Could not update glow color right now.')
+        return redirect('profile-settings')
+
     return render(request, 'a_users/profile_settings.html', {
         'privacy_form': form,
         'profile': profile,
+        'glow_choices': glow_choices,
         'username_form': username_form,
         'username_can_change': username_form.can_change_now()[0],
         'username_next_available_at': username_form.can_change_now()[1],
@@ -1570,10 +1785,21 @@ def follow_requests_modal_view(request):
     )
     items = list(qs[:200])
     pending_count = qs.count()
-    return render(request, 'a_users/partials/follow_requests_modal.html', {
+    resp = render(request, 'a_users/partials/follow_requests_modal.html', {
         'items': items,
         'pending_count': int(pending_count or 0),
     })
+    try:
+        is_htmx = str(request.headers.get('HX-Request') or '').lower() == 'true'
+        if is_htmx:
+            resp['HX-Trigger'] = json.dumps({
+                'followRequestsChanged': {
+                    'pending_count': int(pending_count or 0),
+                }
+            })
+    except Exception:
+        pass
+    return resp
 
 
 @login_required

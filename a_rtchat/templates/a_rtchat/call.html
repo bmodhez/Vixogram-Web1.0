@@ -131,6 +131,17 @@
     const setStatus = (t) => { if (statusEl) statusEl.textContent = t; };
     const setPhase = (t) => { if (phaseEl) phaseEl.textContent = t; };
 
+    function getPublicCallErrorMessage(error) {
+        const raw = String((error && error.message) ? error.message : (error || '')).toLowerCase();
+        if (raw.includes('permission') || raw.includes('notallowed') || raw.includes('denied')) {
+            return 'Microphone/camera permission is required.';
+        }
+        if (raw.includes('device') || raw.includes('camera') || raw.includes('microphone') || raw.includes('track')) {
+            return 'Could not access your mic/camera. Please check device settings.';
+        }
+        return 'Could not start call. Please try again.';
+    }
+
     function showLoading(text) {
         if (!loadingEl) return;
         if (loadingTextEl) loadingTextEl.textContent = text || 'Loading…';
@@ -770,7 +781,8 @@
             tryPlayAllRemoteAudio();
         } catch (e) {
             hideLoading();
-            setStatus('Error: ' + (e && e.message ? e.message : String(e)));
+            try { console.error('Call page start failed:', e); } catch {}
+            setStatus(getPublicCallErrorMessage(e));
         }
     }
 

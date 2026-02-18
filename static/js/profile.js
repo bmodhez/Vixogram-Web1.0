@@ -39,13 +39,15 @@
         presenceSocketUrl = '';
     }
 
-    function setPresenceUi(online) {
+    function setPresenceUi(online, isDnd) {
         const dot = document.getElementById('presence_dot');
         const text = document.getElementById('presence_text');
         if (!dot || !text) return;
-        dot.classList.toggle('bg-emerald-400', !!online);
-        dot.classList.toggle('bg-gray-500', !online);
-        text.textContent = online ? 'Online' : 'Offline';
+        const dnd = !!isDnd;
+        dot.classList.toggle('bg-red-500', dnd);
+        dot.classList.toggle('bg-emerald-400', !dnd && !!online);
+        dot.classList.toggle('bg-gray-500', !dnd && !online);
+        text.textContent = dnd ? 'DND' : (online ? 'Online' : 'Offline');
     }
 
     function initPresence(cfg) {
@@ -57,8 +59,9 @@
             return;
         }
 
+        const isDnd = !!cfg.presenceIsDnd;
         if (typeof cfg.presenceOnline === 'boolean') {
-            setPresenceUi(cfg.presenceOnline);
+            setPresenceUi(cfg.presenceOnline, isDnd);
         }
 
         const profileUsername = String(cfg.profileUsername || '');
@@ -92,7 +95,7 @@
                 let payload;
                 try { payload = JSON.parse(event.data); } catch { return; }
                 if (payload && payload.type === 'presence') {
-                    if (typeof payload.online === 'boolean') setPresenceUi(payload.online);
+                    if (typeof payload.online === 'boolean') setPresenceUi(payload.online, isDnd);
                 }
             };
 
@@ -200,6 +203,41 @@
         });
     }
 
+    function initMyProfileToggle() {
+        const toggleBtn = document.querySelector('[data-profile-overview-toggle]');
+        const section = document.getElementById('profile_overview_section');
+        const quickMenu = document.getElementById('profile_menu');
+        const stateEl = toggleBtn ? toggleBtn.querySelector('[data-profile-overview-state]') : null;
+        if (!toggleBtn || !section) return;
+
+        const hash = String(window.location.hash || '').toLowerCase();
+        const shouldOpenOptionsFirst = (hash === '' || hash === '#profile_menu');
+        if (shouldOpenOptionsFirst) {
+            section.classList.add('hidden');
+        }
+
+        const setState = () => {
+            const expanded = !section.classList.contains('hidden');
+            toggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            if (stateEl) stateEl.textContent = expanded ? 'Hide' : 'Show';
+        };
+
+        setState();
+
+        if (shouldOpenOptionsFirst && quickMenu) {
+            try { quickMenu.scrollIntoView({ behavior: 'auto', block: 'start' }); } catch {}
+        }
+
+        toggleBtn.addEventListener('click', () => {
+            section.classList.toggle('hidden');
+            setState();
+            const expanded = !section.classList.contains('hidden');
+            if (expanded) {
+                try { section.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {}
+            }
+        });
+    }
+
     let followModalInitDone = false;
     function initFollowListModalOnce(cfg) {
         if (followModalInitDone) return;
@@ -212,6 +250,7 @@
 
     function initAll() {
         const cfg = getCfg();
+        initMyProfileToggle();
         initFollowListModalOnce(cfg);
         initPresence(cfg);
     }

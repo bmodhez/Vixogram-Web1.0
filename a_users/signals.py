@@ -26,6 +26,11 @@ except Exception:  # pragma: no cover
 
 from .tasks import send_welcome_email
 
+try:
+    from .location_ip import maybe_set_profile_city_from_ip
+except Exception:  # pragma: no cover
+    maybe_set_profile_city_from_ip = None
+
 # Profile create/ensure
 # NOTE: Don't call `profile.save()` on every `User` save.
 # Django updates `last_login` on login, which would trigger this signal and add
@@ -58,6 +63,18 @@ if user_signed_up is not None:
 
 
 REFERRAL_POINTS_PER_INVITE = 10
+
+
+def _has_verified_email(user) -> bool:
+    try:
+        if not user or not getattr(user, 'is_authenticated', False):
+            return False
+        qs = getattr(user, 'emailaddress_set', None)
+        if qs is None:
+            return False
+        return bool(qs.filter(verified=True).exists())
+    except Exception:
+        return False
 
 
 if user_signed_up is not None:
@@ -193,6 +210,25 @@ if user_signed_up is not None:
             pass
 
 
+if user_signed_up is not None:
+    @receiver(user_signed_up)
+    def show_verify_email_popup_on_signup(sender, request, user, **kwargs):
+        """Show verify-email nudge after signup when account email is unverified."""
+        try:
+            if request is None:
+                return
+            if not getattr(user, 'is_authenticated', False):
+                return
+            if _has_verified_email(user):
+                return
+            if request.session.get('show_email_verify_popup'):
+                return
+            request.session['show_email_verify_popup'] = True
+            request.session['email_verify_popup_source'] = 'signup'
+        except Exception:
+            pass
+
+
 if django_user_logged_in is not None:
     @receiver(django_user_logged_in)
     def show_welcome_popup_on_login(sender, request, user, **kwargs):
@@ -243,6 +279,21 @@ if django_user_logged_in is not None:
 
 if django_user_logged_in is not None:
     @receiver(django_user_logged_in)
+    def set_location_from_ip_on_login(sender, request, user, **kwargs):
+        """Best-effort fallback: record city/country from login IP.
+
+        If GPS permission location is already present, helper won't overwrite.
+        """
+        try:
+            if maybe_set_profile_city_from_ip is None:
+                return
+            maybe_set_profile_city_from_ip(user=user, request=request)
+        except Exception:
+            pass
+
+
+if django_user_logged_in is not None:
+    @receiver(django_user_logged_in)
     def show_notifications_popup_on_login(sender, request, user, **kwargs):
         """Ask for notifications permission for existing users too.
 
@@ -271,5 +322,24 @@ if django_user_logged_in is not None:
 
             request.session['show_notifications_popup'] = True
             request.session['notifications_popup_source'] = 'login'
+        except Exception:
+            pass
+
+
+if django_user_logged_in is not None:
+    @receiver(django_user_logged_in)
+    def show_verify_email_popup_on_login(sender, request, user, **kwargs):
+        """Show verify-email nudge after login when account email is unverified."""
+        try:
+            if request is None:
+                return
+            if not getattr(user, 'is_authenticated', False):
+                return
+            if _has_verified_email(user):
+                return
+            if request.session.get('show_email_verify_popup'):
+                return
+            request.session['show_email_verify_popup'] = True
+            request.session['email_verify_popup_source'] = 'login'
         except Exception:
             pass

@@ -1,0 +1,119 @@
+{% extends 'layouts/box.html' %}
+
+{% block box_title %}Choose your username{% endblock %}
+
+{% block box_subtitle %}
+  <p class="text-sm text-gray-300 mt-1">This is how people will find you on Vixogram.</p>
+{% endblock %}
+
+{% block box_body %}
+<form method="post" class="space-y-4" novalidate>
+  {% csrf_token %}
+
+  <div>
+    <label class="block text-sm font-semibold text-gray-200 mb-2">Username</label>
+    <div class="relative">
+      <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 font-semibold">@</span>
+      {{ username_form.username }}
+    </div>
+    <div id="username-helper" class="mt-2 text-xs text-gray-300"></div>
+    <div id="username-suggestions" class="mt-3 flex flex-wrap gap-2"></div>
+
+    {% if username_form.username.errors %}
+      <div class="mt-2 text-xs text-red-400">{{ username_form.username.errors|first }}</div>
+    {% endif %}
+  </div>
+
+  <button
+    id="username-continue"
+    type="submit"
+    class="w-full bg-gradient-to-r from-purple-500 via-indigo-500 to-sky-500 hover:from-purple-400 hover:via-indigo-400 hover:to-sky-400 text-white font-bold py-3 px-6 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+    disabled
+  >
+    Continue →
+  </button>
+</form>
+
+<script>
+(function () {
+  const input = document.getElementById('{{ username_form.username.id_for_label }}');
+  const helper = document.getElementById('username-helper');
+  const suggestionsWrap = document.getElementById('username-suggestions');
+  const btn = document.getElementById('username-continue');
+  if (!input || !helper || !btn) return;
+
+  const checkUrlBase = '{% url "username-check" %}';
+  let t = null;
+
+  function setHelper(kind, msg) {
+    helper.className = 'mt-2 text-xs ' + (kind === 'ok' ? 'text-emerald-300' : kind === 'bad' ? 'text-red-300' : 'text-gray-300');
+    helper.textContent = msg || '';
+  }
+
+  function setSuggestions(items) {
+    if (!suggestionsWrap) return;
+    suggestionsWrap.innerHTML = '';
+    if (!items || !items.length) return;
+
+    for (const s of items) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'px-3 py-1.5 rounded-full border border-white/10 bg-gray-900/40 hover:bg-gray-900/60 text-[11px] font-semibold text-gray-100 transition';
+      b.textContent = '@' + s;
+      b.addEventListener('click', () => {
+        input.value = s;
+        schedule();
+        input.focus();
+      });
+      suggestionsWrap.appendChild(b);
+    }
+  }
+
+  async function checkNow() {
+    const raw = (input.value || '').trim();
+    const u = raw.startsWith('@') ? raw.slice(1).trim() : raw;
+
+    btn.disabled = true;
+    setSuggestions([]);
+
+    if (!u) {
+      setHelper('neutral', '');
+      return;
+    }
+
+    try {
+      const res = await fetch(checkUrlBase + '?u=' + encodeURIComponent(u), { credentials: 'same-origin' });
+      const data = await res.json();
+
+      if (data && data.available) {
+        setHelper('ok', '✅ Available');
+        btn.disabled = false;
+        setSuggestions([]);
+      } else {
+        const reason = (data && data.reason) ? data.reason : 'taken';
+        if (reason === 'invalid') {
+          setHelper('bad', '❌ ' + (data.message || 'Invalid username'));
+        } else if (reason === 'cooldown') {
+          setHelper('bad', '❌ ' + (data.message || 'Cooldown active'));
+        } else if (reason === 'empty') {
+          setHelper('neutral', '');
+        } else {
+          setHelper('bad', '❌ Already taken');
+        }
+        setSuggestions((data && data.suggestions) ? data.suggestions : []);
+      }
+    } catch (e) {
+      setHelper('bad', '❌ Could not check right now');
+    }
+  }
+
+  function schedule() {
+    if (t) window.clearTimeout(t);
+    t = window.setTimeout(checkNow, 250);
+  }
+
+  input.addEventListener('input', schedule);
+  schedule();
+})();
+</script>
+{% endblock %}

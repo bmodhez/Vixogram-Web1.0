@@ -41,23 +41,34 @@ def _reaction_context_for(message, user):
 from django.conf import settings
 from .rate_limit import (
     check_rate_limit,
+    get_client_ip_from_scope,
+    get_room_muted_seconds,
     get_muted_seconds,
     is_fast_long_message,
     is_same_emoji_spam,
     is_duplicate_message,
     make_key,
     record_abuse_violation,
+    set_muted,
 )
 
 try:
-    from a_users.location_ip import maybe_set_profile_city_from_ip
+    from a_users.location_ip import maybe_set_profile_city_from_ip, vpn_proxy_status_for_ip
 except Exception:  # pragma: no cover
     maybe_set_profile_city_from_ip = None
+    vpn_proxy_status_for_ip = None
 
 from .moderation import moderate_message
 from .channels_utils import chatroom_channel_group_name
 from .mentions import extract_mention_usernames, resolve_mentioned_users
 from .auto_badges import attach_auto_badges
+
+
+VPN_PROXY_CLIENT_BLOCKED_SESSION_KEY = 'vixo_vpn_proxy_client_blocked'
+VPN_PROXY_WARNING_MESSAGE = (
+    'VPN or proxy connections are not allowed on Vixogram. '
+    'Please disable your VPN to continue using all features.'
+)
 
 
 class GlobalAnnouncementConsumer(WebsocketConsumer):
@@ -241,6 +252,28 @@ def _is_maintenance_blocked(user) -> bool:
         return False
 
 
+def _is_vpn_proxy_blocked_for_scope(scope, user) -> bool:
+    try:
+        if not bool(getattr(settings, 'VPN_PROXY_GUARD_ENABLED', True)):
+            return False
+
+        try:
+            sess = scope.get('session')
+            if sess and bool(sess.get(VPN_PROXY_CLIENT_BLOCKED_SESSION_KEY)):
+                return True
+        except Exception:
+            pass
+
+        if vpn_proxy_status_for_ip is None:
+            return False
+
+        ip = get_client_ip_from_scope(scope)
+        status = vpn_proxy_status_for_ip(ip)
+        return bool(status.get('blocked'))
+    except Exception:
+        return False
+
+
 def _resolve_authenticated_user(scope_user):
     """Convert Channels' lazy user wrapper to a real User model instance."""
     if not getattr(scope_user, 'is_authenticated', False):
@@ -252,6 +285,277 @@ def _resolve_authenticated_user(scope_user):
         return scope_user
 
 class ChatroomConsumer(WebsocketConsumer):
+    def _is_room_admin(self) -> bool:
+        try:
+            if not getattr(self.user, 'is_authenticated', False):
+                return False
+        except Exception:
+            return False
+        try:
+            if getattr(self.user, 'is_staff', False):
+                return True
+        except Exception:
+            pass
+        try:
+            if self.user == getattr(self.chatroom, 'admin', None):
+                return True
+        except Exception:
+            pass
+        try:
+            admins = getattr(self.chatroom, 'admins', None)
+            if not admins:
+                return False
+            uid = getattr(self.user, 'id', None)
+            if not uid:
+                return False
+            return bool(admins.filter(id=uid).exists())
+        except Exception:
+            return False
+
+    def _admin_list_payload(self):
+        admins = []
+        seen = set()
+        try:
+            owner = getattr(self.chatroom, 'admin', None)
+        except Exception:
+            owner = None
+        if owner:
+            try:
+                name = getattr(getattr(owner, 'profile', None), 'name', '') or getattr(owner, 'username', '')
+            except Exception:
+                name = getattr(owner, 'username', '')
+            try:
+                admins.append({'id': int(owner.id), 'username': owner.username, 'name': (name or owner.username)})
+                seen.add(int(owner.id))
+            except Exception:
+                pass
+        try:
+            qs = getattr(self.chatroom, 'admins', None)
+            qs = qs.select_related('profile').all() if qs is not None else []
+        except Exception:
+            qs = []
+        for u in qs:
+            try:
+                uid = int(getattr(u, 'id', 0) or 0)
+            except Exception:
+                uid = 0
+            if not uid or uid in seen:
+                continue
+            try:
+                name = getattr(getattr(u, 'profile', None), 'name', '') or getattr(u, 'username', '')
+            except Exception:
+                name = getattr(u, 'username', '')
+            try:
+                admins.append({'id': uid, 'username': u.username, 'name': (name or u.username)})
+                seen.add(uid)
+            except Exception:
+                continue
+        return admins
+
+    def _send_admin_only(self):
+        try:
+            self.send(text_data=json.dumps({
+                'type': 'admin_only',
+                'only_admins_can_send': True,
+                'admins': self._admin_list_payload(),
+                'message': 'Only admins can send messages.',
+            }))
+        except Exception:
+            return
+
+    def room_settings_handler(self, event):
+        try:
+            room = getattr(self, 'chatroom', None)
+            try:
+                if room is not None:
+                    room.refresh_from_db(fields=[
+                        'only_admins_can_send',
+                        'allow_media_uploads',
+                        'allow_members_invite_others',
+                        'slow_mode_seconds',
+                        'announcement_pinned',
+                        'pinned_message',
+                        'room_description',
+                        'room_avatar',
+                        'code_room_name',
+                        'groupchat_name',
+                        'room_code',
+                        'group_name',
+                        'is_code_room',
+                    ])
+            except Exception:
+                pass
+            room_avatar_url = ''
+            try:
+                room_avatar_url = room.room_avatar.url if room and getattr(room, 'room_avatar', None) else ''
+            except Exception:
+                room_avatar_url = ''
+
+            room_display_name = ''
+            try:
+                room_display_name = (
+                    getattr(room, 'code_room_name', None)
+                    or getattr(room, 'groupchat_name', None)
+                    or getattr(room, 'room_code', None)
+                    or getattr(room, 'group_name', '')
+                )
+            except Exception:
+                room_display_name = ''
+
+            self.send(text_data=json.dumps({
+                'type': 'room_settings',
+                'only_admins_can_send': bool(event.get('only_admins_can_send', getattr(room, 'only_admins_can_send', False))),
+                'allow_media_uploads': bool(event.get('allow_media_uploads', getattr(room, 'allow_media_uploads', True))),
+                'allow_members_invite_others': bool(event.get('allow_members_invite_others', getattr(room, 'allow_members_invite_others', False))),
+                'slow_mode_seconds': int(event.get('slow_mode_seconds', getattr(room, 'slow_mode_seconds', 0)) or 0),
+                'announcement_pinned': bool(event.get('announcement_pinned', getattr(room, 'announcement_pinned', False))),
+                'pinned_message': str(event.get('pinned_message', getattr(room, 'pinned_message', '') or '')),
+                'room_description': str(event.get('room_description', getattr(room, 'room_description', '') or '')),
+                'room_avatar_url': str(event.get('room_avatar_url', room_avatar_url or '')),
+                'room_display_name': str(event.get('room_display_name', room_display_name or '')),
+                'room_code': str(event.get('room_code', getattr(room, 'room_code', '') or '')),
+                'is_code_room': bool(event.get('is_code_room', getattr(room, 'is_code_room', False))),
+                'admins': event.get('admins') or [],
+            }))
+        except Exception:
+            return
+
+    def member_added_handler(self, event):
+        try:
+            self.send(text_data=json.dumps({
+                'type': 'member_added',
+                'member': event.get('member') or {},
+                'member_count': int(event.get('member_count') or 0),
+            }))
+        except Exception:
+            return
+
+    def member_left_handler(self, event):
+        try:
+            self.send(text_data=json.dumps({
+                'type': 'member_left',
+                'user_id': int(event.get('user_id') or 0),
+                'member_count': int(event.get('member_count') or 0),
+            }))
+        except Exception:
+            return
+
+    def waiting_list_updated_handler(self, event):
+        try:
+            self.send(text_data=json.dumps({
+                'type': 'waiting_list_updated',
+                'count': int(event.get('count') or 0),
+            }))
+        except Exception:
+            return
+
+    def member_removed_handler(self, event):
+        removed_id = 0
+        try:
+            removed_id = int(event.get('removed_user_id') or 0)
+        except Exception:
+            removed_id = 0
+        try:
+            self.send(text_data=json.dumps({
+                'type': 'member_removed',
+                'removed_user_id': removed_id,
+                'message': 'You have been removed from the group by an admin.',
+                'member_count': int(event.get('member_count') or 0),
+            }))
+        except Exception:
+            pass
+
+        # If this socket belongs to the removed user, force real-time lockout now.
+        try:
+            current_id = int(getattr(self.user, 'id', 0) or 0)
+        except Exception:
+            current_id = 0
+        if removed_id and current_id and removed_id == current_id:
+            try:
+                self.send(text_data=json.dumps({
+                    'type': 'not_member',
+                    'message': 'You have been removed from the group by an admin.',
+                }))
+            except Exception:
+                pass
+            try:
+                self.close(code=4403)
+            except Exception:
+                try:
+                    self.close()
+                except Exception:
+                    pass
+
+    def admin_role_removed_handler(self, event):
+        demoted_id = 0
+        try:
+            demoted_id = int(event.get('demoted_user_id') or 0)
+        except Exception:
+            demoted_id = 0
+        try:
+            self.send(text_data=json.dumps({
+                'type': 'admin_role_removed',
+                'demoted_user_id': demoted_id,
+                'message': str(event.get('message') or 'You have been removed from admin.'),
+            }))
+        except Exception:
+            return
+
+    def member_mute_updated_handler(self, event):
+        try:
+            self.send(text_data=json.dumps({
+                'type': 'member_mute_updated',
+                'target_user_id': int(event.get('target_user_id') or 0),
+                'seconds': int(event.get('seconds') or 0),
+                'unmuted': bool(event.get('unmuted')),
+                'actor_name': str(event.get('actor_name') or ''),
+                'target_name': str(event.get('target_name') or ''),
+                'tag_text': str(event.get('tag_text') or ''),
+            }))
+        except Exception:
+            return
+
+    def _ensure_still_member(self, close_socket: bool = True) -> bool:
+        """Return True if the current user is still allowed in this room.
+
+        For private rooms, removed users are notified and disconnected.
+        """
+        try:
+            if not getattr(self.chatroom, 'is_private', False):
+                return True
+        except Exception:
+            return True
+
+        try:
+            uid = int(getattr(self.user, 'id', 0) or 0)
+        except Exception:
+            uid = 0
+        if not uid:
+            return False
+        try:
+            if ChatGroup.objects.filter(pk=getattr(self.chatroom, 'pk', None), members__id=uid).exists():
+                return True
+        except Exception:
+            # If membership check fails, be safe and stop.
+            pass
+
+        # Accept + notify, so client stops reconnecting/polling.
+        try:
+            self.send(text_data=json.dumps({
+                'type': 'not_member',
+                'message': 'You have been removed from the group by an admin.',
+            }))
+        except Exception:
+            pass
+        if close_socket:
+            try:
+                self.close(code=4403)
+            except Exception:
+                try:
+                    self.close()
+                except Exception:
+                    pass
+        return False
     def _send_cooldown(self, seconds: int, reason: str = '') -> None:
         try:
             secs = int(seconds or 0)
@@ -476,6 +780,13 @@ class ChatroomConsumer(WebsocketConsumer):
                 self.close()
             return
 
+        if _is_vpn_proxy_blocked_for_scope(self.scope, self.user):
+            try:
+                self.close(code=4403)
+            except Exception:
+                self.close()
+            return
+
         # Chat-ban: block read/write by refusing the websocket connection.
         if _is_chat_banned(self.user):
             try:
@@ -501,8 +812,25 @@ class ChatroomConsumer(WebsocketConsumer):
             if not self.user.is_authenticated:
                 self.close()
                 return
-            if self.user not in self.chatroom.members.all():
-                self.close()
+            is_member = False
+            try:
+                is_member = ChatGroup.objects.filter(pk=self.chatroom.pk, members__id=getattr(self.user, 'id', None)).exists()
+            except Exception:
+                is_member = False
+            if not is_member:
+                # Accept + notify, so the client can stop reconnecting/polling.
+                try:
+                    self.accept()
+                    self.send(text_data=json.dumps({
+                        'type': 'not_member',
+                        'message': 'You have been removed from the group by an admin.',
+                    }))
+                except Exception:
+                    pass
+                try:
+                    self.close(code=4403)
+                except Exception:
+                    self.close()
                 return
         
         async_to_sync(self.channel_layer.group_add)(
@@ -596,12 +924,26 @@ class ChatroomConsumer(WebsocketConsumer):
         if not getattr(self.user, 'is_authenticated', False):
             return
 
+        # If removed after connect, enforce it in real-time.
+        if not self._ensure_still_member():
+            return
+
         # Maintenance mode: immediately stop non-staff users from sending.
         if _is_maintenance_blocked(self.user):
             try:
                 self.close(code=4403)
             except Exception:
                 self.close()
+            return
+
+        if _is_vpn_proxy_blocked_for_scope(self.scope, self.user):
+            try:
+                self.send(text_data=json.dumps({
+                    'type': 'vpn_proxy_blocked',
+                    'message': VPN_PROXY_WARNING_MESSAGE,
+                }))
+            except Exception:
+                pass
             return
 
         # Keep the per-room connection TTL alive.
@@ -622,12 +964,36 @@ class ChatroomConsumer(WebsocketConsumer):
         if _is_chat_blocked(self.user):
             return
 
+        # Room-level mute: blocks sending in this room only.
+        try:
+            room_id = getattr(self.chatroom, 'pk', None)
+            if room_id:
+                room_muted = get_room_muted_seconds(room_id, getattr(self.user, 'id', 0))
+            else:
+                room_muted = 0
+        except Exception:
+            room_muted = 0
+        if room_muted > 0:
+            self._send_cooldown(room_muted, reason='room_muted')
+            return
+
         muted = get_muted_seconds(getattr(self.user, 'id', 0))
         if muted > 0:
             self._send_cooldown(muted, reason='muted')
             return
 
         event_type = (text_data_json.get('type') or '').strip().lower()
+
+        # Room setting: only admins can send messages.
+        try:
+            admin_only = bool(getattr(self.chatroom, 'is_private', False) and getattr(self.chatroom, 'only_admins_can_send', False))
+        except Exception:
+            admin_only = False
+        if admin_only and not self._is_room_admin():
+            # Allow read receipts + heartbeats, but block typing + message sends.
+            if event_type in {'typing'}:
+                self._send_admin_only()
+                return
 
         # Client heartbeat (keeps online presence accurate).
         if event_type in {'ping', 'heartbeat'}:
@@ -803,6 +1169,25 @@ class ChatroomConsumer(WebsocketConsumer):
         body = (text_data_json.get('body') or '').strip()
         if not body:
             return
+
+        if admin_only and not self._is_room_admin():
+            self._send_admin_only()
+            return
+
+        # Burst spam guard (WS path): 6th message within 3s => 10s mute.
+        if not getattr(self.user, 'is_staff', False):
+            burst_limit = int(getattr(settings, 'CHAT_BURST_MSG_LIMIT', 5))
+            burst_period = int(getattr(settings, 'CHAT_BURST_MSG_PERIOD', 3))
+            burst_cooldown = int(getattr(settings, 'CHAT_BURST_COOLDOWN_SECONDS', 10))
+            burst_key = make_key('chat_burst', self.chatroom_name, self.user.id)
+            burst = check_rate_limit(burst_key, limit=burst_limit, period_seconds=burst_period)
+            if not burst.allowed:
+                try:
+                    set_muted(self.user.id, burst_cooldown)
+                except Exception:
+                    pass
+                self._send_cooldown(burst_cooldown, reason='muted')
+                return
 
         # Commands: scoreboard
         # !sc -> your wins total
@@ -1338,6 +1723,11 @@ class ChatroomConsumer(WebsocketConsumer):
         }))
         
     def message_handler(self, event):
+        # Enforce membership for recipients too, so removed users never receive
+        # future group messages even if their socket hasn't torn down yet.
+        if not self._ensure_still_member():
+            return
+
         if event.get('skip_sender') and event.get('author_id') == getattr(self.user, 'id', None):
             return
         message_id = event['message_id']
@@ -1979,13 +2369,6 @@ class NotificationsConsumer(WebsocketConsumer):
         }))
 
     def follow_request_notify_handler(self, event):
-        try:
-            from a_users.models import Profile
-
-            if Profile.objects.filter(user_id=getattr(self.user, 'id', None), is_dnd=True).exists():
-                return
-        except Exception:
-            pass
         self.send(text_data=json.dumps({
             'type': 'follow_request',
             'from_username': event.get('from_username') or '',
@@ -2002,6 +2385,15 @@ class NotificationsConsumer(WebsocketConsumer):
             pass
         self.send(text_data=json.dumps({
             'type': 'support',
+            'preview': event.get('preview') or '',
+            'url': event.get('url') or '',
+        }))
+
+    def room_invite_notify_handler(self, event):
+        self.send(text_data=json.dumps({
+            'type': 'room_invite',
+            'from_username': event.get('from_username') or '',
+            'chatroom_name': event.get('chatroom_name') or '',
             'preview': event.get('preview') or '',
             'url': event.get('url') or '',
         }))

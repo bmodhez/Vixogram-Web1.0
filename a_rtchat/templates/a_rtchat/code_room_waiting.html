@@ -25,7 +25,7 @@
       </div>
 
       <div class="mt-6 flex items-center justify-end gap-2">
-        <a href="{% url 'home' %}" class="text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg transition-colors">Back</a>
+        <a href="{% url 'code-room-waiting-leave' chatroom_name %}?next={% url 'home' %}" class="text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg transition-colors">Back</a>
         <button type="button" id="waiting_refresh_btn" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg transition-colors">Refresh</button>
       </div>
     </div>

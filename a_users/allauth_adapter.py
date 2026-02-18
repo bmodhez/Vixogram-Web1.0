@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import logging
+import random
+import re
+import string
 import threading
 
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.account import adapter as allauth_adapter_module
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from .username_policy import validate_public_username
@@ -16,6 +20,86 @@ logger = logging.getLogger(__name__)
 
 
 class CustomAccountAdapter(DefaultAccountAdapter):
+    @staticmethod
+    def _username_base_from_email(email: str) -> str:
+        try:
+            local = (email or '').split('@', 1)[0]
+        except Exception:
+            local = ''
+        local = (local or '').strip().lower()
+        # Keep only [a-z0-9_], collapse others.
+        local = re.sub(r'[^a-z0-9_]+', '_', local)
+        local = re.sub(r'_+', '_', local).strip('_')
+        if not local:
+            local = 'vixo'
+        # Ensure minimum length.
+        if len(local) < 3:
+            local = f"{local}vixo"
+        return local[:18]
+
+    @classmethod
+    def _generate_unique_username(cls, email: str) -> str:
+        User = get_user_model()
+        base = cls._username_base_from_email(email)
+
+        # Try base first, then base + suffix.
+        candidates = [base]
+        for _ in range(25):
+            suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
+            candidates.append(f"{base}_{suffix}")
+
+        for candidate in candidates:
+            candidate = (candidate or '').strip().lower()
+            if not candidate:
+                continue
+            try:
+                validate_public_username(candidate)
+            except Exception:
+                continue
+            try:
+                if not User.objects.filter(username__iexact=candidate).exists():
+                    return candidate
+            except Exception:
+                continue
+
+        # Fallback: random username.
+        for _ in range(50):
+            candidate = 'vx_' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
+            try:
+                validate_public_username(candidate)
+            except Exception:
+                continue
+            try:
+                if not User.objects.filter(username__iexact=candidate).exists():
+                    return candidate
+            except Exception:
+                continue
+
+        # Last resort (should be extremely rare).
+        return 'vx_' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=12))
+
+    def save_user(self, request, user, form, commit=True):
+        # allauth may call save_user with commit=True; we ensure username exists
+        # even when it is not collected at signup.
+        user = super().save_user(request, user, form, commit=False)
+
+        try:
+            if not (getattr(user, 'username', '') or '').strip():
+                email = (getattr(user, 'email', '') or '').strip()
+                user.username = self._generate_unique_username(email)
+                # Make Step 1 mandatory for this session.
+                try:
+                    if request is not None and getattr(request, 'session', None) is not None:
+                        request.session['onboarding_needs_username'] = True
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        if commit:
+            user.save()
+        return user
+
     def clean_username(self, username, *args, **kwargs):
         username = super().clean_username(username, *args, **kwargs)
         validate_public_username(username)

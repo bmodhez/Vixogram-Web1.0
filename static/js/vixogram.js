@@ -83,6 +83,16 @@
         if (icon) icon.textContent = (t === 'light') ? '☀️' : '🌙';
         if (label) label.textContent = (t === 'light') ? 'Light' : 'Dark';
       }
+
+      const profileBtn = document.getElementById('theme_toggle_profile');
+      if (profileBtn) {
+        profileBtn.setAttribute('data-theme', t);
+        profileBtn.setAttribute('aria-label', `Switch to ${nextLabel} theme`);
+        const icon = profileBtn.querySelector('[data-theme-icon]');
+        const label = profileBtn.querySelector('[data-theme-label]');
+        if (icon) icon.textContent = (t === 'light') ? '☀️' : '🌙';
+        if (label) label.textContent = (t === 'light') ? 'Light' : 'Dark';
+      }
     } catch {
       // ignore
     }
@@ -103,7 +113,7 @@
   applyTheme(getStoredTheme());
 
   function initThemeToggle() {
-    const ids = ['theme_toggle', 'theme_toggle_menu'];
+    const ids = ['theme_toggle', 'theme_toggle_menu', 'theme_toggle_profile', 'theme_toggle_menu_mobile'];
     ids.forEach((id) => {
       const btn = document.getElementById(id);
       if (!btn) return;
@@ -258,6 +268,7 @@
     startTop: 0,
     targetTop: 0,
     container: null,
+    behavior: 'smooth',
   };
 
   function scrollToBottom(opts) {
@@ -276,6 +287,10 @@
     const targetTop = Math.max(0, chatContainer.scrollHeight - chatContainer.clientHeight);
 
     if (behavior === 'auto') {
+      if (__vixoScrollAnim.raf) {
+        try { window.cancelAnimationFrame(__vixoScrollAnim.raf); } catch {}
+        __vixoScrollAnim.raf = null;
+      }
       chatContainer.scrollTop = targetTop;
       return;
     }
@@ -284,9 +299,7 @@
     const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
 
     __vixoScrollAnim.container = chatContainer;
-    __vixoScrollAnim.startTop = chatContainer.scrollTop;
-    __vixoScrollAnim.targetTop = targetTop;
-    __vixoScrollAnim.startTime = now;
+    __vixoScrollAnim.behavior = behavior;
 
     const step = (ts) => {
       const s = __vixoScrollAnim;
@@ -308,10 +321,20 @@
       }
     };
 
+    if (__vixoScrollAnim.raf && __vixoScrollAnim.container === chatContainer) {
+      // Burst update: keep current animation frame alive and only move the target.
+      __vixoScrollAnim.targetTop = targetTop;
+      return;
+    }
+
     if (__vixoScrollAnim.raf) {
       try { window.cancelAnimationFrame(__vixoScrollAnim.raf); } catch {}
       __vixoScrollAnim.raf = null;
     }
+
+    __vixoScrollAnim.startTop = chatContainer.scrollTop;
+    __vixoScrollAnim.targetTop = targetTop;
+    __vixoScrollAnim.startTime = now;
     __vixoScrollAnim.raf = window.requestAnimationFrame(step);
   }
 
@@ -597,6 +620,32 @@
       else close();
     });
 
+    dropdown.addEventListener('click', (e) => {
+      const t = e && e.target;
+      if (!(t instanceof HTMLElement)) return;
+      const profileLink = t.closest('a[data-user-menu-profile="1"]');
+      if (!profileLink) return;
+      try {
+        const href = String(profileLink.getAttribute('href') || '').trim();
+        if (!href) return;
+        const url = new URL(href, window.location.origin);
+        if (url.pathname === window.location.pathname) {
+          e.preventDefault();
+          const targetId = (url.hash || '#profile_top').replace(/^#/, '');
+          const target = document.getElementById(targetId);
+          if (target && typeof target.scrollIntoView === 'function') {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }
+      } catch {
+        // ignore malformed URLs
+      } finally {
+        close();
+      }
+    }, true);
+
     if (closeBtn) closeBtn.addEventListener('click', (e) => { e.preventDefault(); close(); });
 
     document.addEventListener('click', (e) => {
@@ -637,9 +686,83 @@
     dropdown.addEventListener('click', (e) => {
       const t = e && e.target;
       if (!(t instanceof HTMLElement)) return;
-      const closeEl = t.closest('[data-user-menu-close="1"]');
+      const closeEl = t.closest('[data-user-menu-close="1"], a[href], button, [role="menuitem"], input[type="submit"]');
       if (closeEl) close();
     }, true);
+  }
+
+  function initMobileProfileMenu() {
+    const panel = document.getElementById('mobile_profile_menu');
+    const backdrop = document.getElementById('mobile_profile_menu_backdrop');
+    if (!panel || !backdrop) return;
+
+    const isMobileViewport = () => {
+      try { return window.matchMedia('(max-width: 1023.98px)').matches; } catch { return true; }
+    };
+
+    const isOpen = () => !panel.classList.contains('hidden');
+
+    const open = () => {
+      if (!isMobileViewport()) return;
+      backdrop.classList.remove('hidden');
+      backdrop.classList.add('opacity-100');
+      panel.setAttribute('aria-hidden', 'false');
+      __vixoAnimateDropdownOpen(panel, { withTransform: true });
+
+      try {
+        const hash = String(window.location.hash || '').toLowerCase();
+        if (hash === '#profile_menu' || hash === '#profile_top') {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    const close = () => {
+      backdrop.classList.add('hidden');
+      backdrop.classList.remove('opacity-100');
+      panel.setAttribute('aria-hidden', 'true');
+      __vixoAnimateDropdownClose(panel, { withTransform: true });
+    };
+
+    const toggle = () => {
+      if (isOpen()) close();
+      else open();
+    };
+
+    document.addEventListener('click', (e) => {
+      const t = e && e.target;
+      if (!(t instanceof HTMLElement)) return;
+      const trigger = t.closest('[data-mobile-profile-menu-toggle="1"]');
+      if (!trigger) return;
+      if (!isMobileViewport()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      toggle();
+    }, true);
+
+    backdrop.addEventListener('click', close);
+
+    panel.addEventListener('click', (e) => {
+      const t = e && e.target;
+      if (!(t instanceof HTMLElement)) return;
+      const closeEl = t.closest('[data-user-menu-close="1"], a[href], button, [role="menuitem"], input[type="submit"]');
+      if (closeEl) close();
+    }, true);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (!isOpen()) return;
+      close();
+    });
+
+    try {
+      const hash = String(window.location.hash || '').toLowerCase();
+      if (hash === '#profile_menu' && isMobileViewport()) open();
+    } catch {
+      // ignore
+    }
   }
 
   function initCustomConfirm() {
@@ -1134,7 +1257,9 @@
     let audioUnlocked = false;
     const notifAudio = document.getElementById('notif_sound');
     const incomingAudioEl = document.getElementById('incoming_sound');
+    const followSoundSrc = '/static/followsound.mp3';
     const recentInvites = new Map();
+    const recentRoomInvites = new Map();
     const recentMentions = new Map();
     let notifUnread = parseInt(String(baseCfg.navNotifUnread || 0), 10) || 0;
     let followReqPending = parseInt(String(baseCfg.navFollowReqPending || 0), 10) || 0;
@@ -1268,6 +1393,23 @@
       }
     }
 
+    function playFollowRequestSound() {
+      try {
+        const a = new Audio(followSoundSrc);
+        a.preload = 'auto';
+        a.muted = false;
+        a.volume = 1.0;
+        const p = a.play();
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => {
+            playFallbackBeep();
+          });
+        }
+      } catch {
+        playFallbackBeep();
+      }
+    }
+
     function animateToastIn(el) {
       if (!el) return;
       try {
@@ -1297,6 +1439,8 @@
     function updateFollowReqBadges() {
       const navEl = document.getElementById('nav_followreq_badge');
       const menuEl = document.getElementById('followreq_menu_badge');
+      const mobileMenuEl = document.getElementById('followreq_menu_badge_mobile');
+      const mobileProfileEl = document.getElementById('chat_mobile_profile_badge');
       const text = (followReqPending > 99) ? '99+' : String(followReqPending);
 
       if (navEl) {
@@ -1314,6 +1458,24 @@
           menuEl.classList.remove('hidden');
         } else {
           menuEl.classList.add('hidden');
+        }
+      }
+
+      if (mobileMenuEl) {
+        if (followReqPending > 0) {
+          mobileMenuEl.textContent = text;
+          mobileMenuEl.classList.remove('hidden');
+        } else {
+          mobileMenuEl.classList.add('hidden');
+        }
+      }
+
+      if (mobileProfileEl) {
+        if (followReqPending > 0) {
+          mobileProfileEl.textContent = text;
+          mobileProfileEl.classList.remove('hidden');
+        } else {
+          mobileProfileEl.classList.add('hidden');
         }
       }
     }
@@ -1664,11 +1826,116 @@
       animateToastIn(toast);
     }
 
+    function showRoomInvite(payload) {
+      const from = payload.from_username || 'Someone';
+      const room = payload.chatroom_name || '';
+      const preview = (payload.preview || '').trim();
+      const url = payload.url || '';
+      if (!url) return;
+
+      const key = `${room}:${from}:${url}`;
+      const now = Date.now();
+      const last = recentRoomInvites.get(key) || 0;
+      if (now - last < 1200) return;
+      recentRoomInvites.set(key, now);
+
+      bumpNotifUnread();
+      playNotifSound();
+
+      const container = ensureIncomingContainer();
+      const toast = document.createElement('div');
+      toast.className = 'pointer-events-auto flex items-start gap-3 rounded-xl border border-gray-800 bg-gray-900/90 px-4 py-3 text-sm text-gray-100 shadow-lg shadow-black/20 transition duration-200 ease-out transform-gpu';
+      toast.innerHTML = `
+        <div class="mt-0.5 h-2.5 w-2.5 flex-none rounded-full bg-emerald-400"></div>
+        <div class="flex-1 min-w-0">
+          <div class="font-semibold">Room invite</div>
+          <div class="text-gray-300 text-xs mt-0.5">from @${escapeHtml(from)}${room ? ` • room ${escapeHtml(room)}` : ''}</div>
+          ${preview ? `<div class="mt-2 text-xs text-gray-300 truncate">${escapeHtml(preview)}</div>` : ''}
+          <div class="mt-3">
+            <a href="${url}" class="vixo-btn text-xs bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg transition-colors">Join</a>
+          </div>
+        </div>
+        <button type="button" data-close class="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60 transition" aria-label="Dismiss">
+          <span aria-hidden="true">×</span>
+        </button>
+      `;
+
+      const removeToast = () => {
+        toast.classList.add('opacity-0');
+        setTimeout(() => toast.remove(), 200);
+      };
+      toast.querySelector('[data-close]')?.addEventListener('click', removeToast);
+      setTimeout(removeToast, 12000);
+      container.appendChild(toast);
+      animateToastIn(toast);
+    }
+
     function initNotifDropdown() {
       const btn = document.getElementById('notif_btn');
       const panel = document.getElementById('notif_dropdown');
       const closeBtn = document.getElementById('notif_close');
       if (!btn || !panel) return;
+
+      function initNotifPagination(rootEl) {
+        const root = rootEl || document.getElementById('notif_dropdown_body');
+        if (!root) return;
+
+        const pager = root.querySelector('[data-notif-pager]');
+        const prevBtn = root.querySelector('[data-notif-page-prev]');
+        const nextBtn = root.querySelector('[data-notif-page-next]');
+        const statusEl = root.querySelector('[data-notif-page-status]');
+        const items = Array.from(root.querySelectorAll('[data-notif-item]'));
+
+        if (!pager || !prevBtn || !nextBtn || !statusEl || !items.length) return;
+
+        const pageSize = 5;
+        const totalPages = Math.ceil(items.length / pageSize);
+        let page = 1;
+
+        const render = () => {
+          const start = (page - 1) * pageSize;
+          const end = start + pageSize;
+
+          items.forEach((el, idx) => {
+            if (idx >= start && idx < end) el.classList.remove('hidden');
+            else el.classList.add('hidden');
+          });
+
+          statusEl.textContent = `${page} / ${totalPages}`;
+          prevBtn.disabled = page <= 1;
+          nextBtn.disabled = page >= totalPages;
+          prevBtn.classList.toggle('opacity-40', prevBtn.disabled);
+          nextBtn.classList.toggle('opacity-40', nextBtn.disabled);
+        };
+
+        if (totalPages <= 1) {
+          pager.classList.add('hidden');
+          pager.classList.remove('flex');
+          items.forEach((el) => el.classList.remove('hidden'));
+          return;
+        }
+
+        pager.classList.remove('hidden');
+        pager.classList.add('flex');
+
+        prevBtn.onclick = (e) => {
+          e.preventDefault();
+          if (page > 1) {
+            page -= 1;
+            render();
+          }
+        };
+
+        nextBtn.onclick = (e) => {
+          e.preventDefault();
+          if (page < totalPages) {
+            page += 1;
+            render();
+          }
+        };
+
+        render();
+      }
 
       function clampPanelToViewport() {
         try {
@@ -1821,7 +2088,11 @@
           notifUnread = Math.max(0, n);
           updateNotifBadge();
         }
+
+        initNotifPagination(target);
       });
+
+      initNotifPagination(document.getElementById('notif_dropdown_body'));
 
       // Expose for websocket handlers
       window.__refreshNotifDropdownIfOpen = refreshDropdownIfOpen;
@@ -1853,6 +2124,10 @@
 
     updateNotifBadge();
     updateFollowReqBadges();
+    document.addEventListener('DOMContentLoaded', () => {
+      updateNotifBadge();
+      updateFollowReqBadges();
+    }, { once: true });
     initNotifDropdown();
 
     function connect() {
@@ -1907,6 +2182,10 @@
           showMention(payload);
           try { window.__refreshNotifDropdownIfOpen && window.__refreshNotifDropdownIfOpen(); } catch {}
         }
+        if (payload.type === 'room_invite') {
+          showRoomInvite(payload);
+          try { window.__refreshNotifDropdownIfOpen && window.__refreshNotifDropdownIfOpen(); } catch {}
+        }
         if (payload.type === 'chat_block_status') {
           try { window.dispatchEvent(new CustomEvent('chat:block_status', { detail: payload })); } catch {}
         }
@@ -1950,16 +2229,21 @@
           setTimeout(removeToast, 12000);
           container.appendChild(toast);
           animateToastIn(toast);
+          try { window.__refreshNotifDropdownIfOpen && window.__refreshNotifDropdownIfOpen(); } catch {}
+        }
 
         if (payload.type === 'follow_request') {
+          const prevFollowReqPending = Math.max(0, parseInt(String(followReqPending || 0), 10) || 0);
           const n = parseInt(String(payload.pending_count ?? ''), 10);
           if (Number.isFinite(n)) {
             followReqPending = Math.max(0, n);
           } else {
             followReqPending = Math.min(999, (followReqPending || 0) + 1);
           }
+          if (followReqPending > prevFollowReqPending) {
+            playFollowRequestSound();
+          }
           updateFollowReqBadges();
-        }
           try { window.__refreshNotifDropdownIfOpen && window.__refreshNotifDropdownIfOpen(); } catch {}
         }
 
@@ -3610,6 +3894,7 @@
     initGlobalLoadingIndicator();
     initContactDropdown();
     initUserMenuDropdown();
+    initMobileProfileMenu();
     initToasts();
     initCustomConfirm();
     initPromptModal();
