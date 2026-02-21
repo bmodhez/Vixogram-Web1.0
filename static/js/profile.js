@@ -177,7 +177,41 @@
                 if (!state) return;
                 modal.dataset.kind = state.getAttribute('data-kind') || (modal.dataset.kind || '');
                 modal.dataset.full = state.getAttribute('data-full') || (modal.dataset.full || '0');
+                modal.dataset.query = state.getAttribute('data-query') || '';
+                try {
+                    const searchInput = target.querySelector('[data-follow-search="1"]');
+                    if (searchInput) applyFollowSearch(target, String(searchInput.value || ''));
+                } catch {}
             } catch {}
+        });
+
+        function applyFollowSearch(scopeEl, rawQuery) {
+            if (!scopeEl) return;
+            const q = String(rawQuery || '').trim().toLowerCase();
+            const items = Array.from(scopeEl.querySelectorAll('[data-follow-item="1"]'));
+            const emptyEl = scopeEl.querySelector('[data-follow-search-empty="1"]');
+            if (!items.length) {
+                if (emptyEl) emptyEl.classList.add('hidden');
+                return;
+            }
+
+            let shown = 0;
+            for (const item of items) {
+                const hay = String(item.getAttribute('data-search-index') || '').toLowerCase();
+                const match = !q || hay.includes(q);
+                item.classList.toggle('hidden', !match);
+                if (match) shown += 1;
+            }
+
+            if (emptyEl) {
+                emptyEl.classList.toggle('hidden', shown > 0);
+            }
+        }
+
+        modal.addEventListener('input', (e) => {
+            const input = e.target && e.target.closest ? e.target.closest('[data-follow-search="1"]') : null;
+            if (!input) return;
+            applyFollowSearch(bodyEl, String(input.value || ''));
         });
 
         document.body.addEventListener('followChanged', (e) => {
@@ -194,8 +228,10 @@
                 const baseUrl = modal.dataset.baseUrl || '';
                 if (!baseUrl) return;
 
-                const isFull = (modal.dataset.full || '0') === '1';
-                const url = isFull ? (baseUrl + '?full=1') : baseUrl;
+                const query = String(modal.dataset.query || '').trim();
+                const url = query
+                    ? `${baseUrl}?q=${encodeURIComponent(query)}`
+                    : baseUrl;
                 if (window.htmx && typeof window.htmx.ajax === 'function') {
                     window.htmx.ajax('GET', url, { target: '#follow_modal_body', swap: 'innerHTML' });
                 }

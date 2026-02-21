@@ -10,6 +10,9 @@
     style="--vixo-auth-bg: url('{% static 'bg2.jpeg' %}'); --vixo-auth-overlay: 0.38; --vixo-auth-bg-position-mobile: center; --vixo-auth-bg-corner-size-mobile: 190% auto; --vixo-auth-bg-corner-opacity-mobile: 0.45;"
 >
     <div class="vixo-onboarding-bg-rotor" aria-hidden="true"></div>
+    <div id="vixo-page-loader" class="vixo-page-loader" aria-hidden="true">
+        <img src="{% static 'vixologo.png' %}" alt="Vixogram" class="vixo-page-loader__logo" loading="eager" decoding="async" />
+    </div>
 {% else %}
 <div class="w-full flex justify-center px-4 sm:px-6 pt-10 sm:pt-12">
 {% endif %}
@@ -62,6 +65,46 @@
             transform 520ms cubic-bezier(0.22, 1, 0.36, 1),
             background-position 420ms cubic-bezier(0.22, 1, 0.36, 1),
             filter 420ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .vixo-page-loader {
+        position: fixed;
+        inset: 0;
+        z-index: 70;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at center, rgba(17, 24, 39, 0.28) 0%, rgba(2, 6, 23, 0.72) 100%);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: opacity 180ms ease-out, visibility 180ms ease-out;
+    }
+
+    .vixo-page-loader.is-active {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .vixo-page-loader__logo {
+        width: min(34vw, 164px);
+        height: auto;
+        object-fit: contain;
+        filter: drop-shadow(0 10px 26px rgba(56, 189, 248, 0.26));
+        animation: vixoPageLoaderPulse 840ms ease-in-out infinite alternate;
+    }
+
+    @keyframes vixoPageLoaderPulse {
+        0% {
+            transform: scale(0.96);
+            opacity: 0.84;
+        }
+        100% {
+            transform: scale(1.04);
+            opacity: 1;
+        }
     }
 
     #vixo-box-card {
@@ -201,6 +244,12 @@
             transition: none !important;
         }
 
+        .vixo-page-loader,
+        .vixo-page-loader__logo {
+            transition: none !important;
+            animation: none !important;
+        }
+
         #vixo-box-card.vixo-box-card--break {
             animation: none !important;
             opacity: 0 !important;
@@ -220,6 +269,7 @@
     const card = document.getElementById('vixo-box-card');
     if (!card) return;
     const bg = card.closest('.vixo-onboarding-bg');
+    const pageLoader = document.getElementById('vixo-page-loader');
 
     let closing = false;
 
@@ -269,6 +319,10 @@
     function animateIn() {
         prepareBgEnter();
         try {
+            if (pageLoader) pageLoader.classList.remove('is-active');
+            document.body.classList.remove('vixo-page-loader-on');
+        } catch {}
+        try {
             card.classList.remove('vixo-box-card--break');
         } catch {}
         try {
@@ -286,9 +340,18 @@
         }
     }
 
+    function showLoader() {
+        try {
+            if (!pageLoader) return;
+            pageLoader.classList.add('is-active');
+            document.body.classList.add('vixo-page-loader-on');
+        } catch {}
+    }
+
     function animateOut(cb, nextSide) {
         if (closing) return;
         closing = true;
+        showLoader();
         const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
         const leaveMs = reduceMotion ? 210 : 3050;
         try { document.body.classList.add('vixo-page-leave'); } catch {}

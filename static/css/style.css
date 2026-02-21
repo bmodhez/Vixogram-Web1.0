@@ -55,6 +55,85 @@ html.theme-dark .vixo-msg [data-msg-actions] [data-message-menu-toggle]:hover {
 /* Make linkified URLs clearly clickable in chat bubbles */
 .chat-message-body a { text-decoration: underline; cursor: pointer; }
 
+@keyframes vixoPollPopIn {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.94);
+    filter: saturate(0.9) brightness(0.92);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.02);
+    filter: saturate(1.1) brightness(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: saturate(1) brightness(1);
+  }
+}
+
+@keyframes vixoPollRefreshPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+  50% {
+    transform: scale(1.012);
+    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0.08);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+@keyframes vixoPollOptionPress {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.985); }
+  100% { transform: scale(1); }
+}
+
+@keyframes vixoPollOptionSelected {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0);
+    transform: translateY(0) scale(1);
+  }
+  35% {
+    box-shadow: 0 0 0 8px rgba(34, 211, 238, 0.16);
+    transform: translateY(-1px) scale(1.01);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+.vixo-poll-pop-in {
+  animation: vixoPollPopIn 520ms cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+.vixo-poll-refresh-pulse {
+  animation: vixoPollRefreshPulse 420ms ease-out;
+}
+
+[data-poll-vote-btn="1"].vixo-poll-option-press {
+  animation: vixoPollOptionPress 220ms ease-out;
+}
+
+[data-poll-vote-btn="1"].vixo-poll-option-selected {
+  animation: vixoPollOptionSelected 620ms cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vixo-poll-pop-in,
+  .vixo-poll-refresh-pulse,
+  [data-poll-vote-btn="1"].vixo-poll-option-press,
+  [data-poll-vote-btn="1"].vixo-poll-option-selected {
+    animation: none !important;
+  }
+}
+
 body {
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
@@ -90,7 +169,11 @@ body {
 /* Chat: superuser name + verified tick (thunder flicker effect) */
 .vixo-superuser-name-shock {
   color: rgb(240 249 255);
-  display: inline;
+  display: inline-block;
+  position: relative;
+  white-space: nowrap;
+  isolation: isolate;
+  text-decoration: none;
   background: transparent !important;
   --vixo-glow-a: rgba(125, 211, 252, 1);
   --vixo-glow-b: rgba(56, 189, 248, 0.95);
@@ -100,7 +183,33 @@ body {
     0 0 10px var(--vixo-glow-b),
     0 0 18px var(--vixo-glow-c),
     0 0 26px var(--vixo-glow-c);
-  animation: vixoNameGlowPulse 2.35s ease-in-out infinite;
+  animation: vixoSuperuserThunderBurst 3.4s linear infinite !important;
+}
+
+.vixo-superuser-name-shock::after {
+  content: attr(data-vixo-name);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(251, 146, 60, 0.15) 16%,
+    rgba(249, 115, 22, 0.9) 38%,
+    rgba(250, 204, 21, 0.98) 50%,
+    rgba(56, 189, 248, 0.88) 62%,
+    rgba(59, 130, 246, 0.4) 72%,
+    transparent 100%
+  );
+  background-size: 240% 100%;
+  background-repeat: no-repeat;
+  background-position: -140% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  opacity: 0;
+  filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.45)) drop-shadow(0 0 14px rgba(250, 204, 21, 0.32));
+  animation: vixoSuperuserFireSweep 3.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
 .vixo-user-glow-aurora,
@@ -293,6 +402,67 @@ body {
   }
 }
 
+@keyframes vixoSuperuserFireSweep {
+  0% {
+    opacity: 0;
+    background-position: -140% 0;
+  }
+  10% {
+    opacity: 0.68;
+  }
+  68% {
+    opacity: 0.95;
+    background-position: 125% 0;
+  }
+  74% {
+    opacity: 0.34;
+    background-position: 140% 0;
+  }
+  100% {
+    opacity: 0;
+    background-position: 140% 0;
+  }
+}
+
+@keyframes vixoSuperuserThunderBurst {
+  0%,
+  70%,
+  77%,
+  83%,
+  89%,
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    text-shadow:
+      0 0 2px var(--vixo-glow-a),
+      0 0 10px var(--vixo-glow-b),
+      0 0 18px var(--vixo-glow-c),
+      0 0 26px var(--vixo-glow-c);
+  }
+  73%,
+  79%,
+  85% {
+    opacity: 0.94;
+    transform: translate3d(-0.3px, 0.2px, 0) scale(1.02);
+    text-shadow:
+      0 0 3px var(--vixo-glow-a),
+      0 0 14px var(--vixo-glow-b),
+      0 0 24px var(--vixo-glow-c),
+      0 0 34px var(--vixo-glow-c);
+  }
+  75%,
+  81%,
+  87% {
+    opacity: 1;
+    transform: translate3d(0.5px, -0.4px, 0) scale(1.045);
+    text-shadow:
+      0 0 4px var(--vixo-glow-a),
+      0 0 18px var(--vixo-glow-b),
+      0 0 30px var(--vixo-glow-c),
+      0 0 42px var(--vixo-glow-c);
+  }
+}
+
 @keyframes vixoSuperuserTickShock {
   0%, 6%, 10%, 16%, 27%, 31%, 43%, 100% {
     opacity: 1;
@@ -331,6 +501,11 @@ body {
   .vixo-superuser-verified-badge {
     animation: none !important;
     transform: none !important;
+  }
+
+  .vixo-superuser-name-shock::after {
+    animation: none !important;
+    opacity: 0 !important;
   }
 }
 
@@ -1332,6 +1507,18 @@ body {
 
 /* Firefox fallback (no gradient support). */
 html { scrollbar-width: thin; scrollbar-color: rgb(16 185 129) transparent; }
+
+/* Utility: hide scrollbar visuals but keep scrolling enabled. */
+.vixo-scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.vixo-scrollbar-none::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
 
 /* Chat: hide scrollbar entirely to prevent the brief green thumb flash on programmatic scroll.
    Still scrollable via mouse wheel/touch/trackpad. */

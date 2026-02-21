@@ -459,6 +459,22 @@ MOBILE_AD_CHAT_FEED_CTA_URL = os.environ.get('MOBILE_AD_CHAT_FEED_CTA_URL', '')
 MOBILE_AD_CHAT_FEED_IMAGE_URL = os.environ.get('MOBILE_AD_CHAT_FEED_IMAGE_URL', '')
 MOBILE_AD_CHAT_FEED_ADVERTISER = os.environ.get('MOBILE_AD_CHAT_FEED_ADVERTISER', '')
 
+# --- IPL Live Score integration (backend-only API calls) ---
+IPL_RAPIDAPI_KEY = (os.environ.get('IPL_RAPIDAPI_KEY') or '').strip()
+IPL_RAPIDAPI_HOST = (os.environ.get('IPL_RAPIDAPI_HOST') or 'cricbuzz-cricket.p.rapidapi.com').strip()
+IPL_CRICBUZZ_LIVE_URL = (
+    os.environ.get('IPL_CRICBUZZ_LIVE_URL')
+    or 'https://cricbuzz-cricket.p.rapidapi.com/matches/v1/live'
+)
+IPL_RAPIDAPI_TIMEOUT_SECONDS = float(os.environ.get('IPL_RAPIDAPI_TIMEOUT_SECONDS') or 8.0)
+IPL_POLL_INTERVAL_SECONDS = int(os.environ.get('IPL_POLL_INTERVAL_SECONDS') or 180)
+IPL_SCORE_CACHE_TTL_SECONDS = int(os.environ.get('IPL_SCORE_CACHE_TTL_SECONDS') or 21600)
+IPL_LIVE_SCORE_CHAT_ROOM = (os.environ.get('IPL_LIVE_SCORE_CHAT_ROOM') or 'public-chat').strip() or 'public-chat'
+
+# Widget defaults (client can still drag/reposition; this is initial placement).
+IPL_WIDGET_DEFAULT_POSITION = (os.environ.get('IPL_WIDGET_DEFAULT_POSITION') or 'top-center').strip()
+IPL_WIDGET_DEFAULT_MINIMIZED = _env_bool('IPL_WIDGET_DEFAULT_MINIMIZED', default=False)
+
 ASGI_APPLICATION = 'a_core.asgi.application'
 
 # Render ya Railway par ye variables environment se uthayenge

@@ -38,6 +38,81 @@ def _reaction_context_for(message, user):
             pills.append({'emoji': emoji, 'count': c, 'reacted': emoji in reacted})
     message.reaction_pills = pills
     return emojis
+
+
+def _attach_poll_card_for_message(message, user):
+    if not message or not getattr(message, 'poll_id', None):
+        try:
+            message.poll_view = None
+        except Exception:
+            pass
+        return
+
+    poll = getattr(message, 'poll', None)
+    if not poll:
+        poll = ChatPoll.objects.filter(id=getattr(message, 'poll_id', None)).first()
+        try:
+            message.poll = poll
+        except Exception:
+            pass
+    if not poll:
+        return
+
+    options = list(
+        ChatPollOption.objects
+        .filter(poll=poll)
+        .order_by('sort_order', 'id')
+    )
+
+    vote_rows = (
+        ChatPollVote.objects
+        .filter(poll=poll)
+        .values('option_id')
+        .annotate(count=Count('id'))
+    )
+    counts = {int(row['option_id']): int(row['count'] or 0) for row in vote_rows}
+
+    my_ids = set()
+    try:
+        uid = int(getattr(user, 'id', 0) or 0)
+    except Exception:
+        uid = 0
+    if uid > 0:
+        my_ids = set(
+            ChatPollVote.objects
+            .filter(poll=poll, user_id=uid)
+            .values_list('option_id', flat=True)
+        )
+
+    total_votes = 0
+    option_payload = []
+    for opt in options:
+        c = int(counts.get(int(opt.id), 0) or 0)
+        total_votes += c
+        option_payload.append({
+            'id': int(opt.id),
+            'text': str(opt.text or ''),
+            'count': c,
+            'selected': int(opt.id) in my_ids,
+            'percent': 0,
+        })
+
+    if total_votes > 0:
+        for row in option_payload:
+            row['percent'] = int(round((row['count'] * 100.0) / total_votes))
+
+    try:
+        message.poll_view = {
+            'id': int(poll.id),
+            'question': str(getattr(poll, 'question', '') or ''),
+            'allow_multiple_answers': bool(getattr(poll, 'allow_multiple_answers', False)),
+            'total_votes': int(total_votes),
+            'has_voted': any(bool(row.get('selected')) for row in option_payload),
+            'options': option_payload,
+            'refresh_seconds': 10,
+        }
+    except Exception:
+        pass
 from django.conf import settings
 from .rate_limit import (
     check_rate_limit,
@@ -60,6 +135,7 @@ except Exception:  # pragma: no cover
 
 from .moderation import moderate_message
 from .channels_utils import chatroom_channel_group_name
+from .ipl_live import IPL_SCORE_GLOBAL_GROUP, get_cached_ipl_state
 from .mentions import extract_mention_usernames, resolve_mentioned_users
 from .auto_badges import attach_auto_badges
 
@@ -836,8 +912,25 @@ class ChatroomConsumer(WebsocketConsumer):
         async_to_sync(self.channel_layer.group_add)(
             self.room_group_name, self.channel_name
         )
+
+        try:
+            async_to_sync(self.channel_layer.group_add)(
+                IPL_SCORE_GLOBAL_GROUP, self.channel_name
+            )
+        except Exception:
+            pass
         
         self.accept()
+
+        try:
+            snapshot = get_cached_ipl_state()
+            if snapshot:
+                self.send(text_data=json.dumps({
+                    'type': 'ipl_score',
+                    'score': snapshot,
+                }))
+        except Exception:
+            pass
 
         # Mark current messages as read on open (best-effort).
         if getattr(self.user, 'is_authenticated', False):
@@ -895,6 +988,12 @@ class ChatroomConsumer(WebsocketConsumer):
             async_to_sync(self.channel_layer.group_discard)(
                 self.room_group_name, self.channel_name
             )
+        try:
+            async_to_sync(self.channel_layer.group_discard)(
+                IPL_SCORE_GLOBAL_GROUP, self.channel_name
+            )
+        except Exception:
+            pass
         # remove and update online users
         if getattr(getattr(self, 'user', None), 'is_authenticated', False) and hasattr(self, 'chatroom'):
             try:
@@ -1733,6 +1832,7 @@ class ChatroomConsumer(WebsocketConsumer):
         message_id = event['message_id']
         message = GroupMessage.objects.get(id=message_id)
         attach_auto_badges([message], self.chatroom)
+        _attach_poll_card_for_message(message, self.user)
         reaction_emojis = _reaction_context_for(message, self.user)
 
         other_last_read_id = 0
@@ -1778,6 +1878,15 @@ class ChatroomConsumer(WebsocketConsumer):
         except Exception:
             return
 
+    def ipl_score_handler(self, event):
+        try:
+            self.send(text_data=json.dumps({
+                'type': 'ipl_score',
+                'score': event.get('score') or {},
+            }))
+        except Exception:
+            return
+
     def read_receipt_handler(self, event):
         try:
             self.send(text_data=json.dumps({
@@ -1813,6 +1922,7 @@ class ChatroomConsumer(WebsocketConsumer):
         if not message:
             return
         attach_auto_badges([message], self.chatroom)
+        _attach_poll_card_for_message(message, self.user)
         reaction_emojis = _reaction_context_for(message, self.user)
 
         other_last_read_id = 0

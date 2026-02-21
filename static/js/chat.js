@@ -1134,6 +1134,490 @@
         }
     })();
 
+    (function initChatPollUi() {
+        if (window.__vixoPollUiInitDone) return;
+
+        const pollBtn = document.getElementById('poll_btn');
+        const modal = document.getElementById('chat_poll_modal');
+        if (!pollBtn || !modal) return;
+
+        window.__vixoPollUiInitDone = true;
+
+        const closeBtn = document.getElementById('chat_poll_close');
+        const cancelBtn = document.getElementById('chat_poll_cancel');
+        const submitBtn = document.getElementById('chat_poll_submit');
+        const modalBackdrop = document.getElementById('chat_poll_backdrop');
+        const modalPanel = document.getElementById('chat_poll_panel');
+        const addOptionBtn = document.getElementById('chat_poll_add_option');
+        const questionInput = document.getElementById('chat_poll_question');
+        const multiToggle = document.getElementById('chat_poll_multi');
+        const optionsWrap = document.getElementById('chat_poll_options');
+        const optionsBlock = document.getElementById('chat_poll_options_block');
+        const errorEl = document.getElementById('chat_poll_error');
+
+        const pollCreateUrl = String(cfg.pollCreateUrl || '').trim();
+        const pollVoteUrlTemplate = String(cfg.pollVoteUrlTemplate || '').trim();
+        const pollBoxUrlTemplate = String(cfg.pollBoxUrlTemplate || '').trim();
+        const autoRefreshSeconds = Math.max(3, parseInt(cfg.pollAutoRefreshSeconds || '10', 10) || 10);
+        const isPrivateRoom = !!cfg.isPrivateRoom;
+
+        if (!isPrivateRoom || !pollCreateUrl || !pollVoteUrlTemplate || !pollBoxUrlTemplate) {
+            try { pollBtn.classList.add('hidden'); } catch {}
+            return;
+        }
+
+        function getCsrf() {
+            try { return (typeof getCookie === 'function' ? getCookie('csrftoken') : '') || ''; } catch { return ''; }
+        }
+
+        function showError(text) {
+            if (!errorEl) return;
+            const msg = String(text || '').trim();
+            if (!msg) {
+                errorEl.classList.add('hidden');
+                errorEl.textContent = '';
+                return;
+            }
+            errorEl.textContent = msg;
+            errorEl.classList.remove('hidden');
+        }
+
+        function collectOptions() {
+            const nodes = Array.from(optionsWrap ? optionsWrap.querySelectorAll('[data-poll-option="1"]') : []);
+            const out = [];
+            const seen = new Set();
+            for (const n of nodes) {
+                const t = String((n && n.value) || '').trim();
+                if (!t) continue;
+                const key = t.toLowerCase();
+                if (seen.has(key)) continue;
+                seen.add(key);
+                out.push(t);
+                if (out.length >= 6) break;
+            }
+            return out;
+        }
+
+        function refreshOptionRowsUi() {
+            if (!optionsWrap) return;
+            const rows = Array.from(optionsWrap.querySelectorAll('[data-poll-option-row="1"]'));
+            rows.forEach((row, idx) => {
+                const input = row.querySelector('[data-poll-option="1"]');
+                if (input) input.placeholder = `Option ${idx + 1}`;
+
+                const removeBtn = row.querySelector('[data-poll-option-remove="1"]');
+                if (!removeBtn) return;
+                if (idx >= 2) {
+                    removeBtn.classList.remove('hidden');
+                } else {
+                    removeBtn.classList.add('hidden');
+                }
+            });
+        }
+
+        function updateOptionsBlockVisibility(animated) {
+            if (!optionsBlock || !questionInput) return;
+            const hasQuestion = String(questionInput.value || '').trim().length > 0;
+
+            if (hasQuestion) {
+                optionsBlock.classList.remove('max-h-0', 'opacity-0', '-translate-y-1');
+                optionsBlock.classList.add('max-h-[26rem]', 'opacity-100', 'translate-y-0');
+                if (animated) {
+                    optionsBlock.classList.remove('vixo-poll-pop-in');
+                    void optionsBlock.offsetWidth;
+                    optionsBlock.classList.add('vixo-poll-pop-in');
+                    window.setTimeout(() => optionsBlock.classList.remove('vixo-poll-pop-in'), 520);
+                }
+            } else {
+                optionsBlock.classList.add('max-h-0', 'opacity-0', '-translate-y-1');
+                optionsBlock.classList.remove('max-h-[26rem]', 'opacity-100', 'translate-y-0');
+            }
+        }
+
+        function createOptionInput(placeholderText) {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.maxLength = 120;
+            input.setAttribute('data-poll-option', '1');
+            input.placeholder = placeholderText;
+            input.className = 'w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-sky-500/50';
+            return input;
+        }
+
+        function createOptionRow(index, canDelete) {
+            const row = document.createElement('div');
+            row.setAttribute('data-poll-option-row', '1');
+            row.className = 'relative transition duration-150 ease-out';
+
+            const input = createOptionInput(`Option ${index}`);
+            if (canDelete) {
+                input.classList.add('pr-11');
+            }
+            row.appendChild(input);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.setAttribute('data-poll-option-remove', '1');
+            removeBtn.setAttribute('aria-label', 'Delete option');
+            removeBtn.className = canDelete
+                ? 'absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 text-sm leading-none inline-flex items-center justify-center'
+                : 'hidden absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 text-sm leading-none inline-flex items-center justify-center';
+            removeBtn.innerHTML = '✕';
+            row.appendChild(removeBtn);
+
+            return row;
+        }
+
+        function resetForm() {
+            if (questionInput) questionInput.value = '';
+            if (multiToggle) multiToggle.checked = false;
+            if (optionsWrap) {
+                optionsWrap.innerHTML = '';
+                optionsWrap.appendChild(createOptionRow(1, false));
+                optionsWrap.appendChild(createOptionRow(2, false));
+            }
+            refreshOptionRowsUi();
+            updateOptionsBlockVisibility(false);
+            showError('');
+        }
+
+        function animatePollBox(box, mode, selectedOptionId) {
+            if (!box) return;
+
+            box.setAttribute('data-poll-seen', '1');
+            const label = box.querySelector('[data-poll-refresh-label="1"]');
+            if (label) label.classList.add('hidden');
+
+            box.classList.remove('vixo-poll-pop-in', 'vixo-poll-refresh-pulse');
+            void box.offsetWidth;
+
+            if (mode === 'create') {
+                box.classList.add('vixo-poll-pop-in');
+                window.setTimeout(() => box.classList.remove('vixo-poll-pop-in'), 750);
+            } else if (mode === 'vote') {
+                box.classList.add('vixo-poll-refresh-pulse');
+                window.setTimeout(() => box.classList.remove('vixo-poll-refresh-pulse'), 520);
+            }
+
+            if (selectedOptionId) {
+                const sel = box.querySelector(`[data-poll-vote-btn="1"][data-option-id="${String(selectedOptionId)}"]`);
+                if (sel) {
+                    sel.classList.remove('vixo-poll-option-selected');
+                    void sel.offsetWidth;
+                    sel.classList.add('vixo-poll-option-selected');
+                    window.setTimeout(() => sel.classList.remove('vixo-poll-option-selected'), 680);
+                }
+            }
+        }
+
+        function markExistingPollBoxesAsSeen() {
+            const boxes = Array.from(document.querySelectorAll('[data-chat-poll-box="1"]'));
+            boxes.forEach((box) => {
+                box.setAttribute('data-poll-seen', '1');
+                const label = box.querySelector('[data-poll-refresh-label="1"]');
+                if (label) label.classList.add('hidden');
+            });
+        }
+
+        function initPollCreationObserver() {
+            const messagesEl = document.getElementById('chat_messages');
+            if (!messagesEl || messagesEl.__vixoPollCreateObserverBound === '1') return;
+            messagesEl.__vixoPollCreateObserverBound = '1';
+
+            const observer = new MutationObserver((mutations) => {
+                for (const m of mutations) {
+                    const added = Array.from(m.addedNodes || []);
+                    for (const node of added) {
+                        if (!(node instanceof HTMLElement)) continue;
+
+                        if (node.matches && node.matches('[data-chat-poll-box="1"]')) {
+                            if (node.getAttribute('data-poll-seen') !== '1') {
+                                animatePollBox(node, 'create');
+                            }
+                            continue;
+                        }
+
+                        const nested = Array.from(node.querySelectorAll ? node.querySelectorAll('[data-chat-poll-box="1"]') : []);
+                        nested.forEach((box) => {
+                            if (box.getAttribute('data-poll-seen') !== '1') {
+                                animatePollBox(box, 'create');
+                            }
+                        });
+                    }
+                }
+            });
+
+            observer.observe(messagesEl, { childList: true, subtree: true });
+        }
+
+        function openModal() {
+            modal.classList.remove('hidden');
+            modal.setAttribute('aria-hidden', 'false');
+            try { document.body.classList.add('overflow-hidden'); } catch {}
+            if (modalBackdrop) {
+                modalBackdrop.classList.add('opacity-0');
+                modalBackdrop.classList.remove('opacity-100');
+            }
+            if (modalPanel) {
+                modalPanel.classList.add('opacity-0', 'translate-y-3', 'scale-[0.97]');
+                modalPanel.classList.remove('opacity-100', 'translate-y-0', 'scale-100');
+            }
+            requestAnimationFrame(() => {
+                if (modalBackdrop) {
+                    modalBackdrop.classList.remove('opacity-0');
+                    modalBackdrop.classList.add('opacity-100');
+                }
+                if (modalPanel) {
+                    modalPanel.classList.remove('opacity-0', 'translate-y-3', 'scale-[0.97]');
+                    modalPanel.classList.add('opacity-100', 'translate-y-0', 'scale-100');
+                }
+            });
+            try { if (questionInput) questionInput.focus(); } catch {}
+        }
+
+        function closeModal() {
+            if (modal.classList.contains('hidden')) return;
+            if (modalBackdrop) {
+                modalBackdrop.classList.add('opacity-0');
+                modalBackdrop.classList.remove('opacity-100');
+            }
+            if (modalPanel) {
+                modalPanel.classList.add('opacity-0', 'translate-y-3', 'scale-[0.97]');
+                modalPanel.classList.remove('opacity-100', 'translate-y-0', 'scale-100');
+            }
+            window.setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.setAttribute('aria-hidden', 'true');
+                try { document.body.classList.remove('overflow-hidden'); } catch {}
+                resetForm();
+            }, 190);
+        }
+
+        function replacePollBoxFromHtml(messageId, html, animationCfg) {
+            const box = document.getElementById(`chat_poll_box_${messageId}`);
+            if (!box || !html) return;
+            const tmp = document.createElement('div');
+            tmp.innerHTML = String(html);
+            const incoming = tmp.querySelector('[data-chat-poll-box="1"]');
+            if (!incoming) return;
+            box.replaceWith(incoming);
+
+            const cfgAnim = animationCfg || {};
+            const mode = String(cfgAnim.mode || 'vote');
+            const selectedOptionId = parseInt(cfgAnim.selectedOptionId || '0', 10) || 0;
+            animatePollBox(incoming, mode, selectedOptionId);
+        }
+
+        markExistingPollBoxesAsSeen();
+        initPollCreationObserver();
+        resetForm();
+
+        pollBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            openModal();
+        });
+
+        if (closeBtn) closeBtn.addEventListener('click', (e) => { e.preventDefault(); closeModal(); });
+        if (cancelBtn) cancelBtn.addEventListener('click', (e) => { e.preventDefault(); closeModal(); });
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal || e.target === modal.firstElementChild) closeModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+        });
+
+        if (addOptionBtn) {
+            addOptionBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const count = optionsWrap ? optionsWrap.querySelectorAll('[data-poll-option="1"]').length : 0;
+                if (count >= 6) {
+                    showError('Maximum 6 options allowed.');
+                    return;
+                }
+                showError('');
+                if (optionsWrap) {
+                    const row = createOptionRow(count + 1, true);
+                    optionsWrap.appendChild(row);
+                    refreshOptionRowsUi();
+                    row.classList.add('vixo-poll-pop-in');
+                    window.setTimeout(() => row.classList.remove('vixo-poll-pop-in'), 520);
+                    const input = row.querySelector('[data-poll-option="1"]');
+                    if (input) {
+                        try { input.focus(); } catch {}
+                    }
+                }
+            });
+        }
+
+        if (optionsWrap) {
+            optionsWrap.addEventListener('click', (e) => {
+                const removeBtn = e.target && e.target.closest ? e.target.closest('[data-poll-option-remove="1"]') : null;
+                if (!removeBtn) return;
+                e.preventDefault();
+
+                const row = removeBtn.closest('[data-poll-option-row="1"]');
+                if (!row) return;
+
+                const rows = Array.from(optionsWrap.querySelectorAll('[data-poll-option-row="1"]'));
+                if (rows.length <= 2) return;
+
+                row.classList.add('opacity-0', 'scale-95');
+                window.setTimeout(() => {
+                    try { row.remove(); } catch {}
+                    refreshOptionRowsUi();
+                }, 140);
+            });
+        }
+
+        if (questionInput) {
+            let hadQuestion = false;
+            questionInput.addEventListener('input', () => {
+                const hasQuestion = String(questionInput.value || '').trim().length > 0;
+                updateOptionsBlockVisibility(hasQuestion && !hadQuestion);
+                hadQuestion = hasQuestion;
+            });
+        }
+
+        if (submitBtn) {
+            submitBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const question = String((questionInput && questionInput.value) || '').trim();
+                const options = collectOptions();
+                const allowMultiple = !!(multiToggle && multiToggle.checked);
+
+                if (!question) {
+                    showError('Question is required.');
+                    return;
+                }
+                if (options.length < 2) {
+                    showError('At least 2 options are required.');
+                    return;
+                }
+
+                submitBtn.disabled = true;
+                showError('');
+                try {
+                    const resp = await fetch(pollCreateUrl, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCsrf(),
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: JSON.stringify({
+                            question,
+                            options,
+                            allow_multiple_answers: allowMultiple,
+                        }),
+                    });
+
+                    const data = await resp.json().catch(() => ({}));
+                    if (!resp.ok || !data || !data.ok) {
+                        showError((data && data.error) || 'Could not create poll.');
+                        return;
+                    }
+
+                    closeModal();
+
+                    if (data.html) {
+                        if (typeof __enqueueIncomingRender === 'function') {
+                            __enqueueIncomingRender({
+                                kind: 'append',
+                                html: data.html,
+                                forceScroll: true,
+                                showPrivateJump: false,
+                            });
+                        } else {
+                            const messagesEl = document.getElementById('chat_messages');
+                            if (messagesEl) {
+                                const tmp = document.createElement('div');
+                                tmp.innerHTML = String(data.html);
+                                Array.from(tmp.children || []).forEach((el) => messagesEl.appendChild(el));
+                                try { safeScrollToBottom(); } catch {}
+                            }
+                        }
+                    }
+                } catch {
+                    showError('Network error. Please try again.');
+                } finally {
+                    submitBtn.disabled = false;
+                }
+            });
+        }
+
+        document.addEventListener('click', async (e) => {
+            const voteBtn = e.target && e.target.closest ? e.target.closest('[data-poll-vote-btn="1"]') : null;
+            if (!voteBtn) return;
+
+            e.preventDefault();
+            const messageId = parseInt(voteBtn.getAttribute('data-message-id') || '0', 10) || 0;
+            const optionId = parseInt(voteBtn.getAttribute('data-option-id') || '0', 10) || 0;
+            if (!messageId || !optionId) return;
+
+            voteBtn.classList.remove('vixo-poll-option-press');
+            void voteBtn.offsetWidth;
+            voteBtn.classList.add('vixo-poll-option-press');
+            window.setTimeout(() => voteBtn.classList.remove('vixo-poll-option-press'), 240);
+
+            const url = pollVoteUrlTemplate.replace('/0/', `/${messageId}/`);
+            const params = new URLSearchParams();
+            params.set('option_id', String(optionId));
+
+            try {
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                        'X-CSRFToken': getCsrf(),
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: params,
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (resp.ok && data && data.ok && data.html) {
+                    replacePollBoxFromHtml(messageId, data.html, { mode: 'vote', selectedOptionId: optionId });
+                }
+            } catch {
+                // ignore
+            }
+        }, true);
+
+        window.setInterval(async () => {
+            const boxes = Array.from(document.querySelectorAll('[data-chat-poll-box="1"]'));
+            if (!boxes.length) return;
+
+            for (const box of boxes) {
+                const messageId = parseInt(box.getAttribute('data-message-id') || '0', 10) || 0;
+                if (!messageId) continue;
+
+                const current = parseInt(box.getAttribute('data-poll-refresh-left') || String(autoRefreshSeconds), 10) || autoRefreshSeconds;
+                const next = current - 1;
+                const label = box.querySelector('[data-poll-refresh-label="1"]');
+                if (label) label.classList.add('hidden');
+
+                if (next > 0) {
+                    box.setAttribute('data-poll-refresh-left', String(next));
+                    continue;
+                }
+
+                box.setAttribute('data-poll-refresh-left', String(autoRefreshSeconds));
+
+                const url = pollBoxUrlTemplate.replace('/0/', `/${messageId}/`);
+                try {
+                    const resp = await fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                    const data = await resp.json().catch(() => ({}));
+                    if (resp.ok && data && data.ok && data.html) {
+                        replacePollBoxFromHtml(messageId, data.html, { mode: 'refresh' });
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+        }, 1000);
+    })();
+
     // --- Private code room rename (admin/staff) ---
     function __isSmallScreen() {
         try { return !window.matchMedia('(min-width: 640px)').matches; } catch { return true; }
@@ -1484,9 +1968,277 @@
     const inviteUrl = String(cfg.inviteUrl || '');
     const tokenUrl = String(cfg.tokenUrl || '');
     const presenceUrl = String(cfg.presenceUrl || '');
+    const iplWidgetPositionDefault = String(cfg.iplWidgetPosition || 'top-center');
+    const iplWidgetMinimizedDefault = !!cfg.iplWidgetMinimized;
+    const iplInitialScore = (cfg.iplInitialScore && typeof cfg.iplInitialScore === 'object') ? cfg.iplInitialScore : null;
 
     const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const wsUrl = `${wsScheme}://${window.location.host}/ws/chatroom/${chatroomName}`;
+
+    function __sanitizeText(input) {
+        return String(input || '').replace(/[&<>"']/g, (c) => {
+            if (c === '&') return '&amp;';
+            if (c === '<') return '&lt;';
+            if (c === '>') return '&gt;';
+            if (c === '"') return '&quot;';
+            return '&#39;';
+        });
+    }
+
+    function __teamCompact(score, key) {
+        const raw = String((score && score[key]) || '').trim();
+        return raw || '0/0';
+    }
+
+    function initIplLiveScoreWidget() {
+        const keyBase = currentUserId > 0 ? String(currentUserId) : 'anon';
+        const storageKey = `vixo:ipl-widget:v1:${keyBase}`;
+        const scoreStateKey = 'vixo:ipl-last-announced:v1';
+
+        function readState() {
+            try {
+                const raw = window.localStorage ? window.localStorage.getItem(storageKey) : '';
+                if (!raw) {
+                    return {
+                        minimized: iplWidgetMinimizedDefault,
+                        position: iplWidgetPositionDefault,
+                        x: null,
+                        y: null,
+                    };
+                }
+                const parsed = JSON.parse(raw);
+                return {
+                    minimized: !!parsed.minimized,
+                    position: String(parsed.position || iplWidgetPositionDefault),
+                    x: Number.isFinite(parsed.x) ? Number(parsed.x) : null,
+                    y: Number.isFinite(parsed.y) ? Number(parsed.y) : null,
+                };
+            } catch {
+                return {
+                    minimized: iplWidgetMinimizedDefault,
+                    position: iplWidgetPositionDefault,
+                    x: null,
+                    y: null,
+                };
+            }
+        }
+
+        function saveState(next) {
+            try {
+                if (!window.localStorage) return;
+                window.localStorage.setItem(storageKey, JSON.stringify(next));
+            } catch {
+                // ignore
+            }
+        }
+
+        const state = readState();
+        const root = document.createElement('div');
+        root.id = 'vixo_ipl_live_widget';
+        root.className = 'hidden fixed z-40 pointer-events-auto';
+        root.innerHTML = `
+            <div data-ipl-box class="relative rounded-full border border-fuchsia-400/70 bg-gray-950/90 shadow-2xl px-4 py-2 flex items-center gap-3 min-w-[18rem] max-w-[48rem]">
+                <button type="button" data-ipl-drag class="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-300 hover:text-white hover:bg-white/10" aria-label="Move score box" title="Drag">
+                    <span aria-hidden="true">⋮⋮</span>
+                </button>
+                <div data-ipl-full class="flex items-center gap-3 min-w-0">
+                    <div class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-300 text-[10px] font-black text-gray-900" data-ipl-team1-badge>T1</div>
+                    <div class="text-base font-black text-white" data-ipl-team1>0/0</div>
+                    <div class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 motion-safe:animate-pulse" aria-hidden="true"></div>
+                    <div class="text-sm font-semibold text-emerald-300">LIVE</div>
+                    <div class="text-base font-black text-white" data-ipl-team2>0/0</div>
+                    <div class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-200 text-[10px] font-black text-gray-900" data-ipl-team2-badge>T2</div>
+                    <div class="text-[11px] text-gray-300 truncate max-w-[14rem]" data-ipl-status>Waiting for live match</div>
+                </div>
+                <div data-ipl-mini class="hidden items-center gap-2 min-w-0">
+                    <div class="text-sm font-black text-white truncate" data-ipl-mini-text>0/0 vs 0/0</div>
+                </div>
+                <button type="button" data-ipl-toggle class="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-200 hover:text-white hover:bg-white/10" aria-label="Toggle compact mode" title="Minimize">—</button>
+            </div>
+        `;
+        document.body.appendChild(root);
+
+        const box = root.querySelector('[data-ipl-box]');
+        const dragBtn = root.querySelector('[data-ipl-drag]');
+        const toggleBtn = root.querySelector('[data-ipl-toggle]');
+        const fullEl = root.querySelector('[data-ipl-full]');
+        const miniEl = root.querySelector('[data-ipl-mini]');
+        const t1El = root.querySelector('[data-ipl-team1]');
+        const t2El = root.querySelector('[data-ipl-team2]');
+        const t1Badge = root.querySelector('[data-ipl-team1-badge]');
+        const t2Badge = root.querySelector('[data-ipl-team2-badge]');
+        const statusEl = root.querySelector('[data-ipl-status]');
+        const miniTextEl = root.querySelector('[data-ipl-mini-text]');
+
+        function applyPresetPosition(preset) {
+            root.style.left = '';
+            root.style.right = '';
+            root.style.top = '';
+            root.style.bottom = '';
+            root.style.transform = '';
+
+            if (preset === 'top-left') {
+                root.style.top = '86px';
+                root.style.left = '20px';
+                return;
+            }
+            if (preset === 'top-right') {
+                root.style.top = '86px';
+                root.style.right = '20px';
+                return;
+            }
+            if (preset === 'bottom-center') {
+                root.style.bottom = '24px';
+                root.style.left = '50%';
+                root.style.transform = 'translateX(-50%)';
+                return;
+            }
+
+            root.style.top = '86px';
+            root.style.left = '50%';
+            root.style.transform = 'translateX(-50%)';
+        }
+
+        function applyPosition() {
+            if (Number.isFinite(state.x) && Number.isFinite(state.y)) {
+                root.style.left = `${Math.max(8, state.x)}px`;
+                root.style.top = `${Math.max(8, state.y)}px`;
+                root.style.right = '';
+                root.style.bottom = '';
+                root.style.transform = '';
+                return;
+            }
+            applyPresetPosition(state.position);
+        }
+
+        function applySizeMode() {
+            const mini = !!state.minimized;
+            if (fullEl) fullEl.classList.toggle('hidden', mini);
+            if (miniEl) miniEl.classList.toggle('hidden', !mini);
+            if (toggleBtn) {
+                toggleBtn.textContent = mini ? '+' : '—';
+                toggleBtn.title = mini ? 'Expand' : 'Minimize';
+                toggleBtn.setAttribute('aria-label', mini ? 'Expand score box' : 'Minimize score box');
+            }
+            if (box) {
+                box.classList.toggle('min-w-[18rem]', !mini);
+                box.classList.toggle('min-w-[10.5rem]', mini);
+            }
+        }
+
+        function renderScore(score) {
+            if (!score || !score.is_live) return;
+
+            const team1Short = String(score.team1_short || 'T1').toUpperCase();
+            const team2Short = String(score.team2_short || 'T2').toUpperCase();
+            const team1Score = __teamCompact(score, 'team1_score');
+            const team2Score = __teamCompact(score, 'team2_score');
+            const statusText = String(score.status || 'LIVE').trim() || 'LIVE';
+
+            if (t1El) t1El.textContent = team1Score;
+            if (t2El) t2El.textContent = team2Score;
+            if (t1Badge) t1Badge.textContent = team1Short.slice(0, 3);
+            if (t2Badge) t2Badge.textContent = team2Short.slice(0, 3);
+            if (statusEl) statusEl.textContent = statusText;
+            if (miniTextEl) miniTextEl.textContent = `${team1Score} vs ${team2Score}`;
+
+            root.classList.remove('hidden');
+            applySizeMode();
+            applyPosition();
+        }
+
+        function maybeAnnounceInChat(score) {
+            if (!score || !score.is_live || !window.localStorage) return;
+            const announceKey = `${score.match_id || ''}|${score.team1_score || ''}|${score.team2_score || ''}|${score.status || ''}`;
+            if (!announceKey.trim()) return;
+
+            try {
+                const seen = String(window.localStorage.getItem(scoreStateKey) || '');
+                if (seen === announceKey) return;
+                window.localStorage.setItem(scoreStateKey, announceKey);
+            } catch {
+                // ignore
+            }
+
+            const title = 'Admin • IPL Live';
+            const body = `${__sanitizeText(score.team1_short || 'T1')} ${__sanitizeText(score.team1_score || '0/0')} vs ${__sanitizeText(score.team2_short || 'T2')} ${__sanitizeText(score.team2_score || '0/0')} • ${__sanitizeText(score.status || 'LIVE')}`;
+            const html = `<div class="mx-auto my-2 max-w-xl"><div class="rounded-xl border border-fuchsia-500/30 bg-gray-900/80 px-3 py-2 text-xs text-gray-100"><div class="font-semibold text-fuchsia-300">${title}</div><div class="mt-0.5">${body}</div></div></div>`;
+
+            if (typeof __enqueueIncomingRender === 'function') {
+                __enqueueIncomingRender({ kind: 'append', html, forceScroll: false, showPrivateJump: false });
+            }
+        }
+
+        let dragging = false;
+        let dragDx = 0;
+        let dragDy = 0;
+
+        function onPointerMove(e) {
+            if (!dragging) return;
+            state.x = Math.max(8, Math.round(e.clientX - dragDx));
+            state.y = Math.max(8, Math.round(e.clientY - dragDy));
+            applyPosition();
+        }
+
+        function stopDrag() {
+            if (!dragging) return;
+            dragging = false;
+            saveState(state);
+            window.removeEventListener('pointermove', onPointerMove, true);
+            window.removeEventListener('pointerup', stopDrag, true);
+            window.removeEventListener('pointercancel', stopDrag, true);
+        }
+
+        if (dragBtn) {
+            dragBtn.addEventListener('pointerdown', (e) => {
+                const r = root.getBoundingClientRect();
+                dragging = true;
+                state.x = r.left;
+                state.y = r.top;
+                dragDx = e.clientX - r.left;
+                dragDy = e.clientY - r.top;
+                state.position = 'custom';
+                root.style.transform = '';
+                window.addEventListener('pointermove', onPointerMove, true);
+                window.addEventListener('pointerup', stopDrag, true);
+                window.addEventListener('pointercancel', stopDrag, true);
+            });
+        }
+
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', () => {
+                state.minimized = !state.minimized;
+                applySizeMode();
+                saveState(state);
+            });
+        }
+
+        window.__vixoSetIplWidgetPosition = function (preset) {
+            const next = String(preset || '').trim().toLowerCase();
+            if (!next) return;
+            state.position = next;
+            state.x = null;
+            state.y = null;
+            applyPosition();
+            saveState(state);
+        };
+
+        if (iplInitialScore && iplInitialScore.is_live) {
+            renderScore(iplInitialScore);
+        } else {
+            applyPosition();
+            applySizeMode();
+        }
+
+        return {
+            update(score) {
+                renderScore(score || {});
+                maybeAnnounceInChat(score || {});
+            },
+        };
+    }
+
+    const __iplWidget = initIplLiveScoreWidget();
 
     // Expose current room + scroll state helpers to global notification handlers
     window.__activeChatroomName = chatroomName;
@@ -2299,7 +3051,33 @@
         });
     })();
 
-    // Keep the "Upload (x/y used)" counter in sync without requiring a page refresh.
+    function applyUploadCounterUi(counter, used, limit) {
+        if (!counter || !limit || limit <= 0) return;
+
+        counter.textContent = `${used}/${limit} Files`;
+        counter.setAttribute('data-used', String(used));
+        counter.setAttribute('data-limit', String(limit));
+
+        counter.classList.remove('text-gray-500', 'text-amber-300', 'text-rose-300');
+
+        let warn = false;
+        let danger = false;
+
+        if (limit === 15) {
+            warn = used >= 10;
+            danger = used >= 14;
+        } else {
+            const ratio = used / limit;
+            warn = ratio >= 0.66;
+            danger = ratio >= 0.9;
+        }
+
+        if (danger) counter.classList.add('text-rose-300');
+        else if (warn) counter.classList.add('text-amber-300');
+        else counter.classList.add('text-gray-500');
+    }
+
+    // Keep the upload counter in sync without requiring a page refresh.
     // The server triggers this event after a successful upload.
     document.body.addEventListener('uploadCountUpdated', (e) => {
         const detail = (e && e.detail) ? e.detail : {};
@@ -2309,7 +3087,7 @@
 
         const counter = document.getElementById('upload_counter');
         if (counter && limit > 0) {
-            counter.textContent = `Upload (${used}/${limit} used)`;
+            applyUploadCounterUi(counter, used, limit);
         }
 
         const msg = document.getElementById('upload_limit_reached_msg');
@@ -2327,6 +3105,14 @@
             }
         }
     });
+
+    (function initUploadCounterUi() {
+        const counter = document.getElementById('upload_counter');
+        if (!counter) return;
+        const used = parseInt(counter.getAttribute('data-used') || '0', 10) || 0;
+        const limit = parseInt(counter.getAttribute('data-limit') || '0', 10) || 0;
+        applyUploadCounterUi(counter, used, limit);
+    })();
 
     function resetComposerAfterSend() {
         const form = document.getElementById('chat_message_form');
@@ -2627,6 +3413,7 @@
     function __setComposerQuickActionsMuted(muted) {
         const emojiBtn = document.getElementById('emoji_btn');
         const gifBtn = document.getElementById('gif_btn');
+        const pollBtn = document.getElementById('poll_btn');
         const emojiPanel = document.getElementById('emoji_panel');
         const gifPanel = document.getElementById('gif_panel');
 
@@ -2675,6 +3462,7 @@
             __composerQuickActionsHiddenByMute = true;
             hideBtn(emojiBtn);
             hideBtn(gifBtn);
+            hideBtn(pollBtn);
 
             try {
                 if (emojiPanel) {
@@ -2697,6 +3485,7 @@
 
         showBtnAnimated(emojiBtn);
         showBtnAnimated(gifBtn);
+        showBtnAnimated(pollBtn);
     }
 
     function __setMutedUiText(seconds) {
@@ -4952,6 +5741,7 @@
             const uploadBtn = document.getElementById('chat_upload_btn');
             const emojiBtn = document.getElementById('emoji_btn');
             const gifBtn = document.getElementById('gif_btn');
+            const pollBtn = document.getElementById('poll_btn');
             const fileInput = document.getElementById('chat_file_input');
 
             if (adminOnlyRow) adminOnlyRow.classList.toggle('hidden', !on);
@@ -4965,6 +5755,7 @@
             if (sendBtn) sendBtn.disabled = on;
             if (emojiBtn) emojiBtn.disabled = on;
             if (gifBtn) gifBtn.disabled = on;
+            if (pollBtn) pollBtn.disabled = on;
             if (uploadBtn) {
                 uploadBtn.disabled = on || !mediaAllowed;
                 uploadBtn.classList.toggle('hidden', on || !mediaAllowed);
@@ -5073,6 +5864,17 @@
                             forceScroll: !!window.__forceNextChatScroll,
                             showPrivateJump: !window.__forceNextChatScroll,
                         });
+                    }
+                } catch {
+                    // ignore
+                }
+                return;
+            }
+
+            if (payload.type === 'ipl_score' && payload.score) {
+                try {
+                    if (__iplWidget && typeof __iplWidget.update === 'function') {
+                        __iplWidget.update(payload.score || {});
                     }
                 } catch {
                     // ignore

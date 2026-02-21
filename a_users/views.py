@@ -1071,19 +1071,29 @@ def _can_view_follow_lists(request, profile_user: User) -> tuple[bool, str]:
 def profile_followers_partial_view(request, username: str):
     profile_user = get_object_or_404(User, username=username)
     allowed, reason = _can_view_follow_lists(request, profile_user)
+    is_owner = bool(request.user == profile_user)
+    search_query = (request.GET.get('q') or '').strip()
+    owner_only_notice_threshold = 801
     if not allowed:
         return render(request, 'a_users/partials/follow_list_modal.html', {
             'profile_user': profile_user,
             'kind': 'followers',
-            'is_owner': bool(request.user == profile_user),
+            'is_owner': is_owner,
             'locked_reason': reason,
             'items': [],
             'total_count': 0,
             'is_full': False,
+            'owner_only_notice': '',
+            'search_query': search_query,
             'verified_user_ids': set(),
         })
 
-    is_full = str(request.GET.get('full') or '') in {'1', 'true', 'True', 'yes'}
+    # Followers visibility rules:
+    # - Owner sees full followers list.
+    # - Non-owner gets limited preview only for very large follower lists (801+).
+    total_followers_for_profile = Follow.objects.filter(following=profile_user).count()
+    should_limit_for_non_owner = (not is_owner) and (total_followers_for_profile >= owner_only_notice_threshold)
+    viewer_limit = 15 if should_limit_for_non_owner else None
 
     qs = (
         Follow.objects
@@ -1091,8 +1101,20 @@ def profile_followers_partial_view(request, username: str):
         .select_related('follower', 'follower__profile')
         .order_by('-created')
     )
+    if search_query:
+        qs = qs.filter(
+            Q(follower__username__icontains=search_query)
+            | Q(follower__profile__name__icontains=search_query)
+        )
     total_count = qs.count()
-    items = list(qs[:(total_count if is_full else 5)])
+    if viewer_limit is None:
+        items = list(qs)
+        is_full = True
+        owner_only_notice = ''
+    else:
+        items = list(qs[:viewer_limit])
+        is_full = False
+        owner_only_notice = f'Only {profile_user.username} can see all followers'
 
     follower_ids = [getattr(rel.follower, 'id', None) for rel in items]
     verified_user_ids = get_verified_user_ids(follower_ids)
@@ -1100,11 +1122,13 @@ def profile_followers_partial_view(request, username: str):
     return render(request, 'a_users/partials/follow_list_modal.html', {
         'profile_user': profile_user,
         'kind': 'followers',
-        'is_owner': bool(request.user == profile_user),
+        'is_owner': is_owner,
         'locked_reason': '',
         'items': items,
         'total_count': total_count,
         'is_full': is_full,
+        'owner_only_notice': owner_only_notice,
+        'search_query': search_query,
         'verified_user_ids': verified_user_ids,
     })
 
@@ -1113,19 +1137,25 @@ def profile_followers_partial_view(request, username: str):
 def profile_following_partial_view(request, username: str):
     profile_user = get_object_or_404(User, username=username)
     allowed, reason = _can_view_follow_lists(request, profile_user)
+    is_owner = bool(request.user == profile_user)
+    search_query = (request.GET.get('q') or '').strip()
     if not allowed:
         return render(request, 'a_users/partials/follow_list_modal.html', {
             'profile_user': profile_user,
             'kind': 'following',
-            'is_owner': bool(request.user == profile_user),
+            'is_owner': is_owner,
             'locked_reason': reason,
             'items': [],
             'total_count': 0,
             'is_full': False,
+            'owner_only_notice': '',
+            'search_query': search_query,
             'verified_user_ids': set(),
         })
 
-    is_full = str(request.GET.get('full') or '') in {'1', 'true', 'True', 'yes'}
+    # Following visibility rule:
+    # - Everyone who is allowed to view can see full following list.
+    is_full = True
 
     qs = (
         Follow.objects
@@ -1133,8 +1163,13 @@ def profile_following_partial_view(request, username: str):
         .select_related('following', 'following__profile')
         .order_by('-created')
     )
+    if search_query:
+        qs = qs.filter(
+            Q(following__username__icontains=search_query)
+            | Q(following__profile__name__icontains=search_query)
+        )
     total_count = qs.count()
-    items = list(qs[:(total_count if is_full else 5)])
+    items = list(qs)
 
     following_ids = [getattr(rel.following, 'id', None) for rel in items]
     verified_user_ids = get_verified_user_ids(following_ids)
@@ -1142,11 +1177,13 @@ def profile_following_partial_view(request, username: str):
     return render(request, 'a_users/partials/follow_list_modal.html', {
         'profile_user': profile_user,
         'kind': 'following',
-        'is_owner': bool(request.user == profile_user),
+        'is_owner': is_owner,
         'locked_reason': '',
         'items': items,
         'total_count': total_count,
         'is_full': is_full,
+        'owner_only_notice': '',
+        'search_query': search_query,
         'verified_user_ids': verified_user_ids,
     })
 
@@ -1859,16 +1896,20 @@ def remove_follower_view(request, username: str):
     toast_message = f'Removed @{target.username} from followers'
 
     if is_htmx:
-        is_full = str(request.GET.get('full') or '') in {'1', 'true', 'True', 'yes'}
-
+        search_query = (request.GET.get('q') or '').strip()
         qs = (
             Follow.objects
             .filter(following=request.user)
             .select_related('follower', 'follower__profile')
             .order_by('-created')
         )
+        if search_query:
+            qs = qs.filter(
+                Q(follower__username__icontains=search_query)
+                | Q(follower__profile__name__icontains=search_query)
+            )
         total_count = qs.count()
-        items = list(qs[:(total_count if is_full else 5)])
+        items = list(qs)
 
         follower_ids = [getattr(rel.follower, 'id', None) for rel in items]
         verified_user_ids = get_verified_user_ids(follower_ids)
@@ -1887,7 +1928,9 @@ def remove_follower_view(request, username: str):
             'locked_reason': '',
             'items': items,
             'total_count': total_count,
-            'is_full': is_full,
+            'is_full': True,
+            'owner_only_notice': '',
+            'search_query': search_query,
             'verified_user_ids': verified_user_ids,
         })
         try:

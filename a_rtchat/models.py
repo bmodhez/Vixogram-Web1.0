@@ -125,6 +125,7 @@ class PrivateChatGroup(ChatGroup):
     
 class GroupMessage(models.Model):
     group = models.ForeignKey(ChatGroup, related_name='chat_messages', on_delete=models.CASCADE)
+    poll = models.OneToOneField('ChatPoll', related_name='message', null=True, blank=True, on_delete=models.SET_NULL)
     reply_to = models.ForeignKey('self', related_name='replies', null=True, blank=True, on_delete=models.SET_NULL)
     author = models.ForeignKey(User, on_delete=models.CASCADE)
     body = models.CharField(max_length=300, blank=True, null=True)
@@ -378,4 +379,55 @@ class ChatChallenge(models.Model):
 
     def __str__(self):
         return f"Challenge({self.kind}) room={getattr(self.group, 'group_name', '')} status={self.status}"
+
+
+class ChatPoll(models.Model):
+    group = models.ForeignKey(ChatGroup, related_name='polls', on_delete=models.CASCADE)
+    created_by = models.ForeignKey(User, related_name='created_chat_polls', on_delete=models.CASCADE)
+    question = models.CharField(max_length=180)
+    allow_multiple_answers = models.BooleanField(default=False)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created']
+        indexes = [
+            models.Index(fields=['group', '-created'], name='cp_group_created_idx'),
+        ]
+
+    def __str__(self):
+        return f"Poll#{self.id} in {getattr(self.group, 'group_name', '')}"
+
+
+class ChatPollOption(models.Model):
+    poll = models.ForeignKey(ChatPoll, related_name='options', on_delete=models.CASCADE)
+    text = models.CharField(max_length=120)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ['sort_order', 'id']
+        indexes = [
+            models.Index(fields=['poll', 'sort_order'], name='cpo_poll_order_idx'),
+        ]
+
+    def __str__(self):
+        return f"PollOption#{self.id}({self.text[:30]})"
+
+
+class ChatPollVote(models.Model):
+    poll = models.ForeignKey(ChatPoll, related_name='votes', on_delete=models.CASCADE)
+    option = models.ForeignKey(ChatPollOption, related_name='votes', on_delete=models.CASCADE)
+    user = models.ForeignKey(User, related_name='chat_poll_votes', on_delete=models.CASCADE)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['poll', 'option', 'user'], name='uniq_chat_poll_option_user'),
+        ]
+        indexes = [
+            models.Index(fields=['poll', 'user'], name='cpv_poll_user_idx'),
+            models.Index(fields=['option'], name='cpv_option_idx'),
+        ]
+
+    def __str__(self):
+        return f"PollVote(p={self.poll_id}, o={self.option_id}, u={self.user_id})"
 

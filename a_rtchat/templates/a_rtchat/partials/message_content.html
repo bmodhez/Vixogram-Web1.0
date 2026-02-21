@@ -1,6 +1,8 @@
 {% load chat_extras %}
 
-{% if message.body and message.body|slice:":5" == "[GIF]" %}
+{% if message.poll_id and message.poll_view %}
+    {% include 'a_rtchat/partials/poll_box.html' %}
+{% elif message.body and message.body|slice:":5" == "[GIF]" %}
     {% with gif_url=message.body|slice:"5:"|cut:" " %}
         <div class="w-full sm:w-auto max-w-full sm:max-w-72">
             <video

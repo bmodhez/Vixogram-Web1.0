@@ -2232,7 +2232,20 @@
                                     <div id="emoji_mart_mount"></div>
                                 </div>
 
+                                {% if chat_group.is_private %}
+                                    <button
+                                        type="button"
+                                        id="poll_btn"
+                                        class="absolute {% if gifs_allowed %}right-20{% else %}right-12{% endif %} top-1/2 -translate-y-1/2 h-8 w-8 inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-gray-300 hover:text-gray-100 hover:bg-white/5 transition focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                                        aria-label="Create Poll"
+                                        title="Create Poll"
+                                    >
+                                        <span class="text-[16px] leading-none">📊</span>
+                                    </button>
+                                {% endif %}
+
                                 {% if gifs_allowed %}
+
                                     <button
                                         type="button"
                                         id="gif_btn"
@@ -2318,6 +2331,49 @@
                         </div>
                     </div>
 
+                    {% if chat_group.is_private %}
+                        <div id="chat_poll_modal" class="hidden fixed inset-0 z-[95]" aria-hidden="true">
+                            <div id="chat_poll_backdrop" class="absolute inset-0 bg-black/65 opacity-0 transition-opacity duration-200"></div>
+                            <div class="relative min-h-screen flex items-center justify-center px-4 py-8">
+                                <div id="chat_poll_panel" class="w-full max-w-xl rounded-2xl border border-white/10 bg-gray-900/95 shadow-2xl overflow-hidden opacity-0 translate-y-3 scale-[0.97] transition duration-300 ease-out">
+                                    <div class="px-5 py-4 border-b border-white/10 flex items-center justify-between">
+                                        <div class="text-3xl font-extrabold text-white tracking-tight">Create a new poll</div>
+                                        <button type="button" id="chat_poll_close" class="h-9 w-9 rounded-lg bg-white/5 hover:bg-white/10 text-gray-200 inline-flex items-center justify-center">×</button>
+                                    </div>
+                                    <div class="p-5 space-y-3">
+                                        <div>
+                                            <label for="chat_poll_question" class="text-sm text-gray-200 font-semibold">Question</label>
+                                            <input id="chat_poll_question" type="text" maxlength="180" placeholder="What should we do tonight?" class="mt-1 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-sky-500/50" />
+                                        </div>
+
+                                        <div id="chat_poll_options_block" class="max-h-0 opacity-0 -translate-y-1 overflow-hidden transition-all duration-300 ease-out">
+                                            <div id="chat_poll_options" class="space-y-2">
+                                                <input data-poll-option="1" type="text" maxlength="120" placeholder="Option 1" class="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-sky-500/50" />
+                                                <input data-poll-option="1" type="text" maxlength="120" placeholder="Option 2" class="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-sky-500/50" />
+                                            </div>
+
+                                            <div class="mt-3 flex justify-end">
+                                                <button type="button" id="chat_poll_add_option" class="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/15 text-white text-2xl leading-none">+</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="pt-1 flex items-center justify-between">
+                                            <label for="chat_poll_multi" class="text-xl font-bold text-white">Allow multiple answers</label>
+                                            <input id="chat_poll_multi" type="checkbox" class="h-6 w-11 accent-emerald-400" />
+                                        </div>
+
+                                        <div id="chat_poll_error" class="hidden rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200"></div>
+
+                                        <div class="pt-2 flex items-center justify-between gap-3">
+                                            <button type="button" id="chat_poll_cancel" class="px-5 py-2.5 rounded-full bg-gray-700 hover:bg-gray-600 text-white font-bold">Cancel</button>
+                                            <button type="button" id="chat_poll_submit" class="px-6 py-2.5 rounded-full bg-gradient-to-r from-emerald-400 via-lime-400 to-green-500 text-gray-950 font-extrabold shadow-lg shadow-emerald-900/30 hover:opacity-95">Create Poll</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+
                     <div id="chat_admin_only_row" class="rounded-2xl border border-gray-800 bg-gray-900/70 px-4 py-3 text-sm text-gray-200{% if not chat_group.is_private or not chat_group.only_admins_can_send or is_room_admin %} hidden{% endif %}">
                         <div class="text-center">
                             Only <button type="button" id="chat_admin_only_admins_btn" class="text-emerald-400 hover:text-emerald-300 font-semibold">admins</button> can send messages
@@ -2353,8 +2409,8 @@
                             <input id="chat_file_input" name="file" type="file" accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime" class="sr-only" {% if uploads_remaining == 0 or chat_group.is_private and chat_group.only_admins_can_send and not is_room_admin %}disabled{% endif %} />
 
                             {% if upload_limit %}
-                                <div id="upload_counter" class="text-xs text-gray-400 text-center" data-used="{{ uploads_used }}" data-limit="{{ upload_limit }}">
-                                    Upload ({{ uploads_used }}/{{ upload_limit }} used)
+                                <div id="upload_counter" class="w-full pr-1 mt-0.5 text-[10px] leading-none text-right text-gray-500 select-none pointer-events-none" data-used="{{ uploads_used }}" data-limit="{{ upload_limit }}">
+                                    {{ uploads_used }}/{{ upload_limit }} Files
                                 </div>
                             {% endif %}
 

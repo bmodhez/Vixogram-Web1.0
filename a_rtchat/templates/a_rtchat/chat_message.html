@@ -172,6 +172,21 @@
             </div>
         </div>
     </div>
+{% elif message.body == "[MOD_HIDDEN]" %}
+    <div data-message-id="{{ message.id }}" class="flex justify-center{% if extra_classes %} {{ extra_classes }}{% endif %}">
+        <div class="max-w-[90%]">
+            <div class="inline-flex items-center gap-2 rounded-full border border-rose-400/35 bg-rose-500/10 px-3 py-1.5 text-[11px] font-medium text-rose-100/90">
+                <span>Message hidden by Vixogram moderators</span>
+                <span aria-hidden="true" title="Blocked">🚫</span>
+                <span class="text-rose-200/50">•</span>
+                {% if chat_group and not chat_group.is_private and not chat_group.is_code_room %}
+                    {# Public groups: don't show message time #}
+                {% else %}
+                    <time class="text-rose-100/60" data-dt="{{ message.created|date:'c' }}"></time>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 {% else %}
 <div id="msg-{{ message.id }}" data-message-id="{{ message.id }}" data-author-id="{{ message.author_id }}" class="vixo-msg group relative w-full flex {% if message.author == user %}justify-end{% else %}justify-start{% endif %}{% if extra_classes %} {{ extra_classes }}{% endif %}">
     <div class="flex flex-col {% if message.author == user %}items-end{% else %}items-start{% endif %} max-w-[90%] sm:max-w-[75%] lg:max-w-[65%]">
@@ -189,7 +204,7 @@
                     >
                         <img src="{{ message.author.profile.avatar }}" class="w-6 h-6 rounded-full object-cover border border-white/10">
                         {% if message.author.is_superuser %}
-                            <span class="text-[14px] font-semibold truncate text-gray-100 vixo-superuser-name-shock {% if message.author.profile.name_glow_color and message.author.profile.name_glow_color != 'none' %}vixo-user-glow-{{ message.author.profile.name_glow_color }}{% endif %}" title="Verified superuser">
+                            <span data-vixo-name="{{ message.author.profile.name|default:message.author.username|escape }}" class="text-[14px] font-semibold text-gray-100 vixo-superuser-name-shock {% if message.author.profile.name_glow_color and message.author.profile.name_glow_color != 'none' %}vixo-user-glow-{{ message.author.profile.name_glow_color }}{% endif %}" title="Verified superuser">
                                 {{ message.author.profile.name|default:message.author.username }}
                             </span>
                             <span class="vixo-superuser-verified-badge" aria-label="Verified" title="Verified superuser">✓</span>
@@ -202,7 +217,7 @@
                 {% else %}
                     <span class="text-[14px] font-semibold inline-flex items-center gap-2">
                         {% if message.author.is_superuser %}
-                            <span class="text-gray-100 vixo-superuser-name-shock {% if message.author.profile.name_glow_color and message.author.profile.name_glow_color != 'none' %}vixo-user-glow-{{ message.author.profile.name_glow_color }}{% endif %}" title="Verified superuser">
+                            <span data-vixo-name="{{ message.author.profile.name|default:message.author.username|escape }}" class="text-gray-100 vixo-superuser-name-shock {% if message.author.profile.name_glow_color and message.author.profile.name_glow_color != 'none' %}vixo-user-glow-{{ message.author.profile.name_glow_color }}{% endif %}" title="Verified superuser">
                                 {{ message.author.profile.name|default:message.author.username }}
                             </span>
                             <span class="vixo-superuser-verified-badge" aria-label="Verified" title="Verified superuser">✓</span>
@@ -237,7 +252,7 @@
                 {% include 'a_rtchat/partials/reaction_picker.html' %}
             {% endif %}
 
-            <div data-message-bubble class="relative min-w-0 max-w-full {% if message.body and message.body|slice:':5' == '[GIF]' or message.is_image or message.is_video %}p-0 bg-transparent border-0 shadow-none backdrop-blur-none{% else %}px-3 py-2.5 rounded-2xl shadow-sm shadow-black/20 backdrop-blur-md {% if message.author == user %}bg-gradient-to-r from-purple-500 via-indigo-500 to-sky-500 text-white vixo-keep-white rounded-tr-none border border-white/10{% else %}bg-white/5 text-gray-100 border border-white/10 rounded-tl-none{% endif %}{% endif %}">
+            <div data-message-bubble class="relative min-w-0 max-w-full {% if message.poll_id or message.body and message.body|slice:':5' == '[GIF]' or message.is_image or message.is_video %}p-0 bg-transparent border-0 shadow-none backdrop-blur-none{% else %}px-3 py-2.5 rounded-2xl shadow-sm shadow-black/20 backdrop-blur-md {% if message.author == user %}bg-gradient-to-r from-purple-500 via-indigo-500 to-sky-500 text-white vixo-keep-white rounded-tr-none border border-white/10{% else %}bg-white/5 text-gray-100 border border-white/10 rounded-tl-none{% endif %}{% endif %}">
 
                 {% if message.reply_to %}
                     <button type="button" data-scroll-to="msg-{{ message.reply_to.id }}" class="block w-full max-w-full min-w-0 text-left mb-1.5" style="max-width:100%;overflow:hidden;">
@@ -246,7 +261,9 @@
                                 Replying to {{ message.reply_to.author.profile.name|default:message.reply_to.author.username }}
                             </div>
                             <div class="block min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-gray-100/80" style="display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                                {% if message.reply_to.body %}
+                                {% if message.reply_to.poll_id and message.reply_to.poll %}
+                                    📊 Poll{% if message.reply_to.poll.question %}: {{ message.reply_to.poll.question|truncatechars:80 }}{% endif %}
+                                {% elif message.reply_to.body %}
                                     {% if message.reply_to.body|slice:":5" == "[GIF]" %}
                                         {% with gif_url=message.reply_to.body|slice:"5:"|cut:" " %}
                                             <span class="inline-flex items-center gap-2">

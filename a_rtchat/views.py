@@ -44,6 +44,7 @@ from .forms import *
 from .agora import build_rtc_token
 from .moderation import moderate_message
 from .channels_utils import chatroom_channel_group_name
+from .ipl_live import get_cached_ipl_state
 
 
 def _is_room_admin(user, chat_group) -> bool:
@@ -452,6 +453,7 @@ CHAT_UPLOAD_MAX_BYTES = getattr(settings, 'CHAT_UPLOAD_MAX_BYTES', 10 * 1024 * 1
 CHAT_REACTION_EMOJIS = getattr(settings, 'CHAT_REACTION_EMOJIS', ['👍', '❤️', '😂', '😮', '😢', '🙏'])
 PRIVATE_ROOM_MEMBER_LIMIT = int(getattr(settings, 'PRIVATE_ROOM_MEMBER_LIMIT', 10))
 CODE_ROOM_WAITING_ACTIVE_SECONDS = int(getattr(settings, 'CODE_ROOM_WAITING_ACTIVE_SECONDS', 10))
+CHAT_POLL_AUTO_REFRESH_SECONDS = 10
 
 
 def _code_room_waiting_cutoff():
@@ -508,6 +510,83 @@ def _attach_reaction_pills(messages, user):
             if c:
                 pills.append({'emoji': emoji, 'count': c, 'reacted': (m.id, emoji) in reacted})
         m.reaction_pills = pills
+
+
+def _attach_poll_cards(messages, user):
+    if not messages:
+        return
+
+    poll_ids = [getattr(m, 'poll_id', None) for m in messages if getattr(m, 'poll_id', None)]
+    poll_ids = [pid for pid in poll_ids if pid]
+    if not poll_ids:
+        return
+
+    options = list(
+        ChatPollOption.objects
+        .filter(poll_id__in=poll_ids)
+        .order_by('poll_id', 'sort_order', 'id')
+    )
+
+    vote_rows = (
+        ChatPollVote.objects
+        .filter(poll_id__in=poll_ids)
+        .values('poll_id', 'option_id')
+        .annotate(count=Count('id'))
+    )
+    counts = {
+        (int(row['poll_id']), int(row['option_id'])): int(row['count'] or 0)
+        for row in vote_rows
+    }
+
+    my_votes = set()
+    try:
+        uid = int(getattr(user, 'id', 0) or 0)
+    except Exception:
+        uid = 0
+    if uid:
+        my_votes = set(
+            ChatPollVote.objects
+            .filter(poll_id__in=poll_ids, user_id=uid)
+            .values_list('poll_id', 'option_id')
+        )
+
+    by_poll = {}
+    for opt in options:
+        by_poll.setdefault(int(opt.poll_id), []).append(opt)
+
+    for m in messages:
+        pid = int(getattr(m, 'poll_id', 0) or 0)
+        if not pid:
+            m.poll_view = None
+            continue
+
+        opts = by_poll.get(pid, [])
+        total_votes = 0
+        opt_payload = []
+        for opt in opts:
+            c = int(counts.get((pid, int(opt.id)), 0) or 0)
+            total_votes += c
+            opt_payload.append({
+                'id': int(opt.id),
+                'text': str(opt.text or ''),
+                'count': c,
+                'selected': (pid, int(opt.id)) in my_votes,
+                'percent': 0,
+            })
+
+        if total_votes > 0:
+            for row in opt_payload:
+                row['percent'] = int(round((row['count'] * 100.0) / total_votes))
+
+        m.poll_view = {
+            'id': pid,
+            'question': str(getattr(getattr(m, 'poll', None), 'question', '') or ''),
+            'allow_multiple_answers': bool(getattr(getattr(m, 'poll', None), 'allow_multiple_answers', False)),
+            'total_votes': total_votes,
+            'has_voted': any(bool(row.get('selected')) for row in opt_payload),
+            'options': opt_payload,
+            'refresh_seconds': int(CHAT_POLL_AUTO_REFRESH_SECONDS),
+        }
 
 
 def _attach_one_time_view_flags(messages, user):
@@ -798,6 +877,7 @@ def chat_view(request, chatroom_name='public-chat'):
         has_older_messages = False
 
     _attach_reaction_pills(chat_messages, request.user)
+    _attach_poll_cards(chat_messages, request.user)
     _attach_one_time_view_flags(chat_messages, request.user)
     form = ChatmessageCreateForm()
     # UX: public/group chats use a more standard placeholder.
@@ -1206,6 +1286,7 @@ def chat_view(request, chatroom_name='public-chat'):
             )
 
             _attach_reaction_pills([message], request.user)
+            _attach_poll_cards([message], request.user)
             attach_auto_badges([message], chat_group)
             verified_user_ids = get_verified_user_ids([getattr(request.user, 'id', None)])
             html = render(request, 'a_rtchat/chat_message.html', {
@@ -2033,6 +2114,7 @@ def chat_view(request, chatroom_name='public-chat'):
             )
 
             _attach_reaction_pills([message], request.user)
+            _attach_poll_cards([message], request.user)
             attach_auto_badges([message], chat_group)
             verified_user_ids = get_verified_user_ids([getattr(request.user, 'id', None)])
             html = render(request, 'a_rtchat/chat_message.html', {
@@ -2318,6 +2400,7 @@ def chat_view(request, chatroom_name='public-chat'):
 
     context['chat_config'] = {
         'chatroomName': chatroom_name,
+        'isPrivateRoom': bool(getattr(chat_group, 'is_private', False)),
         'currentUserId': getattr(request.user, 'id', 0) or 0,
         'currentUsername': request.user.username,
         'otherLastReadId': int(other_last_read_id or 0),
@@ -2330,6 +2413,10 @@ def chat_view(request, chatroom_name='public-chat'):
         'messageEditUrlTemplate': reverse('message-edit', args=[0]),
         'messageDeleteUrlTemplate': reverse('message-delete', args=[0]),
         'messageReactUrlTemplate': reverse('message-react', args=[0]),
+        'pollCreateUrl': reverse('chat-poll-create', args=[chatroom_name]),
+        'pollVoteUrlTemplate': reverse('chat-poll-vote', args=[0]),
+        'pollBoxUrlTemplate': reverse('chat-poll-box', args=[0]),
+        'pollAutoRefreshSeconds': int(CHAT_POLL_AUTO_REFRESH_SECONDS),
         'mentionSearchUrl': reverse('mention-search'),
         'chatMutedSeconds': int(chat_muted_seconds or 0),
         'otherUsername': other_user.username if other_user else '',
@@ -2344,6 +2431,9 @@ def chat_view(request, chatroom_name='public-chat'):
         'chatBlocked': bool(chat_blocked),
         'forceRoomTutorial': bool(show_public_chat_tutorial),
         'unreadMentionRooms': unread_mention_rooms,
+        'iplWidgetPosition': str(getattr(settings, 'IPL_WIDGET_DEFAULT_POSITION', 'top-center') or 'top-center'),
+        'iplWidgetMinimized': bool(getattr(settings, 'IPL_WIDGET_DEFAULT_MINIMIZED', False)),
+        'iplInitialScore': get_cached_ipl_state() or {},
     }
 
     context['gifs_allowed'] = bool(gifs_allowed)
@@ -2457,6 +2547,7 @@ def chat_config_view(request, chatroom_name):
 
     data = {
         'chatroomName': chatroom_name,
+        'isPrivateRoom': bool(getattr(chat_group, 'is_private', False)),
         'currentUserId': getattr(request.user, 'id', 0) or 0,
         'currentUsername': request.user.username,
         'otherLastReadId': other_last_read_id,
@@ -2469,6 +2560,10 @@ def chat_config_view(request, chatroom_name):
         'messageEditUrlTemplate': reverse('message-edit', args=[0]),
         'messageDeleteUrlTemplate': reverse('message-delete', args=[0]),
         'messageReactUrlTemplate': reverse('message-react', args=[0]),
+        'pollCreateUrl': reverse('chat-poll-create', args=[chatroom_name]),
+        'pollVoteUrlTemplate': reverse('chat-poll-vote', args=[0]),
+        'pollBoxUrlTemplate': reverse('chat-poll-box', args=[0]),
+        'pollAutoRefreshSeconds': int(CHAT_POLL_AUTO_REFRESH_SECONDS),
         'mentionSearchUrl': reverse('mention-search'),
         'chatMutedSeconds': int(chat_muted_seconds or 0),
         'otherUsername': other_user.username if other_user else '',
@@ -2549,6 +2644,7 @@ def chat_older_view(request, chatroom_name):
 
     batch.reverse()
     _attach_reaction_pills(batch, request.user)
+    _attach_poll_cards(batch, request.user)
     _attach_one_time_view_flags(batch, request.user)
 
     verified_user_ids = set()
@@ -4043,6 +4139,7 @@ def chat_file_upload(request, chatroom_name):
     # even if websockets are unavailable.
     if is_htmx:
         _attach_reaction_pills([message], request.user)
+        _attach_poll_cards([message], request.user)
         _attach_one_time_view_flags([message], request.user)
         verified_user_ids = get_verified_user_ids([getattr(request.user, 'id', None)])
         html = render(request, 'a_rtchat/chat_message.html', {
@@ -4250,6 +4347,7 @@ def chat_poll_view(request, chatroom_name):
         return JsonResponse({'messages_html': '', 'last_id': after_id, 'online_count': online_count})
 
     _attach_reaction_pills(new_messages, request.user)
+    _attach_poll_cards(new_messages, request.user)
     _attach_one_time_view_flags(new_messages, request.user)
 
     verified_user_ids = set()
@@ -4274,6 +4372,187 @@ def chat_poll_view(request, chatroom_name):
 
     last_id = new_messages[-1].id
     return JsonResponse({'messages_html': ''.join(parts), 'last_id': last_id, 'online_count': online_count})
+
+
+def _poll_room_for_user_or_404(request, chatroom_name):
+    if chatroom_name == 'public-chat':
+        raise Http404()
+
+    chat_group = get_object_or_404(ChatGroup, group_name=chatroom_name)
+
+    if _is_chat_banned(request.user):
+        raise Http404()
+    if _is_chat_blocked(request.user):
+        raise Http404()
+    if not bool(getattr(chat_group, 'is_private', False)):
+        raise Http404()
+    if request.user not in chat_group.members.all() and not getattr(request.user, 'is_staff', False):
+        raise Http404()
+
+    return chat_group
+
+
+@login_required
+@require_POST
+def chat_poll_create_view(request, chatroom_name):
+    chat_group = _poll_room_for_user_or_404(request, chatroom_name)
+
+    rl = check_rate_limit(
+        make_key('chat_poll_create', chat_group.group_name, request.user.id),
+        limit=8,
+        period_seconds=60,
+    )
+    if not rl.allowed:
+        resp = JsonResponse({'ok': False, 'error': 'Too many poll requests.'}, status=429)
+        resp['Retry-After'] = str(int(rl.retry_after or 10))
+        return resp
+
+    payload = {}
+    try:
+        if request.content_type and 'application/json' in request.content_type:
+            payload = json.loads((request.body or b'{}').decode('utf-8'))
+    except Exception:
+        payload = {}
+
+    question = str((payload.get('question') if isinstance(payload, dict) else None) or request.POST.get('question') or '').strip()
+    allow_multiple = bool((payload.get('allow_multiple_answers') if isinstance(payload, dict) else False) or (request.POST.get('allow_multiple_answers') in {'1', 'true', 'on'}))
+
+    raw_options = []
+    if isinstance(payload, dict) and isinstance(payload.get('options'), list):
+        raw_options = payload.get('options') or []
+    else:
+        raw_options = request.POST.getlist('options[]') or request.POST.getlist('options')
+
+    options = []
+    seen = set()
+    for raw in (raw_options or []):
+        txt = str(raw or '').strip()
+        if not txt:
+            continue
+        key = txt.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        options.append(txt[:120])
+        if len(options) >= 6:
+            break
+
+    if not question:
+        return JsonResponse({'ok': False, 'error': 'Question is required.'}, status=400)
+    if len(question) > 180:
+        question = question[:180]
+    if len(options) < 2:
+        return JsonResponse({'ok': False, 'error': 'At least 2 options are required.'}, status=400)
+
+    with transaction.atomic():
+        poll = ChatPoll.objects.create(
+            group=chat_group,
+            created_by=request.user,
+            question=question,
+            allow_multiple_answers=bool(allow_multiple),
+        )
+        ChatPollOption.objects.bulk_create([
+            ChatPollOption(poll=poll, text=opt, sort_order=idx)
+            for idx, opt in enumerate(options)
+        ])
+        message = GroupMessage.objects.create(
+            group=chat_group,
+            author=request.user,
+            poll=poll,
+        )
+
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        chatroom_channel_group_name(chat_group),
+        {
+            'type': 'message_handler',
+            'message_id': message.id,
+            'skip_sender': True,
+            'author_id': request.user.id,
+        },
+    )
+
+    _attach_reaction_pills([message], request.user)
+    _attach_poll_cards([message], request.user)
+    _attach_one_time_view_flags([message], request.user)
+    attach_auto_badges([message], chat_group)
+    verified_user_ids = get_verified_user_ids([getattr(request.user, 'id', None)])
+    html = render(request, 'a_rtchat/chat_message.html', {
+        'message': message,
+        'user': request.user,
+        'chat_group': chat_group,
+        'reaction_emojis': CHAT_REACTION_EMOJIS,
+        'other_last_read_id': 0,
+        'verified_user_ids': verified_user_ids,
+    }).content.decode('utf-8')
+
+    return JsonResponse({'ok': True, 'html': html, 'message_id': int(message.id)})
+
+
+@login_required
+@require_POST
+def chat_poll_vote_view(request, message_id: int):
+    message = get_object_or_404(GroupMessage, pk=message_id)
+    chat_group = message.group
+    _poll_room_for_user_or_404(request, getattr(chat_group, 'group_name', ''))
+
+    poll = getattr(message, 'poll', None)
+    if not poll:
+        return JsonResponse({'ok': False, 'error': 'Poll not found.'}, status=404)
+
+    try:
+        option_id = int(request.POST.get('option_id') or 0)
+    except Exception:
+        option_id = 0
+    option = ChatPollOption.objects.filter(id=option_id, poll=poll).first()
+    if not option:
+        return JsonResponse({'ok': False, 'error': 'Invalid option.'}, status=400)
+
+    with transaction.atomic():
+        if bool(getattr(poll, 'allow_multiple_answers', False)):
+            existing = ChatPollVote.objects.filter(poll=poll, option=option, user=request.user)
+            if existing.exists():
+                existing.delete()
+            else:
+                ChatPollVote.objects.create(poll=poll, option=option, user=request.user)
+        else:
+            ChatPollVote.objects.filter(poll=poll, user=request.user).exclude(option=option).delete()
+            ChatPollVote.objects.get_or_create(poll=poll, option=option, user=request.user)
+
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        chatroom_channel_group_name(chat_group),
+        {
+            'type': 'message_update_handler',
+            'message_id': message.id,
+        },
+    )
+
+    _attach_poll_cards([message], request.user)
+    html = render(request, 'a_rtchat/partials/poll_box.html', {
+        'message': message,
+        'chat_group': chat_group,
+        'user': request.user,
+    }).content.decode('utf-8')
+    return JsonResponse({'ok': True, 'html': html, 'message_id': int(message.id)})
+
+
+@login_required
+def chat_poll_message_box_view(request, message_id: int):
+    message = get_object_or_404(GroupMessage, pk=message_id)
+    chat_group = message.group
+    _poll_room_for_user_or_404(request, getattr(chat_group, 'group_name', ''))
+
+    if not getattr(message, 'poll_id', None):
+        raise Http404()
+
+    _attach_poll_cards([message], request.user)
+    html = render(request, 'a_rtchat/partials/poll_box.html', {
+        'message': message,
+        'chat_group': chat_group,
+        'user': request.user,
+    }).content.decode('utf-8')
+    return JsonResponse({'ok': True, 'html': html, 'message_id': int(message.id)})
 
 
 @login_required
@@ -4373,7 +4652,7 @@ def message_delete_view(request, message_id: int):
     message = get_object_or_404(GroupMessage, pk=message_id)
     chat_group = message.group
 
-    if message.author_id != request.user.id and not request.user.is_staff:
+    if message.author_id != request.user.id and not request.user.is_staff and not request.user.is_superuser:
         raise Http404()
 
     if getattr(chat_group, 'is_private', False) and request.user not in chat_group.members.all():
@@ -4381,17 +4660,52 @@ def message_delete_view(request, message_id: int):
     if chat_group.groupchat_name and request.user not in chat_group.members.all():
         raise Http404()
 
-    deleted_id = message.id
-    message.delete()
+    is_public_group = (not bool(getattr(chat_group, 'is_private', False))) and (not bool(getattr(chat_group, 'is_code_room', False)))
+    deleted_by_moderator = bool(request.user.is_staff or request.user.is_superuser)
 
     channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        chatroom_channel_group_name(chat_group),
-        {
-            'type': 'message_delete_handler',
-            'message_id': deleted_id,
-        },
-    )
+
+    if is_public_group and deleted_by_moderator:
+        message.body = '[MOD_HIDDEN]'
+        message.file = None
+        message.file_caption = ''
+        message.reply_to = None
+        message.link_url = ''
+        message.link_title = ''
+        message.link_description = ''
+        message.link_image = ''
+        message.link_site_name = ''
+        message.edited_at = timezone.now()
+        message.save(update_fields=[
+            'body',
+            'file',
+            'file_caption',
+            'reply_to',
+            'link_url',
+            'link_title',
+            'link_description',
+            'link_image',
+            'link_site_name',
+            'edited_at',
+        ])
+
+        async_to_sync(channel_layer.group_send)(
+            chatroom_channel_group_name(chat_group),
+            {
+                'type': 'message_update_handler',
+                'message_id': message.id,
+            },
+        )
+    else:
+        deleted_id = message.id
+        message.delete()
+        async_to_sync(channel_layer.group_send)(
+            chatroom_channel_group_name(chat_group),
+            {
+                'type': 'message_delete_handler',
+                'message_id': deleted_id,
+            },
+        )
     return HttpResponse('', status=204)
 
 
