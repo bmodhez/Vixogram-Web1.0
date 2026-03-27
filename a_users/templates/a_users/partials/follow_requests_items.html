@@ -1,0 +1,52 @@
+{% if items %}
+    {% for fr in items %}
+        <div class="flex items-center gap-3 rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-3">
+            <img src="{{ fr.from_user.profile.avatar }}" class="w-9 h-9 rounded-full object-cover border border-gray-700" alt="@{{ fr.from_user.username }}">
+            <div class="flex-1 min-w-0">
+                <div class="text-sm font-semibold text-gray-100 truncate">@{{ fr.from_user.username }}</div>
+                <div class="text-[11px] text-gray-400">Requested</div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <form method="post"
+                      action="{% url 'follow-request-decide' fr.id 'accept' %}"
+                      hx-post="{% url 'follow-request-decide' fr.id 'accept' %}"
+                      hx-target="#global_modal_root"
+                      hx-swap="innerHTML"
+                      hx-push-url="false"
+                      class="m-0">
+                    {% csrf_token %}
+                    <button type="submit" class="inline-flex items-center justify-center h-9 w-9 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition" aria-label="Accept">
+                        <span class="text-base" aria-hidden="true">✓</span>
+                    </button>
+                </form>
+
+                <form method="post"
+                      action="{% url 'follow-request-decide' fr.id 'reject' %}"
+                      hx-post="{% url 'follow-request-decide' fr.id 'reject' %}"
+                      hx-target="#global_modal_root"
+                      hx-swap="innerHTML"
+                      hx-push-url="false"
+                      class="m-0">
+                    {% csrf_token %}
+                    <button type="submit" class="inline-flex items-center justify-center h-9 w-9 rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 transition" aria-label="Reject">
+                        <span class="text-base" aria-hidden="true">✕</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    {% endfor %}
+
+    {% if has_more %}
+        <div
+            hx-get="{% url 'follow-requests-modal' %}?partial=1&amp;offset={{ next_offset }}"
+            hx-trigger="revealed"
+            hx-swap="outerHTML"
+            class="py-1 text-center text-xs text-gray-500"
+        >
+            Loading more...
+        </div>
+    {% endif %}
+{% elif offset|default:0 == 0 %}
+    <div class="text-sm text-gray-400">No follow requests right now.</div>
+{% endif %}

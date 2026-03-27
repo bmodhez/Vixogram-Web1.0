@@ -15,15 +15,16 @@
             </a>
         </div>
 
-        {% if messages %}
-            <div class="space-y-2 mb-6">
-                {% for message in messages %}
-                    <div class="bg-gray-900/40 border border-gray-700 rounded-lg px-4 py-3 text-sm text-gray-200">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            </div>
-        {% endif %}
+        <div
+            id="email-resend-cooldown-banner"
+            class="mb-6 rounded-lg border px-4 py-3 text-sm font-semibold {% if email_resend_cooldown_remaining|default:0 > 0 %}border-red-500/50 bg-red-500/10 text-red-300{% else %}hidden border-emerald-500/40 bg-emerald-500/10 text-emerald-300{% endif %}"
+            data-cooldown-seconds="{{ email_resend_cooldown_remaining|default:0 }}"
+            aria-live="polite"
+        >
+            {% if email_resend_cooldown_remaining|default:0 > 0 %}
+                Please wait <span id="email-resend-cooldown-time" class="tabular-nums">{{ email_resend_cooldown_remaining }}</span>s before resending verification.
+            {% endif %}
+        </div>
 
         {% if emailaddresses %}
             <div class="mb-8">
@@ -69,7 +70,7 @@
                             {% trans "Make primary" %}
                         </button>
                         <button type="submit" name="action_send" class="bg-gray-700 hover:bg-gray-600 text-white rounded-lg px-4 py-2 transition-colors">
-                            {% trans "Re-send verification" %}
+                            {% trans "Send verification" %}
                         </button>
                         <button type="submit" name="action_remove" data-confirm="{% trans "Remove the selected email address?" %}" data-confirm-title="Remove email" class="bg-red-600 hover:bg-red-700 text-white rounded-lg px-4 py-2 transition-colors">
                             {% trans "Remove" %}
@@ -87,12 +88,13 @@
             <div class="border-t border-gray-700 pt-6">
                 <h2 class="text-sm font-semibold text-gray-200 mb-3">{% trans "Add email address" %}</h2>
 
-                <form method="post" action="{% url 'account_email' %}" class="space-y-3">
+                <form method="post" action="{% url 'account_email' %}" class="space-y-3" data-email-add-form="1" novalidate>
                     {% csrf_token %}
 
                     <div class="flex flex-col gap-1">
                         <label class="text-sm text-gray-300" for="id_email">{% trans "Email" %}</label>
                         {{ form.email }}
+                        <div id="email-add-custom-error" class="hidden text-xs text-red-400">Please enter a valid email address to continue.</div>
                         {% if form.email.errors %}
                             <div class="text-xs text-red-400">{{ form.email.errors|first }}</div>
                         {% endif %}
@@ -105,7 +107,164 @@
             </div>
         {% endif %}
 
+        <div id="email-spam-warning-modal" class="fixed inset-0 z-[65] hidden items-center justify-center p-4 sm:p-6">
+            <div class="absolute inset-0 bg-gray-950/75 backdrop-blur-sm" data-email-spam-close></div>
+            <div class="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-indigo-400/35 bg-gradient-to-br from-[#0b1228] via-[#101a36] to-[#0f172a] text-gray-100 shadow-2xl shadow-black/40">
+                <div aria-hidden="true" class="h-[2px] w-full bg-gradient-to-r from-cyan-400 via-indigo-400 to-fuchsia-400"></div>
+                <div class="p-5 sm:p-6">
+                    <div class="flex items-start gap-3">
+                        <div class="mt-1 h-2.5 w-2.5 flex-none rounded-full bg-red-400"></div>
+                        <div class="min-w-0 flex-1">
+                            <h3 class="text-base font-extrabold tracking-wide text-white">Spam Click Warning</h3>
+                            <p class="mt-2 text-sm leading-6 text-gray-200">Spam clicks aren't allowed in Vixogram. This may temporarily limit your access. Please try again after a few seconds.</p>
+                        </div>
+                        <button type="button" class="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60 transition" aria-label="Dismiss" data-email-spam-close>
+                            <span aria-hidden="true">x</span>
+                        </button>
+                    </div>
+                    <div class="mt-5 flex justify-end">
+                        <button type="button" class="inline-flex items-center rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 transition" data-email-spam-close>
+                            Okay
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <script src="{% static 'js/account.js' %}" defer></script>
+        <script>
+            (() => {
+                const banner = document.getElementById('email-resend-cooldown-banner');
+                if (!banner) return;
+
+                const timeEl = document.getElementById('email-resend-cooldown-time');
+                let remaining = Number(banner.getAttribute('data-cooldown-seconds') || 0);
+                if (!Number.isFinite(remaining) || remaining < 0) remaining = 0;
+                remaining = Math.floor(remaining);
+                const hadActiveCooldownAtLoad = remaining > 0;
+
+                const setActive = (seconds) => {
+                    banner.classList.remove('hidden');
+                    banner.classList.remove('border-emerald-500/40', 'bg-emerald-500/10', 'text-emerald-300');
+                    banner.classList.add('border-red-500/50', 'bg-red-500/10', 'text-red-300');
+                    banner.innerHTML = `Please wait <span id="email-resend-cooldown-time" class="tabular-nums">${seconds}</span>s before resending verification.`;
+                };
+
+                const setReady = () => {
+                    banner.classList.remove('hidden');
+                    banner.classList.remove('border-red-500/50', 'bg-red-500/10', 'text-red-300');
+                    banner.classList.add('border-emerald-500/40', 'bg-emerald-500/10', 'text-emerald-300');
+                    banner.textContent = 'You can resend verification now.';
+                };
+
+                if (!hadActiveCooldownAtLoad) {
+                    banner.classList.add('hidden');
+                    return;
+                }
+
+                setActive(remaining);
+                const timer = window.setInterval(() => {
+                    remaining -= 1;
+                    if (remaining <= 0) {
+                        window.clearInterval(timer);
+                        setReady();
+                        return;
+                    }
+                    setActive(remaining);
+                }, 1000);
+            })();
+
+            (() => {
+                const root = document.getElementById('account-email-page');
+                const modal = document.getElementById('email-spam-warning-modal');
+                if (!root || !modal) return;
+
+                const closeButtons = Array.from(modal.querySelectorAll('[data-email-spam-close]'));
+                const showSpamWarning = () => {
+                    modal.classList.remove('hidden');
+                    modal.classList.add('flex');
+                };
+                const hideSpamWarning = () => {
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                };
+
+                closeButtons.forEach((btn) => {
+                    btn.addEventListener('click', hideSpamWarning);
+                });
+
+                let isProcessing = false;
+
+                const addEmailForm = root.querySelector('form[data-email-add-form="1"]');
+                const addEmailInput = addEmailForm ? addEmailForm.querySelector('input[name="email"]') : null;
+                const addEmailError = document.getElementById('email-add-custom-error');
+
+                const showAddEmailError = (show) => {
+                    if (!addEmailError) return;
+                    if (show) addEmailError.classList.remove('hidden');
+                    else addEmailError.classList.add('hidden');
+                };
+
+                if (addEmailInput) {
+                    addEmailInput.addEventListener('input', () => {
+                        showAddEmailError(false);
+                    });
+                }
+
+                root.addEventListener('submit', (ev) => {
+                    const form = ev.target;
+                    if (!form || form.tagName !== 'FORM' || !root.contains(form)) return;
+
+                    if (addEmailForm && form === addEmailForm) {
+                        const value = String((addEmailInput && addEmailInput.value) || '').trim();
+                        const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+                        if (!emailOk) {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            if (typeof ev.stopImmediatePropagation === 'function') {
+                                ev.stopImmediatePropagation();
+                            }
+                            showAddEmailError(true);
+                            try { if (addEmailInput) addEmailInput.focus(); } catch {}
+                            return;
+                        }
+                    }
+
+                    const action = String(form.getAttribute('action') || '').toLowerCase();
+                    const isTwoStepAuthForm = (
+                        action.includes('/accounts/login/')
+                        || action.includes('/accounts/signup/')
+                        || action.includes('/accounts/password/reset/')
+                        || action.includes('/accounts/password/change/')
+                        || action.includes('/accounts/password/reset/key/')
+                    );
+                    const delayedFlag = !!(form.dataset && form.dataset.vixoSubmitDelayed === '1');
+
+                    // account.js on auth pages triggers a two-step submit.
+                    // First pass is pre-submit animation/prep and should not be treated as spam.
+                    if (isTwoStepAuthForm && !delayedFlag) {
+                        return;
+                    }
+
+                    if (isProcessing) {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        if (typeof ev.stopImmediatePropagation === 'function') {
+                            ev.stopImmediatePropagation();
+                        }
+                        showSpamWarning();
+                        return;
+                    }
+
+                    isProcessing = true;
+
+                    // Unlock in case browser does not navigate away.
+                    window.setTimeout(() => {
+                        isProcessing = false;
+                    }, 3000);
+                }, true);
+            })();
+        </script>
     </div>
 </wrapper>
 {% endblock %}

@@ -5,7 +5,7 @@
 {% with urlname=request.resolver_match.url_name|default:'' %}
 {% if urlname|slice:':11' == 'onboarding-' %}
 <div
-    class="vixo-auth-bg vixo-onboarding-bg w-full min-h-[calc(100vh-7rem)] relative flex items-center justify-center px-4 sm:px-6 py-10 sm:pt-20 sm:pb-14 overflow-hidden"
+    class="vixo-auth-bg vixo-onboarding-bg w-full min-h-[calc(100vh-5rem)] relative flex items-center justify-center px-4 sm:px-6 py-10 sm:pt-20 sm:pb-14 overflow-hidden"
     data-vixo-onboarding-step="{{ urlname }}"
     style="--vixo-auth-bg: url('{% static 'bg2.jpeg' %}'); --vixo-auth-overlay: 0.38; --vixo-auth-bg-position-mobile: center; --vixo-auth-bg-corner-size-mobile: 190% auto; --vixo-auth-bg-corner-opacity-mobile: 0.45;"
 >
@@ -23,6 +23,20 @@
             <span class="vixo-box-break-shard vixo-box-break-shard--b"></span>
             <span class="vixo-box-break-shard vixo-box-break-shard--c"></span>
         </div>
+        {% if urlname|slice:':11' == 'onboarding-' %}
+        <div id="vixo-onboarding-progress" class="mb-5 sm:mb-6" aria-label="Onboarding progress" role="group">
+            <div class="vixo-onboarding-step-row">
+                <a class="vixo-onboarding-step-pill" data-step-key="onboarding-username" href="{% url 'onboarding-username' %}" aria-disabled="true" tabindex="-1">Username</a>
+                <a class="vixo-onboarding-step-pill" data-step-key="onboarding-intro" href="{% url 'onboarding-intro' %}" aria-disabled="true" tabindex="-1">Intro</a>
+                <a class="vixo-onboarding-step-pill" data-step-key="onboarding-photo" href="{% url 'onboarding-photo' %}" aria-disabled="true" tabindex="-1">Photo</a>
+                <a class="vixo-onboarding-step-pill" data-step-key="onboarding-about" href="{% url 'onboarding-about' %}" aria-disabled="true" tabindex="-1">About</a>
+            </div>
+            <div class="vixo-onboarding-progress-track" aria-hidden="true">
+                <span id="vixo-onboarding-progress-fill" class="vixo-onboarding-progress-fill"></span>
+            </div>
+            <p id="vixo-onboarding-progress-label" class="vixo-onboarding-progress-label mt-2"></p>
+        </div>
+        {% endif %}
         <div class="flex items-start justify-between gap-4 mb-6">
             <div class="min-w-0">
                 <h1 class="text-xl font-extrabold tracking-wide text-white truncate">
@@ -39,12 +53,104 @@
 {% endwith %}
 
 <style>
+    html.vixo-onboarding-scroll-hidden,
+    body.vixo-onboarding-scroll-hidden {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+
+    html.vixo-onboarding-scroll-hidden::-webkit-scrollbar,
+    body.vixo-onboarding-scroll-hidden::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+    }
+
     .vixo-auth-bg.vixo-onboarding-bg {
         isolation: isolate;
         background-image: linear-gradient(
             rgba(2, 6, 23, var(--vixo-auth-overlay, 0.38)),
             rgba(2, 6, 23, var(--vixo-auth-overlay, 0.38))
         );
+    }
+
+    .vixo-onboarding-step-row {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.4rem;
+    }
+
+    .vixo-onboarding-step-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(17, 24, 39, 0.36);
+        color: rgba(226, 232, 240, 0.92);
+        padding: 0.28rem 0.5rem;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, color 180ms ease;
+        white-space: nowrap;
+        text-decoration: none;
+        cursor: default;
+        pointer-events: none;
+    }
+
+    .vixo-onboarding-step-pill.is-clickable {
+        cursor: pointer;
+        pointer-events: auto;
+    }
+
+    .vixo-onboarding-step-pill.is-clickable:hover,
+    .vixo-onboarding-step-pill.is-clickable:focus-visible {
+        color: #ffffff;
+        border-color: rgba(129, 140, 248, 0.7);
+        background: linear-gradient(120deg, rgba(99, 102, 241, 0.38), rgba(56, 189, 248, 0.34));
+        transform: translateY(-1px);
+        outline: none;
+    }
+
+    .vixo-onboarding-step-pill.is-complete {
+        color: #f8fafc;
+        border-color: rgba(56, 189, 248, 0.52);
+        background: linear-gradient(120deg, rgba(56, 189, 248, 0.32), rgba(14, 116, 144, 0.25));
+    }
+
+    .vixo-onboarding-step-pill.is-active {
+        color: #ffffff;
+        border-color: rgba(167, 139, 250, 0.72);
+        background: linear-gradient(120deg, rgba(168, 85, 247, 0.5), rgba(56, 189, 248, 0.45));
+        transform: translateY(-1px);
+    }
+
+    .vixo-onboarding-progress-track {
+        position: relative;
+        margin-top: 0.6rem;
+        height: 0.46rem;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.65);
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        overflow: hidden;
+    }
+
+    .vixo-onboarding-progress-fill {
+        display: block;
+        height: 100%;
+        width: var(--vixo-progress-width, 25%);
+        border-radius: inherit;
+        background: linear-gradient(90deg, #f472b6 0%, #a78bfa 35%, #60a5fa 68%, #22d3ee 100%);
+        box-shadow: 0 0 14px rgba(96, 165, 250, 0.34);
+        transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .vixo-onboarding-progress-label {
+        margin-bottom: 0;
+        color: rgba(203, 213, 225, 0.9);
+        font-size: 0.78rem;
+        font-weight: 600;
     }
 
     .vixo-onboarding-bg-rotor {
@@ -65,6 +171,36 @@
             transform 520ms cubic-bezier(0.22, 1, 0.36, 1),
             background-position 420ms cubic-bezier(0.22, 1, 0.36, 1),
             filter 420ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--left {
+        --vixo-onboarding-bg-pos: 40% center;
+        --vixo-onboarding-hue: -5deg;
+        --vixo-onboarding-sat: 1.08;
+        --vixo-onboarding-bright: 1.02;
+    }
+
+    .vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--right {
+        --vixo-onboarding-bg-pos: 62% center;
+        --vixo-onboarding-hue: 6deg;
+        --vixo-onboarding-sat: 1.12;
+        --vixo-onboarding-bright: 1.04;
+    }
+
+    .vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--enter-left .vixo-onboarding-bg-rotor {
+        transform: translateX(-1.8%) scaleX(1) scale(1.03);
+    }
+
+    .vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--enter-right .vixo-onboarding-bg-rotor {
+        transform: translateX(1.8%) scaleX(1) scale(1.03);
+    }
+
+    .vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--leave-left .vixo-onboarding-bg-rotor {
+        transform: translateX(-2.6%) scaleX(1) scale(1.03);
+    }
+
+    .vixo-auth-bg.vixo-onboarding-bg.vixo-onboarding-bg--leave-right .vixo-onboarding-bg-rotor {
+        transform: translateX(2.6%) scaleX(1) scale(1.03);
     }
 
     .vixo-page-loader {
@@ -266,12 +402,17 @@
 
 <script>
 (function () {
-    const card = document.getElementById('vixo-box-card');
-    if (!card) return;
-    const bg = card.closest('.vixo-onboarding-bg');
     const pageLoader = document.getElementById('vixo-page-loader');
+    const body = document.body;
+    const docEl = document.documentElement;
 
-    let closing = false;
+    let card = document.getElementById('vixo-box-card');
+    if (!card) return;
+    let bg = card.closest('.vixo-onboarding-bg');
+
+    let inFlight = false;
+
+    const STEP_PATH_RE = /\/onboarding\/(username|intro|photo|about)\/?$/i;
 
     function sideForStep(step) {
         const map = {
@@ -301,6 +442,137 @@
         return sideForStep(step);
     }
 
+    function getCurrentStepKey() {
+        if (!bg) return '';
+        return bg.getAttribute('data-vixo-onboarding-step') || '';
+    }
+
+    function stepOrder() {
+        return ['onboarding-username', 'onboarding-intro', 'onboarding-photo', 'onboarding-about'];
+    }
+
+    function renderStepProgress() {
+        if (!card) return;
+        const wrap = card.querySelector('#vixo-onboarding-progress');
+        if (!wrap) return;
+
+        const current = getCurrentStepKey();
+        const order = stepOrder();
+        const idx = Math.max(0, order.indexOf(current));
+        const done = idx + 1;
+        const pct = Math.round((done / order.length) * 100);
+
+        const pills = wrap.querySelectorAll('.vixo-onboarding-step-pill');
+        pills.forEach((pill, i) => {
+            pill.classList.remove('is-complete', 'is-active', 'is-clickable');
+            pill.setAttribute('aria-disabled', 'true');
+            pill.setAttribute('tabindex', '-1');
+            if (i < idx) {
+                pill.classList.add('is-complete');
+                pill.classList.add('is-clickable');
+                pill.setAttribute('aria-disabled', 'false');
+                pill.setAttribute('tabindex', '0');
+            } else if (i === idx) {
+                pill.classList.add('is-active');
+            }
+        });
+
+        const fill = wrap.querySelector('#vixo-onboarding-progress-fill');
+        if (fill) {
+            fill.style.setProperty('--vixo-progress-width', pct + '%');
+        }
+
+        const label = wrap.querySelector('#vixo-onboarding-progress-label');
+        if (label) {
+            label.textContent = 'Step ' + done + ' of ' + order.length + ' completed';
+        }
+    }
+
+    function syncOnboardingScrollbarClass() {
+        const shouldHide = !!bg;
+        try {
+            body.classList.toggle('vixo-onboarding-scroll-hidden', shouldHide);
+            if (docEl) docEl.classList.toggle('vixo-onboarding-scroll-hidden', shouldHide);
+        } catch {}
+    }
+
+    function isOnboardingHref(href) {
+        try {
+            const u = new URL(href, window.location.href);
+            return u.origin === window.location.origin && STEP_PATH_RE.test((u.pathname || '').toLowerCase());
+        } catch {
+            return false;
+        }
+    }
+
+    function parseIncomingStep(pathname) {
+        const p = (pathname || '').toLowerCase();
+        if (p.includes('/onboarding/username/')) return 'onboarding-username';
+        if (p.includes('/onboarding/intro/')) return 'onboarding-intro';
+        if (p.includes('/onboarding/photo/')) return 'onboarding-photo';
+        if (p.includes('/onboarding/about/')) return 'onboarding-about';
+        return '';
+    }
+
+    function syncOnboardingBodyClass(nextBodyClassName) {
+        if (!body) return;
+        try {
+            const current = new Set((body.className || '').split(/\s+/).filter(Boolean));
+            Array.from(current).forEach((cls) => {
+                if (/^vixo-onboarding-[a-z0-9-]+-page$/i.test(cls)) current.delete(cls);
+            });
+            const incoming = String(nextBodyClassName || '').split(/\s+/).filter(Boolean);
+            incoming.forEach((cls) => {
+                if (/^vixo-onboarding-[a-z0-9-]+-page$/i.test(cls)) current.add(cls);
+            });
+            body.className = Array.from(current).join(' ');
+        } catch {}
+    }
+
+    function runScriptsIn(root) {
+        if (!root) return;
+        const scripts = root.querySelectorAll('script');
+        scripts.forEach((oldScript) => {
+            const s = document.createElement('script');
+            for (let i = 0; i < oldScript.attributes.length; i += 1) {
+                const attr = oldScript.attributes[i];
+                s.setAttribute(attr.name, attr.value);
+            }
+            s.textContent = oldScript.textContent || '';
+            oldScript.parentNode.replaceChild(s, oldScript);
+        });
+    }
+
+    function mountIncomingCard(incomingDoc, resolvedUrl) {
+        if (!incomingDoc) return false;
+        const incomingCard = incomingDoc.getElementById('vixo-box-card');
+        if (!incomingCard || !card || !card.parentNode) return false;
+
+        const incomingBg = incomingDoc.querySelector('.vixo-onboarding-bg');
+        if (bg && incomingBg) {
+            const step = incomingBg.getAttribute('data-vixo-onboarding-step') || parseIncomingStep(new URL(resolvedUrl, window.location.href).pathname);
+            if (step) bg.setAttribute('data-vixo-onboarding-step', step);
+        }
+
+        syncOnboardingBodyClass(incomingDoc.body && incomingDoc.body.className ? incomingDoc.body.className : '');
+
+        card.replaceWith(incomingCard);
+        card = document.getElementById('vixo-box-card');
+        bg = card ? card.closest('.vixo-onboarding-bg') : bg;
+        if (!card) return false;
+
+        runScriptsIn(card);
+
+        try {
+            const incomingTitle = incomingDoc.querySelector('title');
+            if (incomingTitle && incomingTitle.textContent) {
+                document.title = incomingTitle.textContent;
+            }
+        } catch {}
+
+        return true;
+    }
+
     function prepareBgEnter() {
         if (!bg) return;
         const side = getCurrentSide();
@@ -317,10 +589,12 @@
     }
 
     function animateIn() {
+        syncOnboardingScrollbarClass();
+        renderStepProgress();
         prepareBgEnter();
         try {
             if (pageLoader) pageLoader.classList.remove('is-active');
-            document.body.classList.remove('vixo-page-loader-on');
+            body.classList.remove('vixo-page-loader-on');
         } catch {}
         try {
             card.classList.remove('vixo-box-card--break');
@@ -344,72 +618,164 @@
         try {
             if (!pageLoader) return;
             pageLoader.classList.add('is-active');
-            document.body.classList.add('vixo-page-loader-on');
+            body.classList.add('vixo-page-loader-on');
         } catch {}
     }
 
-    function animateOut(cb, nextSide) {
-        if (closing) return;
-        closing = true;
-        showLoader();
-        const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-        const leaveMs = reduceMotion ? 210 : 3050;
-        try { document.body.classList.add('vixo-page-leave'); } catch {}
-        if (bg) {
-            const outgoing = nextSide === 'right' ? 'vixo-onboarding-bg--leave-right' : 'vixo-onboarding-bg--leave-left';
-            try {
-                bg.classList.remove('vixo-onboarding-bg--leave-left', 'vixo-onboarding-bg--leave-right');
-                bg.classList.add(outgoing);
-            } catch {}
-        }
+    function animateOut(nextSide) {
+        if (!card) return;
         try {
-            if (reduceMotion) {
-                card.classList.remove('scale-100', 'opacity-100');
-                card.classList.add('scale-95', 'opacity-0');
-            } else {
-                card.classList.remove('scale-100', 'opacity-100');
-                card.classList.add('vixo-box-card--break');
+            card.classList.add('transition-[transform,opacity,filter]');
+            card.classList.add('duration-300');
+            card.classList.add('ease-out');
+            card.classList.remove('scale-100', 'opacity-100');
+            card.classList.add('scale-95', 'opacity-0');
+            card.style.filter = 'blur(1.2px)';
+        } catch {}
+
+        if (!bg) return;
+        try {
+            bg.classList.remove('vixo-onboarding-bg--leave-left', 'vixo-onboarding-bg--leave-right');
+            bg.classList.add(nextSide === 'right' ? 'vixo-onboarding-bg--leave-right' : 'vixo-onboarding-bg--leave-left');
+        } catch {}
+    }
+
+    async function fetchAndSwap(args) {
+        const method = (args.method || 'GET').toUpperCase();
+        const submitter = args.submitter || null;
+        let requestUrl = args.href;
+        let bodyPayload = null;
+        const headers = { 'X-Requested-With': 'XMLHttpRequest' };
+
+        if (method === 'GET' && args.form) {
+            const urlObj = new URL(args.form.getAttribute('action') || window.location.href, window.location.href);
+            const fd = new FormData(args.form);
+            if (submitter && submitter.name) fd.append(submitter.name, submitter.value || '');
+            const params = new URLSearchParams();
+            fd.forEach((val, key) => {
+                if (typeof val === 'string') params.append(key, val);
+            });
+            if (params.toString()) urlObj.search = params.toString();
+            requestUrl = urlObj.toString();
+        } else if (method !== 'GET' && args.form) {
+            const fd = new FormData(args.form);
+            if (submitter && submitter.name) fd.append(submitter.name, submitter.value || '');
+            bodyPayload = fd;
+        }
+
+        const resp = await fetch(requestUrl, {
+            method,
+            body: bodyPayload,
+            headers,
+            credentials: 'same-origin',
+            redirect: 'follow',
+        });
+
+        const html = await resp.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const resolvedUrl = resp.url || requestUrl;
+        const ok = mountIncomingCard(doc, resolvedUrl);
+        if (!ok) {
+            window.location.href = resolvedUrl;
+            return;
+        }
+
+        try {
+            const next = new URL(resolvedUrl, window.location.href);
+            const same = next.href === window.location.href;
+            if (!same) {
+                window.history.pushState({ vixoOnboarding: true }, '', next.href);
             }
         } catch {}
-        window.setTimeout(() => {
-            try { if (cb) cb(); } catch {}
-        }, leaveMs);
+
+        animateIn();
+    }
+
+    async function transitionTo(args) {
+        if (inFlight) return;
+        inFlight = true;
+        const nextSide = args.nextSide || (getCurrentSide() === 'left' ? 'right' : 'left');
+        animateOut(nextSide);
+        showLoader();
+        try {
+            await fetchAndSwap(args);
+        } catch {
+            if (args.href) {
+                window.location.href = args.href;
+            } else if (args.form) {
+                try { args.form.submit(); } catch {}
+            }
+        } finally {
+            inFlight = false;
+            try { card.style.filter = ''; } catch {}
+            try {
+                if (bg) bg.classList.remove('vixo-onboarding-bg--leave-left', 'vixo-onboarding-bg--leave-right');
+            } catch {}
+        }
     }
 
     animateIn();
 
-    // Animate out before navigating via links.
-    card.addEventListener('click', function (ev) {
+    // Intercept onboarding links and fetch the next step without full reload.
+    document.addEventListener('click', function (ev) {
+        if (!card || !bg) return;
         const a = ev.target && ev.target.closest ? ev.target.closest('a') : null;
         if (!a) return;
+        if (!card.contains(a)) return;
         if (a.hasAttribute('data-no-anim')) return;
         const href = a.getAttribute('href') || '';
         if (!href || href.startsWith('#')) return;
         if (a.getAttribute('target') === '_blank') return;
-        // Only same-origin navigation.
-        try {
-            const url = new URL(href, window.location.href);
-            if (url.origin !== window.location.origin) return;
-        } catch { return; }
+        if (!isOnboardingHref(href)) return;
 
         ev.preventDefault();
         const inferred = sideForHref(href);
         const nextSide = inferred || (getCurrentSide() === 'left' ? 'right' : 'left');
-        animateOut(() => { window.location.href = href; }, nextSide);
+        transitionTo({
+            href: new URL(href, window.location.href).toString(),
+            method: 'GET',
+            nextSide,
+        });
     }, true);
 
-    // Animate out before submitting forms.
-    card.addEventListener('submit', function (ev) {
+    // Intercept onboarding form submits and fetch server-rendered next step.
+    document.addEventListener('submit', function (ev) {
+        if (!card || !bg) return;
         const form = ev.target;
         if (!form || form.tagName !== 'FORM') return;
+        if (!card.contains(form)) return;
         if (form.hasAttribute('data-no-anim')) return;
-        if (closing) return;
+        const action = form.getAttribute('action') || window.location.href;
+        if (!isOnboardingHref(action)) return;
+        if (inFlight) return;
         ev.preventDefault();
-        const nextSide = getCurrentSide() === 'left' ? 'right' : 'left';
-        animateOut(() => {
-            try { form.submit(); } catch {}
-        }, nextSide);
+
+        const submitter = ev.submitter || null;
+        let nextSide = sideForHref(action) || (getCurrentSide() === 'left' ? 'right' : 'left');
+
+        if (submitter && submitter.name === 'action' && (submitter.value || '').toLowerCase() === 'skip') {
+            nextSide = 'left';
+        }
+
+        transitionTo({
+            href: new URL(action, window.location.href).toString(),
+            method: (form.getAttribute('method') || 'GET').toUpperCase(),
+            form,
+            submitter,
+            nextSide,
+        });
     }, true);
+
+    window.addEventListener('popstate', async function () {
+        if (!bg || inFlight) return;
+        if (!STEP_PATH_RE.test((window.location.pathname || '').toLowerCase())) return;
+        await transitionTo({
+            href: window.location.href,
+            method: 'GET',
+            nextSide: sideForHref(window.location.href) || 'left',
+        });
+    });
 })();
 </script>
 {% endblock %}

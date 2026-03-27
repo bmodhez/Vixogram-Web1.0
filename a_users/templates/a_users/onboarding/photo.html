@@ -1,5 +1,7 @@
 {% extends 'layouts/box.html' %}
 
+{% block body_class %}vixo-onboarding-photo-page{% endblock %}
+
 {% block box_title %}Add a profile photo{% endblock %}
 
 {% block box_subtitle %}
@@ -15,7 +17,7 @@
     </div>
   </div>
 
-  <form method="post" enctype="multipart/form-data" class="space-y-3" novalidate>
+  <form method="post" enctype="multipart/form-data" class="space-y-3" novalidate data-no-anim>
     {% csrf_token %}
 
     <div>
@@ -42,6 +44,13 @@
       Upload Photo
     </button>
 
+    <div id="onboarding_upload_status" class="hidden rounded-xl border border-sky-400/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100" aria-live="polite">
+      <div class="flex items-center gap-3">
+        <span class="vixo-onboarding-loader" aria-hidden="true"></span>
+        <span id="onboarding_upload_status_text">Checking photo safety (violence and unsafe content)...</span>
+      </div>
+    </div>
+
     <button type="submit" name="action" value="skip" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-xl transition-colors">
       Skip for now
     </button>
@@ -51,13 +60,13 @@
   <div id="onboarding_crop_modal" class="hidden fixed inset-0 z-50" aria-hidden="true">
     <div class="absolute inset-0 bg-black/70"></div>
     <div class="relative h-[100dvh] overflow-y-auto flex items-start justify-center px-4 pt-6 pb-3 sm:pt-10 sm:pb-6 lg:pt-1 xl:pt-0">
-      <div class="w-full max-w-md max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-4rem)] bg-gray-900/70 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 overflow-hidden lg:-mt-14 xl:-mt-20">
+      <div class="w-full max-w-md max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-4rem)] bg-gray-900/70 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 overflow-hidden flex flex-col lg:-mt-14 xl:-mt-20">
         <div class="flex items-center justify-between px-5 py-4 border-b border-white/10">
           <div class="text-white font-bold">Crop photo</div>
           <button id="onboarding_crop_close" type="button" class="text-gray-300 hover:text-white px-2 py-1" aria-label="Close">✕</button>
         </div>
 
-        <div class="p-5 overflow-y-auto">
+        <div class="p-5 overflow-y-auto min-h-0 flex-1">
           <div class="text-xs text-gray-400 mb-3">Drag to position • Use zoom</div>
 
           <div class="mx-auto w-[min(18rem,84vw)] sm:w-[min(20rem,85vw)] max-w-full">
@@ -81,10 +90,6 @@
     </div>
   </div>
 </div>
-{% endblock %}
-
-{% block extra_body %}
-{{ block.super }}
 <style>
   .vixo-avatar-rotor-wrap {
     position: relative;
@@ -178,6 +183,30 @@
       filter: none !important;
     }
   }
+
+  body.vixo-onboarding-photo-page.vixo-onboarding-crop-open .vixo-auth-bg.vixo-onboarding-bg,
+  body.vixo-onboarding-photo-page.vixo-onboarding-crop-open #vixo-box-card {
+    overflow: visible !important;
+  }
+
+  .vixo-onboarding-loader {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 9999px;
+    border: 2px solid rgba(125, 211, 252, 0.35);
+    border-top-color: rgba(125, 211, 252, 1);
+    animation: vixoOnboardingSpin 0.9s linear infinite;
+    flex: 0 0 auto;
+  }
+
+  @keyframes vixoOnboardingSpin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
 </style>
 <script>
 (() => {
@@ -186,6 +215,9 @@
   const fileNameEl = document.getElementById('onboarding_selected_filename');
   const previewImg = document.getElementById('onboarding_avatar_preview');
   const uploadBtn = document.getElementById('onboarding_upload_btn');
+  const uploadStatus = document.getElementById('onboarding_upload_status');
+  const uploadStatusText = document.getElementById('onboarding_upload_status_text');
+  const formEl = uploadBtn ? uploadBtn.closest('form') : null;
 
   if (!fileInput || !selectBtn) return;
 
@@ -201,12 +233,14 @@
 
   const open = () => {
     if (!modal) return;
+    try { document.body.classList.add('vixo-onboarding-crop-open'); } catch {}
     modal.classList.remove('hidden');
     modal.setAttribute('aria-hidden', 'false');
   };
 
   const close = () => {
     if (!modal) return;
+    try { document.body.classList.remove('vixo-onboarding-crop-open'); } catch {}
     modal.classList.add('hidden');
     modal.setAttribute('aria-hidden', 'true');
   };
@@ -252,6 +286,7 @@
     cleanupObjectUrl();
     if (fileNameEl) fileNameEl.textContent = '';
     try { if (uploadBtn) uploadBtn.disabled = true; } catch {}
+    if (selectBtn) selectBtn.textContent = 'Select photo';
   };
 
   const animatePreviewSwap = (nextUrl) => {
@@ -294,6 +329,7 @@
     try {
       const hasFile = !!(fileInput && fileInput.files && fileInput.files.length > 0);
       if (uploadBtn) uploadBtn.disabled = !hasFile;
+      if (selectBtn) selectBtn.textContent = hasFile ? 'Change photo' : 'Select photo';
     } catch {}
   };
 
@@ -353,6 +389,7 @@
     const file = fileInput.files && fileInput.files[0];
     if (!file) return;
     if (fileNameEl) fileNameEl.textContent = file.name || '';
+    if (selectBtn) selectBtn.textContent = 'Change photo';
     if (!file.type || !file.type.startsWith('image/')) {
       clearSelection();
       syncUploadEnabled();
@@ -467,6 +504,70 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !modal.classList.contains('hidden')) cancelCrop();
   });
+
+  let uploadGatePassed = false;
+  let uploadGateTimer = null;
+
+  const setUploadLoading = (isLoading) => {
+    try {
+      if (isLoading) {
+        if (uploadBtn) {
+          uploadBtn.disabled = true;
+          uploadBtn.textContent = 'Checking safety...';
+        }
+        if (selectBtn) selectBtn.disabled = true;
+        if (uploadStatus) uploadStatus.classList.remove('hidden');
+        if (uploadStatusText) uploadStatusText.textContent = 'Checking photo safety (violence and unsafe content)...';
+        return;
+      }
+
+      if (uploadBtn) uploadBtn.textContent = 'Upload Photo';
+      if (selectBtn) selectBtn.disabled = false;
+      if (uploadStatus) uploadStatus.classList.add('hidden');
+      syncUploadEnabled();
+    } catch {}
+  };
+
+  if (formEl) {
+    formEl.addEventListener('submit', (event) => {
+      const submitter = event.submitter || null;
+      const action = (submitter && submitter.value) ? String(submitter.value).toLowerCase() : '';
+
+      if (action !== 'upload') return;
+
+      if (uploadGatePassed) {
+        uploadGatePassed = false;
+        return;
+      }
+
+      event.preventDefault();
+
+      const hasFile = !!(fileInput && fileInput.files && fileInput.files.length > 0);
+      if (!hasFile) {
+        setUploadLoading(false);
+        return;
+      }
+
+      setUploadLoading(true);
+
+      if (uploadGateTimer) {
+        try { clearTimeout(uploadGateTimer); } catch {}
+      }
+
+      uploadGateTimer = window.setTimeout(() => {
+        uploadGatePassed = true;
+        try {
+          if (typeof formEl.requestSubmit === 'function' && submitter) {
+            formEl.requestSubmit(submitter);
+          } else {
+            formEl.submit();
+          }
+        } catch {
+          formEl.submit();
+        }
+      }, 5000);
+    }, true);
+  }
 
   syncUploadEnabled();
 })();

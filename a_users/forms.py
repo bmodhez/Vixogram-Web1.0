@@ -98,8 +98,10 @@ class ProfileForm(forms.ModelForm):
 
         # Enforce a small upload limit for profile background.
         try:
-            if hasattr(f, 'size') and int(f.size) > 2 * 1024 * 1024:
-                raise forms.ValidationError('Background image must be under 2MB.')
+            if hasattr(f, 'size') and int(f.size) > 1 * 1024 * 1024:
+                raise forms.ValidationError('Background image must be under 1MB.')
+        except forms.ValidationError:
+            raise
         except Exception:
             pass
 
@@ -207,12 +209,13 @@ class ReportUserForm(forms.Form):
     )
 
     details = forms.CharField(
-        required=False,
-        max_length=1000,
+        required=True,
+        max_length=150,
         widget=forms.Textarea(
             attrs={
                 'rows': 3,
-                'placeholder': 'Add details (optional)',
+                'placeholder': 'Write your message',
+                'maxlength': '150',
                 'class': 'w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 outline-none focus:border-emerald-500',
             }
         ),
@@ -234,6 +237,47 @@ class ProfilePrivacyForm(forms.ModelForm):
                 'class': 'sr-only peer',
             }),
         }
+
+
+class ProfilePreferredLocationForm(forms.ModelForm):
+    location_query = forms.CharField(
+        required=False,
+        max_length=120,
+        widget=forms.TextInput(
+            attrs={
+                'placeholder': 'Select your city (for local groups & events)',
+                'class': 'w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 outline-none focus:border-emerald-500',
+                'autocomplete': 'off',
+            }
+        ),
+    )
+
+    class Meta:
+        model = Profile
+        fields = ['preferred_location_country', 'preferred_location_state', 'preferred_location_city']
+        widgets = {
+            'preferred_location_country': forms.HiddenInput(),
+            'preferred_location_state': forms.HiddenInput(),
+            'preferred_location_city': forms.HiddenInput(),
+        }
+
+    def clean(self):
+        cleaned = super().clean()
+        city = str(cleaned.get('preferred_location_city') or '').strip()
+        query = str(cleaned.get('location_query') or '').strip()
+
+        if not city and query:
+            cleaned['preferred_location_city'] = query[:80]
+            city = cleaned['preferred_location_city']
+
+        if not city:
+            raise forms.ValidationError('Please select your city.')
+
+        for key in ('preferred_location_country', 'preferred_location_state', 'preferred_location_city'):
+            value = str(cleaned.get(key) or '').strip()
+            cleaned[key] = value[:80] if value else ''
+
+        return cleaned
 
 
 class UsernameChangeForm(forms.Form):

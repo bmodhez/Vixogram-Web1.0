@@ -3,6 +3,7 @@ from .views import *
 
 urlpatterns = [
     path('', chat_view, name="home"),
+    path('random-video/', random_video_view, name='random-video'),
     path('chat/<username>', get_or_create_chatroom, name="start-chat"),
     path('chat/room/<chatroom_name>', chat_view, name="chatroom"),
     path('chat/verify/status/', chat_verify_status, name='chat-verify-status'),
@@ -13,6 +14,7 @@ urlpatterns = [
     path('chat/push/register/', push_register, name='push-register'),
     path('chat/push/config/', push_config, name='push-config'),
     path('chat/push/unregister/', push_unregister, name='push-unregister'),
+    path('chat/theme/update/', chat_theme_update_view, name='chat-theme-update'),
     path('chat/new_groupchat/', create_groupchat, name="new-groupchat"),
     path('chat/private/create/', create_private_room, name='private-room-create'),
     path('chat/private/join/', join_private_room_by_code, name='private-room-join'),
@@ -52,6 +54,7 @@ urlpatterns = [
     path('chat/admin/users/', admin_users_view, name='admin-users'),
     path('chat/admin/users/export/', admin_users_export_view, name='admin-users-export'),
     path('chat/admin/users/<int:user_id>/toggle-block/', admin_toggle_user_block_view, name='admin-user-toggle-block'),
+    path('chat/admin/users/<int:user_id>/ban/modal/', admin_user_ban_modal_view, name='admin-user-ban-modal'),
     path('chat/admin/users/<int:user_id>/ban/', admin_user_ban_view, name='admin-user-ban'),
     path('chat/admin/beta/', admin_beta_features_view, name='admin-beta-features'),
     path('chat/admin/moderation/', moderation_logs_view, name='moderation-logs'),

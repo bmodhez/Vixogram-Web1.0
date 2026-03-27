@@ -53,6 +53,12 @@
     let cropper = null;
     let lastObjectUrl = null;
 
+    const updateSelectButtonState = () => {
+      if (!selectBtn) return;
+      const hasFile = !!(input.files && input.files[0]);
+      selectBtn.textContent = hasFile ? 'Change image' : 'Select image';
+    };
+
     const destroy = () => {
       try {
         if (cropper) cropper.destroy();
@@ -80,6 +86,7 @@
         if (fileName) fileName.textContent = 'No image selected';
         wrap.classList.add('hidden');
         destroy();
+        updateSelectButtonState();
         return;
       }
 
@@ -185,7 +192,11 @@
             } catch (err) {
               resolve(null);
             }
+
+            updateSelectButtonState();
           });
+
+          updateSelectButtonState();
 
           if (blob) {
             try {

@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block content %}
+<div class="w-full max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+    <div class="vixo-allauth-shell bg-gray-900/90 border border-gray-700 rounded-2xl shadow-2xl p-4 sm:p-6">
+        {% if messages %}
+            <div class="space-y-2 mb-5">
+                {% for message in messages %}
+                    <div class="rounded-lg border border-gray-700 bg-gray-800/70 px-3 py-2 text-sm text-gray-100">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <div class="rounded-xl border border-gray-700 bg-gray-800/60 px-3 py-3 sm:px-4 sm:py-3 mb-5">
+            <div class="text-sm font-semibold text-gray-200 mb-2">{% trans "Menu" %}</div>
+            <div class="flex flex-wrap gap-2">
+                {% if user.is_authenticated %}
+                    {% url 'account_email' as email_url_ %}
+                    {% if email_url_ %}<a href="{{ email_url_ }}" class="vixo-aa-link">{% trans "Change Email" %}</a>{% endif %}
+                    {% url 'account_change_password' as change_password_url_ %}
+                    {% if change_password_url_ %}<a href="{{ change_password_url_ }}" class="vixo-aa-link">{% trans "Change Password" %}</a>{% endif %}
+                    {% url 'socialaccount_connections' as connections_url_ %}
+                    {% if connections_url_ %}<a href="{{ connections_url_ }}" class="vixo-aa-link">{% trans "Account Connections" %}</a>{% endif %}
+                    {% url 'mfa_index' as mfa_url_ %}
+                    {% if mfa_url_ %}<a href="{{ mfa_url_ }}" class="vixo-aa-link">{% trans "Two-Factor Authentication" %}</a>{% endif %}
+                    {% url 'account_logout' as logout_url_ %}
+                    {% if logout_url_ %}<a href="{{ logout_url_ }}" class="vixo-aa-link">{% trans "Sign Out" %}</a>{% endif %}
+                {% else %}
+                    {% url 'account_login' as login_url_ %}
+                    {% if login_url_ %}<a href="{{ login_url_ }}" class="vixo-aa-link">{% trans "Sign In" %}</a>{% endif %}
+                    {% url 'account_signup' as signup_url_ %}
+                    {% if signup_url_ %}<a href="{{ signup_url_ }}" class="vixo-aa-link">{% trans "Sign Up" %}</a>{% endif %}
+                {% endif %}
+            </div>
+        </div>
+
+        {% block allauth_content %}{% endblock %}
+    </div>
+</div>
+
+<style>
+    .vixo-allauth-shell h1 { font-size: 1.9rem; line-height: 1.2; font-weight: 800; color: #e5e7eb; margin-bottom: .85rem; }
+    .vixo-allauth-shell h2 { font-size: 1.35rem; line-height: 1.25; font-weight: 700; color: #d1d5db; margin: 1rem 0 .55rem; }
+    .vixo-allauth-shell p,.vixo-allauth-shell li,.vixo-allauth-shell label,.vixo-allauth-shell div { color: #cbd5e1; }
+    .vixo-allauth-shell a { color: #a5b4fc; text-decoration: none; }
+    .vixo-allauth-shell a:hover { color: #c4b5fd; }
+    .vixo-aa-link { display:inline-flex; align-items:center; justify-content:center; border-radius:.65rem; border:1px solid rgba(107,114,128,.9); background:rgba(17,24,39,.55); color:#e5e7eb !important; padding:.5rem .75rem; font-size:.82rem; font-weight:600; transition: background-color .18s ease,border-color .18s ease; }
+    .vixo-aa-link:hover { border-color: rgba(129,140,248,.75); background: rgba(79,70,229,.2); color:#fff !important; }
+    .vixo-allauth-shell form { margin-top: .9rem; }
+    .vixo-allauth-shell input,.vixo-allauth-shell select,.vixo-allauth-shell textarea { width:100%; border-radius:.75rem; border:1px solid rgba(107,114,128,.8); background:rgba(3,7,18,.7); color:#f3f4f6; padding:.62rem .75rem; outline:none; }
+    .vixo-allauth-shell input:focus,.vixo-allauth-shell select:focus,.vixo-allauth-shell textarea:focus { border-color:rgba(99,102,241,.75); box-shadow:0 0 0 2px rgba(99,102,241,.25); }
+    .vixo-allauth-shell button,.vixo-allauth-shell input[type='submit'] { border-radius:.7rem; border:1px solid rgba(79,70,229,.5); background:linear-gradient(90deg, rgba(139,92,246,.95), rgba(79,70,229,.95)); color:#fff; padding:.55rem .9rem; font-size:.88rem; font-weight:700; cursor:pointer; margin-right:.4rem; margin-top:.4rem; }
+    .vixo-allauth-shell ul { margin-top:.4rem; margin-bottom:.4rem; padding-left:1.1rem; }
+    .vixo-allauth-shell hr { border:0; border-top:1px solid rgba(75,85,99,.8); margin:.95rem 0; }
+</style>
+{% endblock %}

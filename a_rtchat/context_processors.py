@@ -105,9 +105,10 @@ def global_announcement(request):
         from a_rtchat.models import GlobalAnnouncement
 
         ann = GlobalAnnouncement.objects.filter(is_active=True).order_by('-updated_at').first()
+        prefix = (getattr(ann, 'prefix', '') or '').strip() or 'Team Vixogram:'
         msg = (getattr(ann, 'message', '') or '').strip()
         if not msg:
-            return {'GLOBAL_ANNOUNCEMENT_MESSAGE': ''}
-        return {'GLOBAL_ANNOUNCEMENT_MESSAGE': msg}
+            return {'GLOBAL_ANNOUNCEMENT_PREFIX': prefix, 'GLOBAL_ANNOUNCEMENT_MESSAGE': ''}
+        return {'GLOBAL_ANNOUNCEMENT_PREFIX': prefix, 'GLOBAL_ANNOUNCEMENT_MESSAGE': msg}
     except Exception:
-        return {'GLOBAL_ANNOUNCEMENT_MESSAGE': ''}
+        return {'GLOBAL_ANNOUNCEMENT_PREFIX': 'Team Vixogram:', 'GLOBAL_ANNOUNCEMENT_MESSAGE': ''}

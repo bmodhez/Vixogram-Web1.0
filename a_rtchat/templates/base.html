@@ -1,4 +1,4 @@
-{% load static %}
+{% load static chat_extras %}
 <!DOCTYPE html>
 <html lang="en" class="{% block html_class %}{% endblock %}">
 <head>
@@ -13,17 +13,53 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260324f">
     <link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css" />
 
-    <script src="{% static 'js/vixogram.js' %}"></script>
+    <script src="{% static 'js/vixogram.js' %}?v=20260323b"></script>
+    <script>
+        (function () {
+            // Keep console clean for end-users. Set `window.__VIXO_DEBUG_CONSOLE = true`
+            // before page scripts load if verbose logs are needed.
+            if (window.__VIXO_DEBUG_CONSOLE === true) return;
+            try {
+                const c = window.console || {};
+                c.log = function () {};
+                c.info = function () {};
+                c.debug = function () {};
+                c.warn = function () {};
+                window.console = c;
+            } catch {}
+        })();
+    </script>
     <script src="{% static 'js/mobile_ads.js' %}"></script>
+    <script src="{% static 'js/desktop_ads_refresh.js' %}"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
     <script src="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.js" defer></script>
     <script src="{% static 'js/profile.js' %}"></script>
     <script src="{% static 'js/story_cropper.js' %}" defer></script>
+    {% if request.resolver_match and request.resolver_match.url_name|default:''|slice:':8' == 'account_' or request.resolver_match.url_name|default:''|slice:':11' == 'onboarding-' %}
+    <style>
+        html,
+        body {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        body.vixo-auth-page {
+            overflow-y: auto !important;
+        }
+
+        html::-webkit-scrollbar,
+        body::-webkit-scrollbar {
+            display: none;
+            width: 0;
+            height: 0;
+        }
+    </style>
+    {% endif %}
 </head>
 <body class="min-h-screen flex flex-col text-white antialiased tracking-tight bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 {% block body_class %}{% endblock %}{% if request.resolver_match and request.resolver_match.url_name|default:''|slice:':8' == 'account_' or request.resolver_match.url_name|default:''|slice:':11' == 'onboarding-' %} vixo-auth-page{% endif %}">
     <audio id="notif_sound" preload="auto" class="hidden" src="{% static 'notification.mp3' %}"></audio>
@@ -42,14 +78,36 @@
     <nav class="vixo-topbar sticky top-0 z-50 bg-gray-900/80 backdrop-blur border-b border-gray-800">
         <div class="w-full max-w-7xl mx-auto px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-3">
             <a href="/" class="vixo-brand inline-flex items-center gap-2 hover:opacity-95 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
-                <img src="{% static 'vixologo.png' %}" alt="Vixogram" class="vixo-logo h-10 sm:h-12 w-auto max-w-none object-contain object-left" />
+                <img
+                    src="{% static 'vixologo.png' %}"
+                    data-theme-logo
+                    data-logo-dark="{% static 'vixologo.png' %}"
+                    data-logo-light="{% static 'whitethemelogo_cropped.png' %}"
+                    alt="Vixogram"
+                    class="vixo-logo h-10 sm:h-12 w-auto max-w-none object-contain object-left"
+                />
             </a>
+
+            {% if not request.resolver_match or request.resolver_match.url_name|default:''|slice:':11' != 'onboarding-' %}
+                <div class="hidden md:flex items-center justify-center flex-1 min-w-[12rem]">
+                    <div class="vixo-rv-floating-box inline-flex items-center gap-2 rounded-full px-2.5 py-1.5">
+                        <span class="vixo-rv-try-tag text-[11px] font-extrabold uppercase tracking-wide">Try Beta</span>
+                        <a href="{% url 'random-video' %}" class="vixo-rv-floating-btn inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-200 ease-out hover:scale-[1.03] active:scale-[0.98]">
+                            <span aria-hidden="true">🎥</span>
+                            <span>Random Video Chat</span>
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
 
             {# Onboarding steps: keep navbar minimal (logo only) until steps complete. #}
             {% if request.resolver_match and request.resolver_match.url_name|default:''|slice:':11' == 'onboarding-' %}
                 <div class="hidden"></div>
             {% elif user.is_authenticated %}
                 <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+                    <a href="{% url 'random-video' %}" class="md:hidden text-xs sm:text-sm text-cyan-200 hover:text-white px-2.5 sm:px-3 py-2 rounded-lg hover:bg-gray-800 transition-all duration-200 ease-out">
+                        Video Chat
+                    </a>
                     <a
                         href="{% url 'invite-friends' %}"
                         class="relative text-xs sm:text-sm text-gray-300 hover:text-white transition-all duration-200 ease-out px-2.5 sm:px-3 py-2 rounded-lg hover:bg-gray-800 hover:-translate-y-0.5 active:translate-y-0"
@@ -110,7 +168,12 @@
                             aria-haspopup="menu"
                             aria-expanded="false"
                         >
-                            <img src="{{ user.profile.avatar }}" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover border border-gray-700">
+                            <span class="relative block w-7 h-7 sm:w-8 sm:h-8">
+                                <img src="{{ user.profile.avatar }}" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover border border-gray-700">
+                                {% if user.profile.avatar_review_status == 'pending' %}
+                                <span class="absolute inset-0 rounded-full border border-amber-300/70" style="background: repeating-linear-gradient(45deg, rgba(245, 158, 11, 0.9) 0px, rgba(245, 158, 11, 0.9) 5px, rgba(17, 24, 39, 0.9) 5px, rgba(17, 24, 39, 0.9) 10px);"></span>
+                                {% endif %}
+                            </span>
                             <span class="hidden sm:inline text-sm text-gray-200 font-semibold">{{ user.username }}</span>
                             <span id="nav_followreq_badge" class="hidden absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-red-500 text-[10px] leading-5 text-center font-bold text-white"></span>
                         </button>
@@ -125,10 +188,22 @@
                                 hx-target="#global_modal_root"
                                 hx-swap="innerHTML"
                                 hx-push-url="false"
-                                class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0"
+                                data-story-add-link="1"
+                                class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0 {% if not CAN_ADD_STORY %}hidden{% endif %}"
                             >
                                 Add Story
                             </a>
+                            <button
+                                type="button"
+                                disabled
+                                aria-disabled="true"
+                                title="{{ STORY_LIMIT_MESSAGE }}"
+                                data-story-add-disabled="1"
+                                class="w-full text-left px-4 py-3 text-sm text-gray-500 cursor-not-allowed bg-gray-900/40 {% if CAN_ADD_STORY %}hidden{% endif %}"
+                            >
+                                Add Story
+                            </button>
+                            <div data-story-add-limit="1" class="px-4 pb-2 text-[11px] text-amber-300 {% if CAN_ADD_STORY %}hidden{% endif %}">{{ STORY_LIMIT_MESSAGE }}</div>
 
                             <button
                                 type="button"
@@ -147,8 +222,8 @@
                             <a href="{% url 'contact-support' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
                                 Contact Support
                             </a>
-                            <a href="{% url 'faq' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
-                                FAQ
+                            <a href="{% url 'my-reports' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
+                                My reports
                             </a>
                             <button type="button" id="theme_toggle_menu" class="w-full text-left px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-between gap-3" aria-label="Toggle theme">
                                 <span class="inline-flex items-center gap-2">
@@ -169,6 +244,9 @@
                 </div>
             {% else %}
                 <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+                    <a href="{% url 'random-video' %}" class="md:hidden text-xs sm:text-sm text-cyan-200 hover:text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-800 transition-all duration-200 ease-out">
+                        Video Chat
+                    </a>
                     <a href="{% url 'account_login' %}" class="text-xs sm:text-sm text-gray-200 hover:text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-800 transition-all duration-200 ease-out hover:-translate-y-0.5 active:translate-y-0">
                         Login
                     </a>
@@ -197,10 +275,22 @@
             hx-target="#global_modal_root"
             hx-swap="innerHTML"
             hx-push-url="false"
-            class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out active:translate-y-0"
+            data-story-add-link="1"
+            class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out active:translate-y-0 {% if not CAN_ADD_STORY %}hidden{% endif %}"
         >
             Add Story
         </a>
+        <button
+            type="button"
+            disabled
+            aria-disabled="true"
+            title="{{ STORY_LIMIT_MESSAGE }}"
+            data-story-add-disabled="1"
+            class="w-full text-left px-4 py-3 text-sm text-gray-500 cursor-not-allowed bg-gray-900/40 {% if CAN_ADD_STORY %}hidden{% endif %}"
+        >
+            Add Story
+        </button>
+        <div data-story-add-limit="1" class="px-4 pb-2 text-[11px] text-amber-300 {% if CAN_ADD_STORY %}hidden{% endif %}">{{ STORY_LIMIT_MESSAGE }}</div>
 
         <button
             type="button"
@@ -218,8 +308,8 @@
         <a href="{% url 'contact-support' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out active:translate-y-0">
             Contact Support
         </a>
-        <a href="{% url 'faq' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out active:translate-y-0">
-            FAQ
+        <a href="{% url 'my-reports' %}" class="block px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out active:translate-y-0">
+            My reports
         </a>
         <button type="button" id="theme_toggle_menu_mobile" class="w-full text-left px-4 py-3 text-sm text-gray-200 hover:bg-gray-800/60 transition-all duration-200 ease-out active:translate-y-0 flex items-center justify-between gap-3" aria-label="Toggle theme">
             <span class="inline-flex items-center gap-2">
@@ -238,28 +328,69 @@
     </div>
     {% endif %}
 
+    {% if request.resolver_match.url_name != 'random-video' %}
     <div id="global-announcement-banner" class="vixo-global-banner w-full border-b border-red-500/40 bg-red-500/10 {% if not GLOBAL_ANNOUNCEMENT_MESSAGE %}hidden{% endif %}">
         <div class="w-full max-w-7xl mx-auto px-4 sm:px-6 py-1.5">
             <div class="vixo-marquee" aria-label="Global announcement">
                 <div class="vixo-marquee-track">
-                    <span class="font-extrabold text-red-200">Team Vixogram:</span>
-                    <span class="ml-2 text-red-100 global-announcement-msg">{{ GLOBAL_ANNOUNCEMENT_MESSAGE }}</span>
+                    <span class="font-extrabold text-red-200 global-announcement-prefix">{{ GLOBAL_ANNOUNCEMENT_PREFIX|default:'Team Vixogram:' }}</span>
+                    <span class="ml-2 text-red-100 global-announcement-msg">{{ GLOBAL_ANNOUNCEMENT_MESSAGE|rich_announcement }}</span>
                     <span class="mx-10 text-red-200/70">•</span>
-                    <span class="font-extrabold text-red-200">Team Vixogram:</span>
-                    <span class="ml-2 text-red-100 global-announcement-msg">{{ GLOBAL_ANNOUNCEMENT_MESSAGE }}</span>
+                    <span class="font-extrabold text-red-200 global-announcement-prefix">{{ GLOBAL_ANNOUNCEMENT_PREFIX|default:'Team Vixogram:' }}</span>
+                    <span class="ml-2 text-red-100 global-announcement-msg">{{ GLOBAL_ANNOUNCEMENT_MESSAGE|rich_announcement }}</span>
                     <span class="mx-10 text-red-200/70">•</span>
-                    <span class="font-extrabold text-red-200">Team Vixogram:</span>
-                    <span class="ml-2 text-red-100 global-announcement-msg">{{ GLOBAL_ANNOUNCEMENT_MESSAGE }}</span>
+                    <span class="font-extrabold text-red-200 global-announcement-prefix">{{ GLOBAL_ANNOUNCEMENT_PREFIX|default:'Team Vixogram:' }}</span>
+                    <span class="ml-2 text-red-100 global-announcement-msg">{{ GLOBAL_ANNOUNCEMENT_MESSAGE|rich_announcement }}</span>
                 </div>
             </div>
         </div>
     </div>
+    {% endif %}
+
+    <style>
+        .global-announcement-msg a {
+            color: #67e8f9;
+            text-decoration: none;
+        }
+
+        .global-announcement-msg a:hover {
+            color: #a5f3fc;
+            text-decoration: none;
+        }
+    </style>
 
     {% if messages %}
         <div id="toast-container" class="fixed top-16 right-3 sm:top-20 sm:right-6 z-50 w-[min(24rem,calc(100vw-3rem))] space-y-3 pointer-events-none">
             {% for message in messages %}
-                {% with msg_text=message|stringformat:"s" %}
-                    {% if "confirmation email sent" not in msg_text|lower and "successfully signed in" not in msg_text|lower %}
+                {% with msg_text=message|stringformat:"s" msg_lower=msg_text|lower %}
+                    {% if "this photo violates our community guidelines." in msg_lower and "please upload a different photo." in msg_lower %}
+                        <div id="profile-upload-feedback-modal" class="fixed inset-0 z-[65] flex items-center justify-center p-4 sm:p-6">
+                            <div class="absolute inset-0 bg-gray-950/75 backdrop-blur-sm" data-profile-feedback-close></div>
+                            <div class="vixo-modal-card relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-indigo-400/35 bg-gradient-to-br from-[#0b1228] via-[#101a36] to-[#0f172a] text-gray-100 shadow-2xl shadow-black/40">
+                                <div aria-hidden="true" class="h-[2px] w-full bg-gradient-to-r from-cyan-400 via-indigo-400 to-fuchsia-400"></div>
+                                <div class="p-5 sm:p-6">
+                                    <div class="flex items-start gap-3">
+                                        <div class="mt-1 h-2.5 w-2.5 flex-none rounded-full bg-cyan-400"></div>
+                                        <div class="min-w-0 flex-1">
+                                            <h3 class="text-base font-extrabold tracking-wide text-white">Photo Not Allowed</h3>
+                                            <p class="mt-2 whitespace-pre-line text-sm leading-6 text-gray-200">{{ message }}</p>
+                                        </div>
+                                        <button type="button" class="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60 transition" aria-label="Dismiss" data-profile-feedback-close>
+                                            <span aria-hidden="true">×</span>
+                                        </button>
+                                    </div>
+                                    <div class="mt-5 flex justify-end">
+                                        <button type="button" class="inline-flex items-center rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 transition" data-profile-feedback-close>
+                                            Okay
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    {% if "confirmation email sent" not in msg_lower and "successfully signed in" not in msg_lower %}
+                        {% if "this photo violates our community guidelines." not in msg_lower or "please upload a different photo." not in msg_lower %}
                         {% with tags=message.tags %}
                             <div
                                 class="toast pointer-events-auto flex items-start gap-3 rounded-xl border border-gray-800 bg-gray-900/90 px-4 py-3 text-sm text-gray-100 shadow-lg shadow-black/20 transition duration-200 ease-out"
@@ -281,6 +412,7 @@
                                 </button>
                             </div>
                         {% endwith %}
+                        {% endif %}
                     {% endif %}
                 {% endwith %}
             {% endfor %}
@@ -289,7 +421,7 @@
 
     {% with urlname=request.resolver_match.url_name|default:'' %}
     <div class="w-full flex-1">
-        <div class="w-full {% if urlname|slice:':8' == 'account_' or urlname|slice:':11' == 'onboarding-' %}px-0 py-0{% elif urlname == 'home' or urlname == 'chatroom' or urlname == 'start-chat' or urlname == 'chat-call' %}px-0 sm:px-6 py-0 sm:py-6{% else %}px-4 sm:px-6 py-5 sm:py-6{% endif %}">
+        <div class="w-full {% if urlname|slice:':8' == 'account_' or urlname|slice:':11' == 'onboarding-' %}px-0 py-0{% elif urlname == 'random-video' %}px-0 py-0{% elif urlname == 'home' or urlname == 'chatroom' or urlname == 'start-chat' or urlname == 'chat-call' %}px-0 sm:px-6 py-0{% else %}px-4 sm:px-6 py-5 sm:py-6{% endif %}">
             <div class="vixo-site-grid grid grid-cols-1 {% if urlname|slice:':8' != 'account_' and urlname|slice:':11' != 'onboarding-' %}{% if user.is_authenticated and user.profile.is_founder_club %}{% else %}xl:grid-cols-[max-content_minmax(0,80rem)_max-content]{% endif %}{% endif %} gap-3 items-start justify-center">
                 <!-- Side ad slots (in-flow so they never overlap content) -->
                 {% if urlname|slice:':8' != 'account_' and urlname|slice:':11' != 'onboarding-' %}
@@ -300,7 +432,7 @@
                             <div class="sticky top-24">
                                 <div class="rounded-2xl border border-gray-800 bg-gray-900/50 p-3 text-center">
                                     <div class="text-[10px] uppercase tracking-widest text-gray-400">Advertisement</div>
-                                    <div class="mt-3 min-h-[600px] min-w-[160px] rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
+                                    <div data-vixo-side-ad-slot="left" class="mt-3 min-h-[600px] min-w-[160px] rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
                                         Place Ad (160×600)
                                     </div>
                                 </div>
@@ -309,7 +441,7 @@
                     {% endif %}
                 {% endif %}
 
-                <main class="min-w-0">
+                <main class="min-w-0 {% if urlname == 'random-video' %}self-stretch{% endif %}">
                     {% block content %}
                     {% endblock %}
                 </main>
@@ -322,7 +454,7 @@
                             <div class="sticky top-24">
                                 <div class="rounded-2xl border border-gray-800 bg-gray-900/50 p-3 text-center">
                                     <div class="text-[10px] uppercase tracking-widest text-gray-400">Advertisement</div>
-                                    <div class="mt-3 min-h-[600px] min-w-[160px] rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
+                                    <div data-vixo-side-ad-slot="right" class="mt-3 min-h-[600px] min-w-[160px] rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
                                         Place Ad (160×600)
                                     </div>
                                 </div>
@@ -355,14 +487,14 @@
 
                                     <!-- Mobile banner -->
                                     <div class="mt-3 sm:hidden">
-                                        <div class="min-h-[100px] w-full rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
+                                        <div data-vixo-footer-ad-slot="mobile" class="min-h-[100px] w-full rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
                                             Place Ad (320×100)
                                         </div>
                                     </div>
 
                                     <!-- Desktop banner -->
                                     <div class="mt-3 hidden sm:block">
-                                        <div class="min-h-[90px] w-full max-w-[728px] mx-auto rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
+                                        <div data-vixo-footer-ad-slot="desktop" class="min-h-[90px] w-full max-w-[728px] mx-auto rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
                                             Place Ad (728×90)
                                         </div>
                                     </div>
@@ -374,7 +506,14 @@
                     <div class="relative grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
                         <div>
                             <div class="flex items-center gap-3">
-                                <img src="{% static 'vixologo.png' %}" alt="Vixogram" class="h-10 w-auto object-contain" />
+                                <img
+                                    src="{% static 'vixologo.png' %}"
+                                    data-theme-logo
+                                    data-logo-dark="{% static 'vixologo.png' %}"
+                                    data-logo-light="{% static 'whitethemelogo_cropped.png' %}"
+                                    alt="Vixogram"
+                                    class="h-10 w-auto object-contain"
+                                />
                             </div>
                             <div class="mt-3 text-sm font-semibold text-white">Chat. Call. Connect.</div>
                             <p class="mt-2 text-sm text-gray-300 leading-6">
@@ -416,8 +555,31 @@
                         <div class="text-xs sm:text-sm text-gray-300">
                             © {% now "Y" %} <span class="font-semibold text-white">Vixogram</span>. All rights reserved.
                         </div>
-                        <div class="text-xs sm:text-sm text-gray-300">
-                            Built for fun, friendship, and safe chatting <span aria-hidden="true">💬</span> <span class="mx-1 text-gray-600" aria-hidden="true">•</span> Made with <span aria-hidden="true">❤️</span> in India
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-gray-300">
+                            <span>Built for fun, friendship, and safe chatting <span aria-hidden="true">💬</span></span>
+                            <span class="text-gray-600" aria-hidden="true">•</span>
+                            <span>Made with <span aria-hidden="true">❤️</span> in India</span>
+                            <span class="text-gray-600" aria-hidden="true">•</span>
+                            <a
+                                href="https://www.instagram.com/bhavinmodhh/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="Follow bhavinmodhh on Instagram"
+                                class="inline-flex items-center gap-1.5 text-gray-200 hover:text-white transition-colors"
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    class="inline-flex h-5 w-5 items-center justify-center rounded-md"
+                                    style="background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 8%, #fd5949 45%, #d6249f 60%, #285AEB 90%);"
+                                >
+                                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <rect x="4" y="4" width="16" height="16" rx="5" stroke="white" stroke-width="2"/>
+                                        <circle cx="12" cy="12" r="3.5" stroke="white" stroke-width="2"/>
+                                        <circle cx="17.3" cy="6.7" r="1.2" fill="white"/>
+                                    </svg>
+                                </span>
+                                <span class="font-medium">@bhavinmodhh</span>
+                            </a>
                         </div>
                     </div>
 
@@ -477,10 +639,11 @@
                 return container;
             };
 
-            const showToast = (message, kind = 'info', durationMs = 4000) => {
+            const showToast = (message, kind = 'info', durationMs = 4000, title = '') => {
                 try {
                     const msg = String(message || '').trim();
-                    if (!msg) return;
+                    const heading = String(title || '').trim();
+                    if (!msg && !heading) return;
 
                     const container = ensureToastContainer();
 
@@ -492,8 +655,21 @@
                     dot.className = 'mt-0.5 h-2.5 w-2.5 flex-none rounded-full ' + (kind === 'error' ? 'bg-red-500' : (kind === 'success' ? 'bg-emerald-400' : 'bg-gray-500'));
 
                     const body = document.createElement('div');
-                    body.className = 'flex-1 leading-5';
-                    body.textContent = msg;
+                    body.className = 'flex-1 min-w-0';
+
+                    if (heading) {
+                        const titleEl = document.createElement('div');
+                        titleEl.className = 'font-semibold leading-5';
+                        titleEl.textContent = heading;
+                        body.appendChild(titleEl);
+                    }
+
+                    if (msg) {
+                        const messageEl = document.createElement('div');
+                        messageEl.className = heading ? 'mt-1 text-xs leading-5 text-gray-300' : 'leading-5';
+                        messageEl.textContent = msg;
+                        body.appendChild(messageEl);
+                    }
 
                     const closeBtn = document.createElement('button');
                     closeBtn.type = 'button';
@@ -520,7 +696,7 @@
 
             document.body.addEventListener('vixo:toast', (e) => {
                 const detail = (e && e.detail) || {};
-                showToast(detail.message || '', detail.kind || 'info', detail.durationMs || 4000);
+                showToast(detail.message || '', detail.kind || 'info', detail.durationMs || 4000, detail.title || '');
             });
 
             document.addEventListener('click', (e) => {
@@ -538,6 +714,21 @@
             }, true);
 
             document.addEventListener('keydown', (e) => {
+
+            // Centered profile upload feedback modal close handlers.
+            const profileFeedbackModal = document.getElementById('profile-upload-feedback-modal');
+            if (profileFeedbackModal) {
+                const closeProfileFeedbackModal = () => {
+                    profileFeedbackModal.classList.add('opacity-0');
+                    window.setTimeout(() => {
+                        try { profileFeedbackModal.remove(); } catch {}
+                    }, 150);
+                };
+
+                profileFeedbackModal.querySelectorAll('[data-profile-feedback-close]').forEach((el) => {
+                    el.addEventListener('click', closeProfileFeedbackModal);
+                });
+            }
                 if (e.key === 'Escape' && root.innerHTML.trim()) close();
             });
 
@@ -665,7 +856,7 @@
         </div>
     </div>
 
-    {% if SHOW_WELCOME_POPUP or request.GET.welcome %}
+    {% if SHOW_WELCOME_POPUP and '/accounts/2fa/' not in request.path and '/accounts/reauthenticate/' not in request.path or request.GET.welcome and '/accounts/2fa/' not in request.path and '/accounts/reauthenticate/' not in request.path %}
     <div id="welcome-modal" class="fixed inset-0 z-[70] flex items-center justify-center p-5 sm:p-8" aria-hidden="false" role="dialog" aria-modal="true">
         <div class="absolute inset-0 bg-center bg-cover" style="background-image: url('{% static 'welcomebg.jpeg' %}');"></div>
         <div id="welcome-overlay" class="absolute inset-0 bg-black/70 backdrop-blur-sm opacity-0 transition-opacity duration-200 ease-out"></div>
@@ -1339,6 +1530,7 @@
         data-status-url="{{ VPN_PROXY_STATUS_URL }}"
         data-report-url="{{ VPN_PROXY_REPORT_URL }}"
         data-check-seconds="{{ VPN_PROXY_CHECK_INTERVAL_SECONDS|default:5 }}"
+        data-client-probe-enabled="{{ VPN_PROXY_CLIENT_PROBE_ENABLED|yesno:'1,0' }}"
         data-warning="{{ VPN_PROXY_WARNING_MESSAGE|escapejs }}"
     >
         <div class="absolute inset-0 bg-black/80"></div>
@@ -1374,6 +1566,7 @@
             const reportUrl = String(modal.getAttribute('data-report-url') || '/api/security/network-client-report/').trim();
             const fallbackMsg = String(modal.getAttribute('data-warning') || '').trim() || 'VPN or proxy connections are not allowed on Vixogram. Please disable your VPN to continue using all features.';
             const pollSec = Math.max(3, Number(modal.getAttribute('data-check-seconds') || '5') || 5);
+            const clientProbeEnabled = String(modal.getAttribute('data-client-probe-enabled') || '0') === '1';
             let openState = modal.getAttribute('aria-hidden') === 'false';
             let clientProbeRunning = false;
             let clientProbeBlocked = false;
@@ -1468,6 +1661,10 @@
             }
 
             async function refreshClientProbe() {
+                if (!clientProbeEnabled) {
+                    clientProbeBlocked = false;
+                    return;
+                }
                 if (clientProbeRunning) return;
                 clientProbeRunning = true;
                 try {
@@ -1552,6 +1749,7 @@
     <script id="vixo-config" type="application/json">{
         "userAuthenticated": {% if user.is_authenticated %}true{% else %}false{% endif %},
         "userIsStaff": {% if user.is_authenticated and user.is_staff %}true{% else %}false{% endif %},
+        "userIsSuperuser": {% if user.is_authenticated and user.is_superuser %}true{% else %}false{% endif %},
         "navNotifUnread": {{ NAV_NOTIF_UNREAD|default:0 }},
         "navFollowReqPending": {{ NAV_FOLLOWREQ_PENDING|default:0 }},
         "firebaseEnabled": {% if user.is_authenticated and FIREBASE_ENABLED %}true{% else %}false{% endif %},

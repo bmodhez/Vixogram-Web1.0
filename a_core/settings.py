@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+from datetime import timedelta
 
 from urllib.parse import urlparse
 import dj_database_url
@@ -65,6 +66,13 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return str(raw).strip().lower() in {"1", "true", "t", "yes", "y", "on"}
 
 
+def _env_csv(name: str, default: str = '') -> list[str]:
+    raw = (os.environ.get(name) or default).strip()
+    if not raw:
+        return []
+    return [part.strip() for part in raw.split(',') if part.strip()]
+
+
 def _origin_from_url(url: str) -> str | None:
     try:
         parsed = urlparse(url)
@@ -76,6 +84,15 @@ def _origin_from_url(url: str) -> str | None:
 
 
 ENVIRONMENT = (os.environ.get("ENVIRONMENT") or ("production" if IS_RENDER else "development")).strip().lower()
+
+# Admin hardening
+# Set ADMIN_URL in env to rotate admin path without code changes.
+ADMIN_URL = (os.environ.get('ADMIN_URL') or 'bhavin_rich2026').strip().strip('/') or 'bhavin_rich2026'
+ADMIN_URL_PREFIX = f'/{ADMIN_URL}/'
+
+# Comma-separated list of IPs/CIDRs allowed to access admin path.
+# Example: ADMIN_ALLOWED_IPS=203.0.113.5,203.0.113.0/24
+ADMIN_ALLOWED_IPS = _env_csv('ADMIN_ALLOWED_IPS', default='127.0.0.1,::1')
 
 # Public contact info (shown in navbar + support page)
 CONTACT_EMAIL = (os.environ.get('CONTACT_EMAIL') or '').strip()
@@ -187,9 +204,9 @@ STORAGES = {
 }
 
 # Cloudinary upload moderation provider
-# - Default: AWS Rekognition (aws_rek)
-# - Override via env: CLOUDINARY_UPLOAD_MODERATION
-CLOUDINARY_UPLOAD_MODERATION = (os.environ.get('CLOUDINARY_UPLOAD_MODERATION') or 'aws_rek').strip() or 'aws_rek'
+# - Set CLOUDINARY_UPLOAD_MODERATION=aws_rek only if your Cloudinary account has that add-on.
+# - Leave blank to disable moderation and allow normal uploads.
+CLOUDINARY_UPLOAD_MODERATION = (os.environ.get('CLOUDINARY_UPLOAD_MODERATION') or '').strip()
 
 # If True, block saving media when moderation returns pending.
 # This gives "before save" semantics (user must retry later).
@@ -206,7 +223,8 @@ if ENVIRONMENT == 'production':
 ALLOWED_HOSTS: list[str] = []
 
 # Dev-friendly defaults.
-if ENVIRONMENT != "production":
+# Keep localhost usable when DEBUG is enabled, even if ENVIRONMENT=production.
+if ENVIRONMENT != "production" or DEBUG:
     ALLOWED_HOSTS.extend(
         [
             "localhost",
@@ -250,7 +268,7 @@ if _extra_allowed_hosts:
 CSRF_TRUSTED_ORIGINS: list[str] = []
 
 # Dev-only origins
-if ENVIRONMENT != "production":
+if ENVIRONMENT != "production" or DEBUG:
     CSRF_TRUSTED_ORIGINS.extend(
         [
             "http://localhost",
@@ -314,6 +332,14 @@ if ENVIRONMENT == "production" or (_render_origin and _render_origin.startswith(
     SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False)
     SECURE_HSTS_PRELOAD = _env_bool("SECURE_HSTS_PRELOAD", default=False)
 
+# Explicit secure cookie/frame defaults.
+# CSRF cookie remains JS-readable because frontend sends X-CSRFToken header.
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = (os.environ.get('SESSION_COOKIE_SAMESITE') or 'Lax').strip() or 'Lax'
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = (os.environ.get('CSRF_COOKIE_SAMESITE') or 'Lax').strip() or 'Lax'
+X_FRAME_OPTIONS = (os.environ.get('X_FRAME_OPTIONS') or 'DENY').strip() or 'DENY'
+
 # VS Code Port Forwarding / Dev Tunnels typically terminates TLS at the proxy.
 # IMPORTANT: Do NOT auto-enable this just because ALLOWED_HOSTS contains
 # ".devtunnels.ms"; that would force https:// links even for local 127.0.0.1.
@@ -324,6 +350,14 @@ if _using_devtunnel:
 
 # Custom CSRF failure view (shows a friendly 403 page).
 CSRF_FAILURE_VIEW = "a_core.error_views.csrf_failure"
+
+try:
+    import allauth.mfa  # noqa: F401
+    _allauth_mfa_available = True
+except Exception:
+    _allauth_mfa_available = False
+
+ALLAUTH_MFA_ENABLED = _env_bool('ALLAUTH_MFA_ENABLED', default=_allauth_mfa_available) and _allauth_mfa_available
 
 # Application definition
 INSTALLED_APPS = [
@@ -343,12 +377,16 @@ INSTALLED_APPS = [
     'allauth.account',
     'allauth.socialaccount',
     'django_htmx',
+    'axes',
     # Project package: included so its management commands are discoverable.
     'a_core',
     'a_home',
     'a_users.apps.AUsersConfig',
     'a_rtchat',
 ]
+
+if ALLAUTH_MFA_ENABLED:
+    INSTALLED_APPS.append('allauth.mfa')
 
 # Password hashing
 #
@@ -369,6 +407,7 @@ PASSWORD_HASHERS = [
 # - Add a simple backend to allow logging in via User.email as well as username
 #   (useful for users created via admin/legacy data without an allauth EmailAddress row).
 AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
     'a_users.auth_backends.EmailOrUsernameModelBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
@@ -378,11 +417,14 @@ SITE_ID = 1
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
+    'a_core.middleware.SecurityHeadersMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'a_core.middleware.ForceCustom404Middleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'axes.middleware.AxesMiddleware',
+    'a_core.middleware.AdminIPAllowlistMiddleware',
     'a_users.middleware.UserDeviceTrackingMiddleware',
     'a_core.middleware.VpnProxyEnforcementMiddleware',
     'a_core.middleware.MaintenanceModeMiddleware',
@@ -394,6 +436,15 @@ MIDDLEWARE = [
     'allauth.account.middleware.AccountMiddleware',
     'django_htmx.middleware.HtmxMiddleware',
 ]
+
+# django-axes: brute-force lockout for admin auth
+AXES_ENABLED = _env_bool('AXES_ENABLED', default=True)
+AXES_ONLY_ADMIN_SITE = _env_bool('AXES_ONLY_ADMIN_SITE', default=True)
+AXES_FAILURE_LIMIT = int(os.environ.get('AXES_FAILURE_LIMIT', '5'))
+AXES_COOLOFF_TIME = timedelta(hours=float(os.environ.get('AXES_COOLOFF_HOURS', '12')))
+AXES_RESET_ON_SUCCESS = _env_bool('AXES_RESET_ON_SUCCESS', default=True)
+AXES_LOCKOUT_TEMPLATE = 'axes/lockout.html'
+AXES_LOCKOUT_CALLABLE = 'a_core.security_views.axes_lockout_response'
 
 
 # Cloudinary settings verify karein (Images ke liye)
@@ -470,6 +521,7 @@ IPL_RAPIDAPI_TIMEOUT_SECONDS = float(os.environ.get('IPL_RAPIDAPI_TIMEOUT_SECOND
 IPL_POLL_INTERVAL_SECONDS = int(os.environ.get('IPL_POLL_INTERVAL_SECONDS') or 180)
 IPL_SCORE_CACHE_TTL_SECONDS = int(os.environ.get('IPL_SCORE_CACHE_TTL_SECONDS') or 21600)
 IPL_LIVE_SCORE_CHAT_ROOM = (os.environ.get('IPL_LIVE_SCORE_CHAT_ROOM') or 'public-chat').strip() or 'public-chat'
+IPL_WIDGET_ENABLED_DEFAULT = _env_bool('IPL_WIDGET_ENABLED_DEFAULT', default=False)
 
 # Widget defaults (client can still drag/reposition; this is initial placement).
 IPL_WIDGET_DEFAULT_POSITION = (os.environ.get('IPL_WIDGET_DEFAULT_POSITION') or 'top-center').strip()
@@ -547,6 +599,10 @@ else:
 # Local/dev: don't depend on Redis (prevents WS disconnects when Redis isn't running).
 if ENVIRONMENT == 'production' and REDIS_URL:
     _redis_host_entry: object
+    _channel_capacity = int(os.environ.get('CHANNEL_LAYER_CAPACITY', '2000'))
+    _channel_expiry = int(os.environ.get('CHANNEL_LAYER_EXPIRY', '60'))
+    _channel_group_expiry = int(os.environ.get('CHANNEL_LAYER_GROUP_EXPIRY', '86400'))
+    _channel_prefix = (os.environ.get('CHANNEL_LAYER_PREFIX') or 'vixogram').strip() or 'vixogram'
 
     # channels_redis supports either string URLs or dicts.
     # For TLS Redis (rediss://), some providers need ssl_cert_reqs disabled.
@@ -565,6 +621,10 @@ if ENVIRONMENT == 'production' and REDIS_URL:
             'BACKEND': 'channels_redis.core.RedisChannelLayer',
             'CONFIG': {
                 'hosts': [_redis_host_entry],
+                'capacity': max(100, _channel_capacity),
+                'expiry': max(5, _channel_expiry),
+                'group_expiry': max(60, _channel_group_expiry),
+                'prefix': _channel_prefix,
             },
         },
     }
@@ -576,14 +636,10 @@ else:
         },
     }
 
-# Agar production ho toh DATABASE_URL required hai, warna local SQLite
-if ENVIRONMENT == 'production':
-    _database_url = (os.environ.get('DATABASE_URL') or '').strip()
-    if not _database_url:
-        raise ImproperlyConfigured(
-            'DATABASE_URL is required when ENVIRONMENT=production (e.g. on Render). '
-            'Set it in Render Dashboard (PostgreSQL Internal Database URL).'
-        )
+# Prefer DATABASE_URL whenever present (works for local Postgres testing too).
+_database_url = (os.environ.get('DATABASE_URL') or '').strip()
+
+if _database_url:
     DATABASES = {
         'default': dj_database_url.parse(_database_url)
     }
@@ -595,6 +651,11 @@ if ENVIRONMENT == 'production':
     except Exception:
         DATABASES['default']['CONN_MAX_AGE'] = 60
 else:
+    if ENVIRONMENT == 'production':
+        raise ImproperlyConfigured(
+            'DATABASE_URL is required when ENVIRONMENT=production (e.g. on Render). '
+            'Set it in Render Dashboard (PostgreSQL Internal Database URL).'
+        )
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -627,6 +688,10 @@ CHAT_MAX_MESSAGES_PER_ROOM = int(os.environ.get('CHAT_MAX_MESSAGES_PER_ROOM', '2
 # Private rooms can have a different cap to protect DB size.
 # Default is higher than public rooms, but still bounded.
 PRIVATE_CHAT_MAX_MESSAGES_PER_ROOM = int(os.environ.get('PRIVATE_CHAT_MAX_MESSAGES_PER_ROOM', '1000'))
+
+# Private code room member cap.
+# Increase default so room admins can admit users without hitting an unexpectedly low limit.
+PRIVATE_ROOM_MEMBER_LIMIT = int(os.environ.get('PRIVATE_ROOM_MEMBER_LIMIT', '100'))
 
 # Chat UI performance
 # Initial messages rendered into the DOM on room open. Keep this small to prevent
@@ -690,6 +755,18 @@ WS_TYPING_RATE_PERIOD = int(os.environ.get('WS_TYPING_RATE_PERIOD', '10'))
 WS_MSG_RATE_LIMIT = int(os.environ.get('WS_MSG_RATE_LIMIT', '8'))
 WS_MSG_RATE_PERIOD = int(os.environ.get('WS_MSG_RATE_PERIOD', '10'))
 
+# WebSocket connect overload guards (graceful degradation under spikes)
+# 0 means disabled. Defaults are enabled in production to avoid runaway connection storms.
+WS_CONNECT_RATE_LIMIT = int(os.environ.get('WS_CONNECT_RATE_LIMIT', '30' if ENVIRONMENT == 'production' else '0'))
+WS_CONNECT_RATE_PERIOD = int(os.environ.get('WS_CONNECT_RATE_PERIOD', '10'))
+WS_GLOBAL_CONNECTION_LIMIT = int(os.environ.get('WS_GLOBAL_CONNECTION_LIMIT', '25000' if ENVIRONMENT == 'production' else '0'))
+WS_CHATROOM_CONNECTION_LIMIT = int(os.environ.get('WS_CHATROOM_CONNECTION_LIMIT', '18000' if ENVIRONMENT == 'production' else '0'))
+WS_ONLINE_STATUS_CONNECTION_LIMIT = int(os.environ.get('WS_ONLINE_STATUS_CONNECTION_LIMIT', '8000' if ENVIRONMENT == 'production' else '0'))
+WS_NOTIFICATIONS_CONNECTION_LIMIT = int(os.environ.get('WS_NOTIFICATIONS_CONNECTION_LIMIT', '8000' if ENVIRONMENT == 'production' else '0'))
+WS_PROFILE_PRESENCE_CONNECTION_LIMIT = int(os.environ.get('WS_PROFILE_PRESENCE_CONNECTION_LIMIT', '6000' if ENVIRONMENT == 'production' else '0'))
+WS_GLOBAL_ANNOUNCEMENT_CONNECTION_LIMIT = int(os.environ.get('WS_GLOBAL_ANNOUNCEMENT_CONNECTION_LIMIT', '6000' if ENVIRONMENT == 'production' else '0'))
+WS_CONNECTION_COUNTER_TTL = int(os.environ.get('WS_CONNECTION_COUNTER_TTL', '120'))
+
 # Uploads / poll
 CHAT_UPLOAD_RATE_LIMIT = int(os.environ.get('CHAT_UPLOAD_RATE_LIMIT', '3'))
 CHAT_UPLOAD_RATE_PERIOD = int(os.environ.get('CHAT_UPLOAD_RATE_PERIOD', '60'))
@@ -732,10 +809,14 @@ CALL_PRESENCE_RATE_LIMIT = int(os.environ.get('CALL_PRESENCE_RATE_LIMIT', '60'))
 CALL_PRESENCE_RATE_PERIOD = int(os.environ.get('CALL_PRESENCE_RATE_PERIOD', '60'))
 CALL_EVENT_RATE_LIMIT = int(os.environ.get('CALL_EVENT_RATE_LIMIT', '30'))
 CALL_EVENT_RATE_PERIOD = int(os.environ.get('CALL_EVENT_RATE_PERIOD', '60'))
+RANDOM_VIDEO_ACTIVE_USERS_LIMIT = int(os.environ.get('RANDOM_VIDEO_ACTIVE_USERS_LIMIT', '2000'))
+RANDOM_VIDEO_REMATCH_COOLDOWN_SECONDS = int(os.environ.get('RANDOM_VIDEO_REMATCH_COOLDOWN_SECONDS', '12'))
+RANDOM_VIDEO_REMATCH_FALLBACK_WAIT_SECONDS = int(os.environ.get('RANDOM_VIDEO_REMATCH_FALLBACK_WAIT_SECONDS', '10'))
 
 # VPN/proxy guard
 VPN_PROXY_GUARD_ENABLED = _env_bool('VPN_PROXY_GUARD_ENABLED', default=True)
 VPN_PROXY_BYPASS_ADMIN = _env_bool('VPN_PROXY_BYPASS_ADMIN', default=False)
+VPN_PROXY_CLIENT_PROBE_ENABLED = _env_bool('VPN_PROXY_CLIENT_PROBE_ENABLED', default=False)
 VPN_PROXY_STATUS_CACHE_SECONDS = int(os.environ.get('VPN_PROXY_STATUS_CACHE_SECONDS', '120'))
 VPN_PROXY_CHECK_INTERVAL_SECONDS = int(os.environ.get('VPN_PROXY_CHECK_INTERVAL_SECONDS', '5'))
 
@@ -755,6 +836,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # - CHAT_UPLOAD_MAX_BYTES: max single file size
 CHAT_UPLOAD_LIMIT_PER_ROOM = int(os.environ.get('CHAT_UPLOAD_LIMIT_PER_ROOM', '15'))
 CHAT_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+SUPPORT_CHAT_USERNAME = (os.environ.get('SUPPORT_CHAT_USERNAME', 'vixogramconnect') or 'vixogramconnect').strip()
 
 # Agora (Voice/Video Calls)
 # IMPORTANT: Do not hardcode your Agora certificate in git.
@@ -887,13 +969,19 @@ else:
             'login_failed': _login_failed_rl,
         }
 
+if ALLAUTH_MFA_ENABLED:
+    MFA_SUPPORTED_TYPES = ['totp', 'recovery_codes']
+    MFA_TOTP_ISSUER = (os.getenv('MFA_TOTP_ISSUER', 'Vixogram') or 'Vixogram').strip() or 'Vixogram'
+
 # Sentry (Error + Performance Monitoring)
-# Enabled only if SENTRY_DSN is set.
+# Enabled only if SENTRY_DSN is set and SENTRY_ENABLED resolves true.
+# Default: ON in production, OFF in non-production.
 SENTRY_DSN = (os.getenv('SENTRY_DSN', '') or '').strip()
 SENTRY_TRACES_SAMPLE_RATE = float(os.getenv('SENTRY_TRACES_SAMPLE_RATE', '0.0') or '0.0')
 SENTRY_PROFILES_SAMPLE_RATE = float(os.getenv('SENTRY_PROFILES_SAMPLE_RATE', '0.0') or '0.0')
+SENTRY_ENABLED = _env_bool('SENTRY_ENABLED', default=(ENVIRONMENT == 'production'))
 
-if SENTRY_DSN:
+if SENTRY_DSN and SENTRY_ENABLED:
     try:
         import sentry_sdk
         from sentry_sdk.integrations.celery import CeleryIntegration

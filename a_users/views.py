@@ -1,7 +1,9 @@
 import json
 import base64
+import os
 import re
 import uuid
+import logging
 from datetime import timedelta
 from decimal import Decimal
 
@@ -15,7 +17,7 @@ from django.views.decorators.http import require_POST
 from django.db.models import Q
 from django.core.cache import cache
 
-from .models import Profile, Story, StoryView, DEFAULT_AVATAR_DATA_URI
+from .models import Profile, Story, StoryView, StoryLike, DEFAULT_AVATAR_DATA_URI
 from .forms import ProfileForm
 from .forms import ReportUserForm
 from .forms import ProfilePrivacyForm
@@ -24,6 +26,8 @@ from .forms import UsernameChangeForm
 from .forms import OnboardingAvatarForm
 from .forms import OnboardingAboutForm
 from .forms import StoryForm
+from .forms import ProfilePreferredLocationForm
+from .location_preferences import clean_location_name, ensure_local_community_membership
 
 try:
     from .story_policy import can_user_add_story, story_upload_locked_message, get_story_max_active
@@ -60,6 +64,9 @@ try:
     from a_rtchat.models import Notification
 except Exception:  # pragma: no cover
     Notification = None
+
+
+logger = logging.getLogger(__name__)
 
 
 @login_required
@@ -188,6 +195,95 @@ def _is_user_globally_online(user) -> bool:
         return False
 
 
+def location_suggest_view(request):
+    if request.method != 'GET':
+        return JsonResponse({'results': []}, status=405)
+
+    q = clean_location_name(request.GET.get('q') or '', max_len=120)
+    if len(q) < 2:
+        return JsonResponse({'results': []})
+
+    cache_key = f"vixo:locsuggest:v2:{q.lower()}"
+    try:
+        cached = cache.get(cache_key)
+        if isinstance(cached, list):
+            return JsonResponse({'results': cached})
+    except Exception:
+        pass
+
+    results = []
+    seen = set()
+
+    try:
+        url = 'https://nominatim.openstreetmap.org/search'
+        params = {
+            'q': q,
+            'format': 'jsonv2',
+            'addressdetails': '1',
+            'limit': '12',
+        }
+        contact = (getattr(settings, 'CONTACT_EMAIL', '') or '').strip()
+        user_agent = 'Vixogram/1.0'
+        if contact:
+            user_agent = f"{user_agent} ({contact})"
+
+        resp = requests.get(url, params=params, headers={'User-Agent': user_agent}, timeout=4)
+        if resp.status_code == 200:
+            payload = resp.json() if resp.content else []
+        else:
+            payload = []
+    except Exception:
+        payload = []
+
+    for row in payload if isinstance(payload, list) else []:
+        if not isinstance(row, dict):
+            continue
+        address = row.get('address') if isinstance(row.get('address'), dict) else {}
+
+        city = clean_location_name(
+            address.get('city')
+            or address.get('town')
+            or address.get('village')
+            or address.get('hamlet')
+            or address.get('county')
+            or address.get('state_district')
+            or ''
+        )
+        state = clean_location_name(address.get('state') or address.get('state_district') or '')
+        country = clean_location_name(address.get('country') or '')
+
+        # Nominatim often returns region/state records without a city key
+        # (e.g. "Tamil Nadu"). Allow those as selectable location values.
+        if not city and state:
+            city = state
+            state = ''
+        elif city and state and city.lower() == state.lower():
+            state = ''
+
+        if not city:
+            continue
+
+        label_parts = [part for part in [city, state, country] if part]
+        label = ', '.join(label_parts)
+        key = (city.lower(), state.lower(), country.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append({
+            'label': label,
+            'city': city,
+            'state': state,
+            'country': country,
+        })
+
+    try:
+        cache.set(cache_key, results, 24 * 3600)
+    except Exception:
+        pass
+
+    return JsonResponse({'results': results})
+
+
 def _has_verified_email(user) -> bool:
     try:
         if not getattr(user, 'is_authenticated', False):
@@ -231,6 +327,10 @@ def profile_view(request, username=None):
     viewer_verified = _has_verified_email(getattr(request, 'user', None))
     is_owner = bool(request.user.is_authenticated and request.user == profile_user)
     is_private = bool(getattr(user_profile, 'is_private_account', False))
+    is_founder_effective = bool(
+        getattr(user_profile, 'is_founder_club', False)
+        or getattr(profile_user, 'is_superuser', False)
+    )
 
     # Presence visibility
     is_bot = bool(getattr(user_profile, 'is_bot', False))
@@ -299,6 +399,7 @@ def profile_view(request, username=None):
     ctx = {
         'profile': user_profile,
         'profile_user': profile_user,
+        'is_founder_effective': is_founder_effective,
         'followers_count': followers_count,
         'following_count': following_count,
         'is_verified_badge': is_verified_badge,
@@ -409,6 +510,24 @@ def user_stories_json_view(request, username: str):
         .order_by('created_at')
     )
 
+    liked_story_ids = set()
+    like_counts = {}
+    try:
+        story_ids = [int(getattr(s, 'id', 0) or 0) for s in qs[:40]]
+        story_ids = [sid for sid in story_ids if sid > 0]
+        if request.user.is_authenticated and story_ids:
+            liked_story_ids = set(
+                StoryLike.objects.filter(story_id__in=story_ids, user=request.user).values_list('story_id', flat=True)
+            )
+        if story_ids:
+            from django.db.models import Count
+
+            for row in StoryLike.objects.filter(story_id__in=story_ids).values('story_id').annotate(c=Count('id')):
+                like_counts[int(row.get('story_id') or 0)] = int(row.get('c') or 0)
+    except Exception:
+        liked_story_ids = set()
+        like_counts = {}
+
     stories = []
     for s in qs[:40]:
         try:
@@ -422,6 +541,8 @@ def user_stories_json_view(request, username: str):
             'image_url': url,
             'created_at': s.created_at.isoformat() if getattr(s, 'created_at', None) else None,
             'expires_at': s.expires_at.isoformat() if getattr(s, 'expires_at', None) else None,
+            'liked_by_me': bool(int(s.id) in liked_story_ids),
+            'likes_count': int(like_counts.get(int(s.id), 0)),
         })
 
     res = JsonResponse({
@@ -490,6 +611,57 @@ def story_seen_view(request, story_id: int):
 
 
 @login_required
+@require_POST
+def story_like_toggle_view(request, story_id: int):
+    """Toggle like for a story by the current user."""
+    story = get_object_or_404(Story, id=story_id)
+
+    owner = getattr(story, 'user', None)
+    owner_profile = getattr(owner, 'profile', None) if owner else None
+
+    is_admin = False
+    try:
+        is_admin = bool(getattr(request.user, 'is_staff', False) or getattr(request.user, 'is_superuser', False))
+    except Exception:
+        is_admin = False
+
+    is_private = bool(getattr(owner_profile, 'is_private_account', False))
+    if is_private and not is_admin:
+        is_owner = bool(getattr(story, 'user_id', None) == getattr(request.user, 'id', None))
+        is_following = False
+        if not is_owner:
+            try:
+                is_following = Follow.objects.filter(follower=request.user, following=owner).exists()
+            except Exception:
+                is_following = False
+        if not (is_owner or is_following):
+            return JsonResponse({'detail': 'Private account'}, status=403)
+
+    liked = False
+    try:
+        obj, created = StoryLike.objects.get_or_create(story=story, user=request.user)
+        if created:
+            liked = True
+        else:
+            obj.delete()
+            liked = False
+    except Exception:
+        return JsonResponse({'detail': 'Could not update like'}, status=400)
+
+    try:
+        likes_count = int(StoryLike.objects.filter(story=story).count())
+    except Exception:
+        likes_count = 0
+
+    res = JsonResponse({'ok': True, 'liked': bool(liked), 'likes_count': int(likes_count)})
+    try:
+        res['Cache-Control'] = 'no-store'
+    except Exception:
+        pass
+    return res
+
+
+@login_required
 def story_viewers_json_view(request, story_id: int):
     """Return the viewers list for a story.
 
@@ -535,6 +707,12 @@ def story_viewers_json_view(request, story_id: int):
             cursor_id = int(cursor_id_raw)
         except Exception:
             cursor_id = None
+
+    liked_viewer_ids = set()
+    try:
+        liked_viewer_ids = set(StoryLike.objects.filter(story=story).values_list('user_id', flat=True))
+    except Exception:
+        liked_viewer_ids = set()
 
     viewers = []
     has_more = False
@@ -591,6 +769,7 @@ def story_viewers_json_view(request, story_id: int):
                 'username': getattr(u, 'username', ''),
                 'displayname': getattr(p, 'name', None) if p else None,
                 'avatar': avatar,
+                'liked': bool(getattr(u, 'id', None) in liked_viewer_ids),
             })
     except Exception:
         viewers = []
@@ -636,7 +815,45 @@ def story_delete_view(request, story_id: int):
     except Exception:
         return JsonResponse({'detail': 'Failed to delete'}, status=400)
 
-    res = JsonResponse({'ok': True})
+    max_active = 1
+    try:
+        if callable(get_story_max_active):
+            max_active = int(get_story_max_active() or 1)
+    except Exception:
+        max_active = 1
+
+    active_count = 0
+    try:
+        now = timezone.now()
+        cutoff = now - timedelta(hours=int(getattr(Story, 'TTL_HOURS', 24) or 24))
+        active_count = int(
+            Story.objects
+            .filter(user=request.user)
+            .filter(
+                Q(expires_at__gt=now)
+                | Q(expires_at__isnull=True, created_at__gte=cutoff)
+            )
+            .count()
+        )
+    except Exception:
+        active_count = 0
+
+    can_add_story = bool(active_count < max_active)
+    limit_msg = (
+        'Free plan limited to 1 story. Delete your current story to add a new one.'
+        if int(max_active or 1) == 1
+        else f'You can put only {max_active} stories.'
+    )
+
+    res = JsonResponse({
+        'ok': True,
+        'story_upload': {
+            'can_add_story': can_add_story,
+            'active_count': int(active_count or 0),
+            'max_active': int(max_active or 1),
+            'limit_message': str(limit_msg),
+        },
+    })
     try:
         res['Cache-Control'] = 'no-store'
     except Exception:
@@ -687,15 +904,41 @@ def story_add_view(request):
         except Exception:
             return 0
 
-    max_active = 25
+    max_active = 1
     try:
         if callable(get_story_max_active):
-            max_active = int(get_story_max_active() or 25)
+            max_active = int(get_story_max_active() or 1)
     except Exception:
-        max_active = 25
+        max_active = 1
 
-    if _active_story_count() >= max_active:
-        msg = f'You can put only {max_active} stories.'
+    limit_msg = (
+        'Only 1 active story is allowed. Uploading a new story will replace your previous one.'
+        if int(max_active or 1) == 1
+        else f'You can put only {max_active} stories.'
+    )
+
+    def _delete_existing_active_stories() -> None:
+        """For single-story plans, keep only the newest upload by removing active older stories."""
+        try:
+            cutoff = now - timedelta(hours=getattr(Story, 'TTL_HOURS', 24))
+            active_qs = (
+                Story.objects
+                .filter(user=request.user)
+                .filter(
+                    Q(expires_at__gt=now)
+                    | Q(expires_at__isnull=True, created_at__gte=cutoff)
+                )
+            )
+            for s in active_qs[:200]:
+                try:
+                    s.delete()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    if int(max_active or 1) > 1 and _active_story_count() >= max_active:
+        msg = limit_msg
         if is_htmx and is_modal:
             # User clicked "Add Story" from menu: show popup and close.
             return HttpResponse(
@@ -737,8 +980,8 @@ def story_add_view(request):
 
         form = StoryForm(request.POST, files)
         if form.is_valid():
-            if _active_story_count() >= max_active:
-                msg = f'You can put only {max_active} stories.'
+            if int(max_active or 1) > 1 and _active_story_count() >= max_active:
+                msg = limit_msg
                 try:
                     form.add_error(None, msg)
                 except Exception:
@@ -766,10 +1009,48 @@ def story_add_view(request):
                 messages.error(request, msg)
                 return redirect('profile')
 
+            if int(max_active or 1) == 1:
+                _delete_existing_active_stories()
+
             story = form.save(commit=False)
             story.user = request.user
-            story.save()
-            messages.success(request, 'Story added. It will auto-expire in 24 hours.')
+            try:
+                story.save()
+            except Exception as exc:
+                logger.exception('Story upload failed for user_id=%s', getattr(request.user, 'id', None))
+                msg = 'Could not upload story right now. Please try again in a moment.'
+                exc_msg = (str(exc) or '').strip()
+                # Keep moderation messages user-friendly if they are intentional business errors.
+                if exc_msg in {'Upload rejected by Vixogram Team', 'Upload is under review'}:
+                    msg = exc_msg
+
+                try:
+                    form.add_error('image', msg)
+                except Exception:
+                    pass
+
+                if is_htmx and is_modal:
+                    ctx = {
+                        'form': form,
+                        'duration_seconds': int(getattr(Story, 'DURATION_SECONDS', 10)),
+                        'ttl_hours': int(getattr(Story, 'TTL_HOURS', 24)),
+                    }
+                    resp = render(request, 'a_users/partials/story_add_modal.html', ctx)
+                    try:
+                        extra = f"""
+                        <script>
+                          try {{
+                            document.body.dispatchEvent(new CustomEvent('vixo:toast', {{ detail: {{ message: {msg!r}, kind: 'error', durationMs: 3200 }} }}));
+                          }} catch (e) {{}}
+                        </script>
+                        """.strip().encode('utf-8')
+                    except Exception:
+                        extra = b''
+                    return HttpResponse(resp.content + extra)
+
+                messages.error(request, msg)
+                return redirect('profile')
+
             if is_htmx and is_modal:
                 # Close modal + show toast without page navigation.
                 return HttpResponse(
@@ -783,6 +1064,7 @@ def story_add_view(request):
                     </script>
                     """.strip()
                 )
+            messages.success(request, 'Story added. It will auto-expire in 24 hours.')
             return redirect('profile')
     else:
         form = StoryForm()
@@ -1057,13 +1339,27 @@ def _can_view_follow_lists(request, profile_user: User) -> tuple[bool, str]:
     viewer_verified = _has_verified_email(getattr(request, 'user', None))
     is_owner = bool(request.user.is_authenticated and request.user == profile_user)
     is_private = bool(getattr(getattr(profile_user, 'profile', None), 'is_private_account', False))
+    is_following = False
+
+    if request.user.is_authenticated and request.user != profile_user:
+        try:
+            is_following = Follow.objects.filter(follower=request.user, following=profile_user).exists()
+        except Exception:
+            is_following = False
 
     if not request.user.is_authenticated:
         return False, 'Login and verify your email to view followers/following.'
+
+    # Private account: owner and accepted followers can view lists.
+    if is_private:
+        if is_owner or is_following:
+            return True, ''
+        return False, 'This acc is private. You cannot view following/followers unless the user accepts your request'
+
+    # Public account: verified-email gate remains in place.
     if not viewer_verified:
         return False, 'Verify your email to view followers/following.'
-    if is_private and not is_owner:
-        return False, 'This account is private. Only counts are visible.'
+
     return True, ''
 
 
@@ -1214,37 +1510,45 @@ def report_user_view(request, username: str):
 
         return redirect('profile')
 
+    if target.is_superuser:
+        messages.error(request, 'Superusers cannot be reported.')
+
+        if is_modal:
+            resp = HttpResponse(status=204)
+            resp['HX-Trigger'] = json.dumps({
+                'vixo:closeGlobalModal': True,
+                'vixo:toast': {
+                    'message': 'Superusers cannot be reported.',
+                    'kind': 'error',
+                },
+            })
+            return resp
+
+        return redirect('profile-user', username=target.username)
+
     form = ReportUserForm(request.POST or None)
     if request.method == 'POST':
         if form.is_valid():
             reason = form.cleaned_data['reason']
             details = (form.cleaned_data.get('details') or '').strip()
+            success_message = 'Our team will verify and let you know within a short period of time.'
 
-            # Avoid duplicate open reports from the same reporter to the same user.
-            obj, created = UserReport.objects.get_or_create(
+            UserReport.objects.create(
                 reporter=request.user,
                 reported_user=target,
+                reason=reason,
+                details=details,
                 status=UserReport.STATUS_OPEN,
-                defaults={'reason': reason, 'details': details},
             )
-            if not created:
-                # Update details/reason if they submit again.
-                obj.reason = reason
-                obj.details = details
-                obj.save(update_fields=['reason', 'details'])
-
-            messages.success(request, f"Report submitted for @{target.username}.")
 
             if is_modal:
-                resp = HttpResponse(status=204)
-                resp['HX-Trigger'] = json.dumps({
-                    'vixo:closeGlobalModal': True,
-                    'vixo:toast': {
-                        'message': f"Report submitted for @{target.username}.",
-                        'kind': 'success',
-                    },
+                return render(request, 'a_users/partials/report_user_success_modal.html', {
+                    'target_user': target,
+                    'success_title': 'Submitted',
+                    'success_message': success_message,
                 })
-                return resp
+
+            messages.success(request, f"Submitted. {success_message}")
 
             return redirect('profile-user', username=target.username)
 
@@ -1253,6 +1557,20 @@ def report_user_view(request, username: str):
     return render(request, template_name, {
         'target_user': target,
         'form': form,
+    })
+
+
+@login_required
+def my_reports_view(request):
+    reports = (
+        UserReport.objects
+        .filter(reporter=request.user)
+        .select_related('reported_user', 'handled_by')
+        .order_by('-created_at')
+    )
+
+    return render(request, 'a_users/my_reports.html', {
+        'reports': reports,
     })
 
 
@@ -1449,8 +1767,14 @@ def onboarding_photo_view(request):
             try:
                 form.save()
                 return redirect('onboarding-about')
-            except Exception:
-                messages.error(request, 'Could not save your photo right now. Please try again.')
+            except Exception as exc:
+                exc_msg = (str(exc) or '').strip().lower()
+                if 'upload rejected by vixogram team' in exc_msg:
+                    messages.error(request, 'Your profile pic has been removed. This image is not accepted under our Terms & Conditions.')
+                elif 'upload is under review' in exc_msg:
+                    messages.error(request, 'Your profile pic is under moderation review. Please upload a different image.')
+                else:
+                    messages.error(request, 'Could not save your photo right now. Please try again.')
 
     return render(request, 'a_users/onboarding/photo.html', {
         'form': form,
@@ -1492,6 +1816,13 @@ def profile_edit_view(request):
     profile = get_object_or_404(Profile, user=request.user)
     form = ProfileForm(instance=profile)
     username_form = UsernameChangeForm(user=request.user, profile=profile)
+
+    def _redirect_profile_with_fresh_token():
+        try:
+            qs = urlencode({'updated': int(timezone.now().timestamp() * 1000)})
+            return redirect(f"{reverse('profile')}?{qs}")
+        except Exception:
+            return redirect('profile')
     
     if request.method == 'POST':
         action = (request.POST.get('action') or '').strip().lower()
@@ -1515,33 +1846,76 @@ def profile_edit_view(request):
                     profile.username_last_changed_at = timezone.now()
                     profile.save(update_fields=['username_change_count', 'username_last_changed_at'])
                     messages.success(request, f'Username changed from @{old_username} to @{new_username}.')
-                    return redirect('profile')
+                    return _redirect_profile_with_fresh_token()
                 except Exception:
                     messages.error(request, 'Failed to update username. Please try again.')
 
         else:
             form = ProfileForm(request.POST, request.FILES, instance=profile)
             if form.is_valid():
-                try:
-                    form.save()
-                    return redirect('profile')
-                except Exception as exc:
-                    try:
-                        from cloudinary.exceptions import AuthorizationRequired
-                    except Exception:  # pragma: no cover
-                        AuthorizationRequired = None
+                has_new_avatar = bool(request.FILES.get('image'))
 
+                if has_new_avatar:
+                    # --- Async NudeNet moderation path ---
+                    # Save form fields (displayname, bio, cover_image) but keep the
+                    # current avatar unchanged until NudeNet approves it.
+                    uploaded_file = request.FILES['image']
+                    instance = form.save(commit=False)
+                    instance.image = profile.image  # restore original; NudeNet will update it later
+                    instance.save()
+
+                    # Write temp file locally for the Celery worker.
+                    temp_dir = os.path.join(settings.BASE_DIR, 'media', 'pending_avatars')
+                    os.makedirs(temp_dir, exist_ok=True)
+                    ext = os.path.splitext(uploaded_file.name)[1].lower() or '.jpg'
+                    temp_filename = f'pending_{profile.pk}_{uuid.uuid4().hex[:8]}{ext}'
+                    temp_path = os.path.join(temp_dir, temp_filename)
+                    with open(temp_path, 'wb') as fh:
+                        for chunk in uploaded_file.chunks():
+                            fh.write(chunk)
+
+                    Profile.objects.filter(pk=profile.pk).update(
+                        avatar_review_status='pending',
+                        avatar_pending_local=temp_path,
+                    )
+
+                    from .tasks import moderate_avatar_task
                     try:
-                        import logging
-                        logging.getLogger(__name__).exception('Profile update failed (avatar/cover save)')
+                        moderate_avatar_task.delay(profile.pk)
                     except Exception:
-                        pass
+                        # Broker unavailable (e.g. Redis not running locally) —
+                        # run moderation inline so the upload still works.
+                        logging.getLogger(__name__).warning(
+                            'Celery broker unreachable; running moderate_avatar_task inline for profile %s.',
+                            profile.pk,
+                        )
+                        moderate_avatar_task(profile.pk)
 
-                    # If Cloudinary account is locked/disabled, show a clearer message.
-                    if AuthorizationRequired is not None and isinstance(exc, AuthorizationRequired):
-                        messages.error(request, 'Image uploads are currently disabled on the media server. Please enable uploads in Cloudinary or use local media storage.')
-                    else:
-                        messages.error(request, 'Could not save your profile image right now. Please try a smaller image or try again later.')
+                    return redirect('profile-edit')
+
+                else:
+                    # No new avatar — save everything normally.
+                    try:
+                        form.save()
+                        messages.success(request, 'Profile updated successfully.')
+                        return _redirect_profile_with_fresh_token()
+                    except Exception as exc:
+                        try:
+                            from cloudinary.exceptions import AuthorizationRequired
+                        except Exception:  # pragma: no cover
+                            AuthorizationRequired = None
+
+                        logging.getLogger(__name__).exception('Profile update failed (cover/bio save)')
+
+                        exc_msg = (str(exc) or '').strip().lower()
+                        if AuthorizationRequired is not None and isinstance(exc, AuthorizationRequired):
+                            messages.error(request, 'Image uploads are currently disabled on the media server. Please enable uploads in Cloudinary or use local media storage.')
+                        elif 'upload rejected by vixogram team' in exc_msg:
+                            messages.error(request, 'Your profile pic has been removed. This image is not accepted under our Terms & Conditions.')
+                        elif 'upload is under review' in exc_msg:
+                            messages.error(request, 'Your profile pic is under moderation review. Please upload a different image.')
+                        else:
+                            messages.error(request, 'This photo violates our community guidelines.\nPlease upload a different photo.')
             
     # Cooldown info for template
     can_change, next_at = username_form.can_change_now()
@@ -1557,17 +1931,50 @@ def profile_edit_view(request):
     })
 
 @login_required
+def avatar_review_status_view(request):
+    """Poll endpoint: returns the current avatar_review_status for the logged-in user's profile.
+
+    Once a terminal state (approved / rejected) is read it is reset to 'none'
+    so subsequent polls don't keep delivering stale results.
+    """
+    profile = get_object_or_404(Profile, user=request.user)
+    status = (getattr(profile, 'avatar_review_status', '') or 'none').strip()
+
+    if status in ('approved', 'rejected'):
+        Profile.objects.filter(pk=profile.pk).update(avatar_review_status='none')
+
+    return JsonResponse({'status': status})
+
+
+@login_required
 def profile_settings_view(request):
     profile = get_object_or_404(Profile, user=request.user)
     form = ProfilePrivacyForm(instance=profile)
     username_form = UsernameChangeForm(user=request.user, profile=profile)
+    location_form = ProfilePreferredLocationForm(
+        instance=profile,
+        initial={'location_query': clean_location_name(getattr(profile, 'preferred_location_city', '') or '')},
+    )
     glow_choices = [
         (value, label)
         for value, label in getattr(Profile, 'NAME_GLOW_CHOICES', ())
-        if value != getattr(Profile, 'NAME_GLOW_NONE', 'none')
     ]
+    can_use_founder_ui = bool(getattr(profile, 'is_founder_club', False) or getattr(request.user, 'is_superuser', False))
 
     is_htmx = str(request.headers.get('HX-Request') or '').lower() == 'true'
+
+    try:
+        location_cooldown_hours = int(getattr(settings, 'PREFERRED_LOCATION_CHANGE_COOLDOWN_HOURS', 24) or 24)
+    except Exception:
+        location_cooldown_hours = 24
+
+    def _location_change_state() -> tuple[bool, timezone.datetime | None]:
+        last = getattr(profile, 'preferred_location_last_changed_at', None)
+        if not last:
+            return True, None
+        next_at = last + timedelta(hours=location_cooldown_hours)
+        now = timezone.now()
+        return (now >= next_at), next_at
 
     if request.method == 'POST' and (request.POST.get('action') or '').strip() == 'privacy':
         old_stealth = bool(getattr(profile, 'is_stealth', False))
@@ -1643,7 +2050,7 @@ def profile_settings_view(request):
             return redirect('profile-settings')
 
     if request.method == 'POST' and (request.POST.get('action') or '').strip().lower() == 'glow':
-        if not bool(getattr(profile, 'is_founder_club', False)):
+        if not can_use_founder_ui:
             messages.error(request, 'Glow colors are available only for Founder Club members.')
             return redirect('profile-settings')
 
@@ -1660,14 +2067,72 @@ def profile_settings_view(request):
             messages.error(request, 'Could not update glow color right now.')
         return redirect('profile-settings')
 
+    if request.method == 'POST' and (request.POST.get('action') or '').strip().lower() == 'preferred_location':
+        can_change_location, next_location_at = _location_change_state()
+        if not can_change_location:
+            if next_location_at:
+                messages.error(request, f'You can update preferred location again after {next_location_at:%b %d, %Y %I:%M %p}.')
+            else:
+                messages.error(request, 'Preferred location update is on cooldown.')
+            return redirect('profile-settings')
+
+        old_country = str(getattr(profile, 'preferred_location_country', '') or '').strip()
+        old_state = str(getattr(profile, 'preferred_location_state', '') or '').strip()
+        old_city = str(getattr(profile, 'preferred_location_city', '') or '').strip()
+
+        location_form = ProfilePreferredLocationForm(request.POST, instance=profile)
+        if location_form.is_valid():
+            try:
+                profile = location_form.save(commit=False)
+                new_country = str(getattr(profile, 'preferred_location_country', '') or '').strip()
+                new_state = str(getattr(profile, 'preferred_location_state', '') or '').strip()
+                new_city = str(getattr(profile, 'preferred_location_city', '') or '').strip()
+
+                changed = (old_country != new_country) or (old_state != new_state) or (old_city != new_city)
+                if changed:
+                    profile.preferred_location_last_changed_at = timezone.now()
+
+                profile.save()
+                ensure_local_community_membership(
+                    request.user,
+                    country=str(getattr(profile, 'preferred_location_country', '') or ''),
+                    state=str(getattr(profile, 'preferred_location_state', '') or ''),
+                    city=str(getattr(profile, 'preferred_location_city', '') or ''),
+                )
+                if changed:
+                    messages.success(request, 'Preferred location updated.')
+                else:
+                    messages.info(request, 'Preferred location is already up to date.')
+            except Exception:
+                messages.error(request, 'Could not update preferred location right now.')
+            return redirect('profile-settings')
+        messages.error(request, 'Please select a valid city.')
+
+    location_can_change, location_next_available_at = _location_change_state()
+
+    mfa_enabled = bool(getattr(settings, 'ALLAUTH_MFA_ENABLED', False))
+    mfa_settings_url = '/accounts/2fa/'
+    if mfa_enabled:
+        try:
+            mfa_settings_url = reverse('mfa_index')
+        except Exception:
+            mfa_settings_url = '/accounts/2fa/'
+
     return render(request, 'a_users/profile_settings.html', {
         'privacy_form': form,
         'profile': profile,
+        'can_use_founder_ui': can_use_founder_ui,
         'glow_choices': glow_choices,
+        'location_form': location_form,
         'username_form': username_form,
         'username_can_change': username_form.can_change_now()[0],
         'username_next_available_at': username_form.can_change_now()[1],
         'username_cooldown_days': int(getattr(settings, 'USERNAME_CHANGE_COOLDOWN_DAYS', 21) or 21),
+        'location_can_change': location_can_change,
+        'location_next_available_at': location_next_available_at,
+        'location_cooldown_hours': location_cooldown_hours,
+        'mfa_enabled': mfa_enabled,
+        'mfa_settings_url': mfa_settings_url,
     })
 
 
@@ -1814,21 +2279,40 @@ def follow_toggle_view(request, username: str):
 
 @login_required
 def follow_requests_modal_view(request):
+    page_size = 10
+    try:
+        offset = max(0, int(request.GET.get('offset') or 0))
+    except Exception:
+        offset = 0
+
     qs = (
         FollowRequest.objects
         .filter(to_user=request.user)
         .select_related('from_user', 'from_user__profile')
         .order_by('-created_at')
     )
-    items = list(qs[:200])
+    items = list(qs[offset:offset + page_size + 1])
+    has_more = len(items) > page_size
+    if has_more:
+        items = items[:page_size]
+
     pending_count = qs.count()
-    resp = render(request, 'a_users/partials/follow_requests_modal.html', {
+
+    context = {
         'items': items,
         'pending_count': int(pending_count or 0),
-    })
+        'offset': offset,
+        'next_offset': offset + len(items),
+        'has_more': has_more,
+    }
+
+    is_partial = str(request.GET.get('partial') or '').lower() in {'1', 'true', 'yes'}
+    template_name = 'a_users/partials/follow_requests_items.html' if is_partial else 'a_users/partials/follow_requests_modal.html'
+
+    resp = render(request, template_name, context)
     try:
         is_htmx = str(request.headers.get('HX-Request') or '').lower() == 'true'
-        if is_htmx:
+        if is_htmx and not is_partial:
             resp['HX-Trigger'] = json.dumps({
                 'followRequestsChanged': {
                     'pending_count': int(pending_count or 0),

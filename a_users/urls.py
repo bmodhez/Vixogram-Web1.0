@@ -7,11 +7,14 @@ urlpatterns = [
     path('story/add/', story_add_view, name='story-add'),
     path('story/<int:story_id>/delete/', story_delete_view, name='story-delete'),
     path('story/<int:story_id>/seen/', story_seen_view, name='story-seen'),
+    path('story/<int:story_id>/like/', story_like_toggle_view, name='story-like-toggle'),
     path('story/<int:story_id>/viewers/', story_viewers_json_view, name='story-viewers'),
     path('config/', profile_config_view, name='profile-config-self'),
     path('edit/', profile_edit_view, name="profile-edit"),
+    path('edit/avatar-review/', avatar_review_status_view, name='avatar-review-status'),
     path('settings/', profile_settings_view, name="profile-settings"),
     path('username/check/', username_availability_view, name='username-check'),
+    path('location/suggest/', location_suggest_view, name='profile-location-suggest'),
 
     # Onboarding (after welcome popup)
     path('onboarding/username/', onboarding_username_view, name='onboarding-username'),
@@ -33,6 +36,7 @@ urlpatterns = [
     path('notifications/<int:notif_id>/read/', notifications_mark_read_view, name='notifications-mark-read'),
     path('notifications/read-all/', notifications_mark_all_read_view, name='notifications-read-all'),
     path('notifications/clear-all/', notifications_clear_all_view, name='notifications-clear-all'),
+    path('reports/', my_reports_view, name='my-reports'),
     path('support/', contact_support_view, name='contact-support'),
     path('invite/', invite_friends_view, name='invite-friends'),
     path('founder-club/apply/', founder_club_apply_view, name='founder-club-apply'),

@@ -44,7 +44,7 @@
               <td class="px-4 py-3">
                 <div class="font-semibold">{{ r.get_reason_display }}</div>
                 {% if r.details %}
-                  <div class="mt-1 text-xs text-gray-400 max-w-md">{{ r.details }}</div>
+                  <div class="mt-1 max-w-md text-xs text-gray-400 whitespace-pre-wrap break-words">{{ r.details }}</div>
                 {% endif %}
               </td>
               <td class="px-4 py-3">

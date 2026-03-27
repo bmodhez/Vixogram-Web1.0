@@ -60,7 +60,15 @@
                     <div class="flex flex-col gap-2">
                         <label class="text-sm font-semibold text-gray-300">Current avatar</label>
                         <div class="flex items-center gap-3">
-                            <img id="current_avatar_preview" src="{{ profile.avatar }}" alt="Current avatar" class="w-16 h-16 rounded-full object-cover border border-gray-700" />
+                            <div class="relative w-16 h-16 flex-none">
+                                <img id="current_avatar_preview" src="{{ profile.avatar }}" alt="Current avatar" class="w-16 h-16 rounded-full object-cover border border-gray-700" />
+                                {% if profile.avatar_review_status == 'pending' %}
+                                <div id="avatar-review-overlay" class="absolute inset-0 rounded-full overflow-hidden pointer-events-none" style="background: repeating-linear-gradient(45deg, #f59e0b 0px, #f59e0b 7px, #111827 7px, #111827 14px); opacity: 0.85;"></div>
+                                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                    <span class="text-[8px] font-bold text-white text-center leading-tight px-0.5" style="text-shadow: 0 1px 3px #000, 0 0 6px #000;">Under<br>Review</span>
+                                </div>
+                                {% endif %}
+                            </div>
                             <div class="text-xs text-gray-400">Choose a new image to update your avatar.</div>
                         </div>
 
@@ -74,19 +82,36 @@
                     <div class="flex flex-col gap-2">
                         <label class="text-sm font-semibold text-gray-300">Profile background</label>
                         <div class="rounded-xl border border-white/10 bg-gray-950/30 overflow-hidden">
-                            <div class="h-24 relative">
-                                {% if profile.cover_url %}
-                                    <img src="{{ profile.cover_url }}" alt="Current background" class="absolute inset-0 w-full h-full object-cover" />
-                                {% else %}
-                                    <div class="absolute inset-0 bg-gradient-to-r from-purple-600/40 via-indigo-600/30 to-sky-600/40"></div>
-                                {% endif %}
+                            <div class="h-24 relative" id="current_cover_preview_wrap">
+                                <img
+                                    id="current_cover_preview"
+                                    src="{% if profile.cover_url %}{{ profile.cover_url }}{% endif %}"
+                                    alt="Current background"
+                                    class="absolute inset-0 w-full h-full object-cover{% if not profile.cover_url %} hidden{% endif %}"
+                                />
+                                <div
+                                    id="current_cover_fallback"
+                                    class="absolute inset-0 bg-gradient-to-r from-purple-600/40 via-indigo-600/30 to-sky-600/40{% if profile.cover_url %} hidden{% endif %}"
+                                ></div>
                                 <div class="absolute inset-0 bg-gradient-to-b from-black/10 via-black/20 to-black/60"></div>
                             </div>
-                            <div class="px-4 py-3 text-xs text-gray-400">Upload a custom background image (max 2MB).</div>
+                            <div class="px-4 py-3 text-xs text-gray-400">Upload a custom background image (max 1MB).</div>
                         </div>
 
                         <label class="text-sm font-semibold text-gray-300 mt-2">{{ field.label }}</label>
-                        {{ field }}
+                        <div id="cover_image_field_wrap">
+                            {{ field }}
+                        </div>
+                        <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
+                            <button
+                                type="button"
+                                id="cover_image_select_btn"
+                                class="inline-flex items-center justify-center rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-semibold px-4 py-2 transition-colors"
+                            >
+                                {% if profile.cover_url %}Change file{% else %}Choose file{% endif %}
+                            </button>
+                            <div id="cover_image_file_name" class="w-full min-w-0 flex-1 text-xs text-gray-400 leading-snug whitespace-normal break-words">No file chosen</div>
+                        </div>
                         {% if field.errors %}
                             <span class="text-red-500 text-xs">{{ field.errors|first }}</span>
                         {% endif %}
@@ -148,6 +173,42 @@
                 </div>
         </div>
 </wrapper>
+
+        <!-- Cover crop modal (opens after selecting a background image) -->
+        <div id="cover_crop_modal" class="hidden fixed inset-0 z-50" aria-hidden="true">
+            <div class="absolute inset-0 bg-black/70"></div>
+            <div class="relative h-[100dvh] overflow-y-auto flex items-start justify-center px-4 pt-6 pb-3 sm:pt-10 sm:pb-6">
+            <div class="w-full max-w-2xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-4rem)] bg-gray-800 rounded-2xl shadow-2xl border border-gray-700 overflow-hidden">
+                    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+                        <div class="text-white font-bold">Crop background</div>
+                        <button id="cover_crop_close" type="button" class="text-gray-300 hover:text-white px-2 py-1">✕</button>
+                    </div>
+
+                <div class="p-5 overflow-y-auto">
+                        <div class="text-xs text-gray-400 mb-3">Drag to position • Use zoom</div>
+
+                <div class="mx-auto w-full max-w-[min(34rem,92vw)]">
+                    <div id="cover_crop_area" class="relative w-full aspect-[3/1] max-w-full bg-gray-900/40 border border-gray-700 rounded-2xl overflow-hidden touch-none select-none">
+                                <img id="cover_crop_img" alt="Crop preview" class="absolute left-1/2 top-1/2 will-change-transform pointer-events-none max-w-none max-h-none" />
+                                <div aria-hidden="true" class="absolute inset-0 ring-1 ring-white/10"></div>
+                            </div>
+                        </div>
+
+                                        <div class="mt-2 text-[11px] text-gray-400">Tip: Use a wide image (at least 900x300) and keep file size under 1MB.</div>
+
+                        <div class="mt-4">
+                            <label class="text-xs text-gray-400">Zoom</label>
+                            <input id="cover_crop_zoom" type="range" min="1" max="3" step="0.01" value="1" class="w-full" />
+                        </div>
+
+                        <div class="mt-5 flex items-center gap-3">
+                            <button id="cover_crop_cancel" type="button" class="flex-1 text-center bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Cancel</button>
+                            <button id="cover_crop_apply" type="button" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Apply</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
 {% if user.is_authenticated %}
 <nav class="lg:hidden fixed left-1/2 -translate-x-1/2 bottom-[max(0.9rem,env(safe-area-inset-bottom))] z-[85] w-[min(20rem,calc(100vw-1.2rem))] rounded-2xl border border-gray-800/90 bg-gray-900/92 backdrop-blur-md shadow-2xl shadow-black/45 px-2 py-1.5" aria-label="Mobile navigation">
@@ -310,6 +371,320 @@
         });
     }
 
+    const coverInput = document.getElementById('id_cover_image') || document.querySelector('input[type="file"][name="cover_image"]');
+    const coverBtn = document.getElementById('cover_image_select_btn');
+    const coverFileName = document.getElementById('cover_image_file_name');
+    const hasExistingCover = {{ profile.cover_url|yesno:"true,false" }};
+    const coverPreview = document.getElementById('current_cover_preview');
+    const coverFallback = document.getElementById('current_cover_fallback');
+
+    const coverModal = document.getElementById('cover_crop_modal');
+    const coverCloseBtn = document.getElementById('cover_crop_close');
+    const coverCancelBtn = document.getElementById('cover_crop_cancel');
+    const coverApplyBtn = document.getElementById('cover_crop_apply');
+    const coverCropArea = document.getElementById('cover_crop_area');
+    const coverCropImg = document.getElementById('cover_crop_img');
+    const coverZoomInput = document.getElementById('cover_crop_zoom');
+
+    let syncCoverState = () => {};
+    const setCoverFileMessage = (message, isError = false) => {
+        if (!coverFileName) return;
+        coverFileName.textContent = String(message || '');
+        coverFileName.classList.toggle('text-red-400', Boolean(isError));
+        coverFileName.classList.toggle('text-gray-400', !isError);
+    };
+
+    if (coverInput && coverBtn) {
+        // Hide native picker UI and use our own button text/state.
+        coverInput.classList.add('hidden');
+
+        syncCoverState = () => {
+            const hasPickedFile = Boolean(coverInput.files && coverInput.files.length);
+            const fileName = hasPickedFile ? String(coverInput.files[0].name || '') : '';
+            coverBtn.textContent = (hasPickedFile || hasExistingCover) ? 'Change file' : 'Choose file';
+            setCoverFileMessage(hasPickedFile ? fileName : 'No file chosen', false);
+        };
+
+        coverBtn.addEventListener('click', () => {
+            coverInput.click();
+        });
+
+        coverInput.addEventListener('change', syncCoverState);
+        syncCoverState();
+    }
+
+    if (
+        coverInput && coverBtn && coverModal && coverCloseBtn && coverCancelBtn &&
+        coverApplyBtn && coverCropArea && coverCropImg && coverZoomInput
+    ) {
+        const COVER_OUT_WIDTH = 1500;
+        const COVER_OUT_HEIGHT = 500;
+        const COVER_MAX_BYTES = 1 * 1024 * 1024;
+        const COVER_MIN_WIDTH = 900;
+        const COVER_MIN_HEIGHT = 300;
+
+        let coverObjectUrl = null;
+        let coverImgEl = null;
+        let coverImgW = 0;
+        let coverImgH = 0;
+        let coverBaseScale = 1;
+        let coverZoom = 1;
+        let coverOffsetX = 0;
+        let coverOffsetY = 0;
+        let coverDragging = false;
+        let coverStartX = 0;
+        let coverStartY = 0;
+        let coverStartOffsetX = 0;
+        let coverStartOffsetY = 0;
+        let coverOriginalFile = null;
+
+        const openCoverModal = () => {
+            coverModal.classList.remove('hidden');
+            coverModal.setAttribute('aria-hidden', 'false');
+        };
+
+        const closeCoverModal = () => {
+            coverModal.classList.add('hidden');
+            coverModal.setAttribute('aria-hidden', 'true');
+        };
+
+        const cleanupCoverObjectUrl = () => {
+            if (coverObjectUrl) {
+                try { URL.revokeObjectURL(coverObjectUrl); } catch {}
+                coverObjectUrl = null;
+            }
+        };
+
+        const getCoverCropSize = () => {
+            const rect = coverCropArea.getBoundingClientRect();
+            return {
+                width: Math.max(1, Math.round(rect.width || 0)),
+                height: Math.max(1, Math.round(rect.height || 0)),
+            };
+        };
+
+        const clampCoverOffsets = () => {
+            const { width, height } = getCoverCropSize();
+            const scale = coverBaseScale * coverZoom;
+            const scaledW = coverImgW * scale;
+            const scaledH = coverImgH * scale;
+            const maxX = Math.max(0, (scaledW - width) / 2);
+            const maxY = Math.max(0, (scaledH - height) / 2);
+            coverOffsetX = Math.min(maxX, Math.max(-maxX, coverOffsetX));
+            coverOffsetY = Math.min(maxY, Math.max(-maxY, coverOffsetY));
+        };
+
+        const renderCoverTransform = () => {
+            clampCoverOffsets();
+            const scale = coverBaseScale * coverZoom;
+            coverCropImg.style.transform = `translate(-50%, -50%) translate(${coverOffsetX}px, ${coverOffsetY}px) scale(${scale})`;
+        };
+
+        const syncCoverCropSize = () => {
+            if (!coverImgEl) return;
+            const { width, height } = getCoverCropSize();
+            coverBaseScale = Math.max(width / coverImgW, height / coverImgH);
+            renderCoverTransform();
+        };
+
+        const loadCoverImageFromFile = (file) => {
+            cleanupCoverObjectUrl();
+            coverOriginalFile = file;
+            coverObjectUrl = URL.createObjectURL(file);
+
+            return new Promise((resolve, reject) => {
+                const im = new Image();
+                im.onload = () => resolve(im);
+                im.onerror = reject;
+                im.src = coverObjectUrl;
+            });
+        };
+
+        const resetCoverStateForImage = (im) => {
+            coverImgEl = im;
+            coverImgW = im.naturalWidth || im.width || 1;
+            coverImgH = im.naturalHeight || im.height || 1;
+
+            const { width, height } = getCoverCropSize();
+            coverBaseScale = Math.max(width / coverImgW, height / coverImgH);
+            coverZoom = 1;
+            coverZoomInput.value = '1';
+            coverOffsetX = 0;
+            coverOffsetY = 0;
+
+            coverCropImg.src = im.src;
+            coverCropImg.style.width = coverImgW + 'px';
+            coverCropImg.style.height = coverImgH + 'px';
+            renderCoverTransform();
+        };
+
+        const clearCoverSelection = ({ preserveMessage = false } = {}) => {
+            coverInput.value = '';
+            coverOriginalFile = null;
+            cleanupCoverObjectUrl();
+            if (!preserveMessage) {
+                syncCoverState();
+            }
+        };
+
+        const onCoverInputChange = async () => {
+            const file = coverInput.files && coverInput.files[0];
+            if (!file) return;
+            if (!file.type || !file.type.startsWith('image/')) {
+                clearCoverSelection();
+                return;
+            }
+            if ((file.size || 0) > COVER_MAX_BYTES) {
+                setCoverFileMessage('File too large. Max 1MB allowed.', true);
+                if (typeof window.showToast === 'function') {
+                    window.showToast('Background image must be under 1MB.');
+                }
+                clearCoverSelection({ preserveMessage: true });
+                return;
+            }
+
+            try {
+                const im = await loadCoverImageFromFile(file);
+                if ((im.naturalWidth || 0) < COVER_MIN_WIDTH || (im.naturalHeight || 0) < COVER_MIN_HEIGHT) {
+                    setCoverFileMessage(`Image too small (${im.naturalWidth || 0}x${im.naturalHeight || 0}). Use at least ${COVER_MIN_WIDTH}x${COVER_MIN_HEIGHT}.`, true);
+                    if (typeof window.showToast === 'function') {
+                        window.showToast(`Use a wider image. Minimum ${COVER_MIN_WIDTH}x${COVER_MIN_HEIGHT}.`);
+                    }
+                    clearCoverSelection({ preserveMessage: true });
+                    return;
+                }
+                openCoverModal();
+                requestAnimationFrame(() => {
+                    resetCoverStateForImage(im);
+                    syncCoverCropSize();
+                    setTimeout(syncCoverCropSize, 50);
+                });
+            } catch {
+                clearCoverSelection();
+            }
+        };
+
+        coverInput.removeEventListener('change', syncCoverState);
+        coverInput.addEventListener('change', onCoverInputChange);
+
+        window.addEventListener('resize', () => {
+            if (coverModal.classList.contains('hidden')) return;
+            syncCoverCropSize();
+        });
+
+        coverZoomInput.addEventListener('input', () => {
+            coverZoom = Math.max(1, Math.min(3, parseFloat(coverZoomInput.value || '1') || 1));
+            renderCoverTransform();
+        });
+
+        coverCropArea.addEventListener('pointerdown', (e) => {
+            if (!coverImgEl) return;
+            coverDragging = true;
+            coverCropArea.setPointerCapture?.(e.pointerId);
+            coverStartX = e.clientX;
+            coverStartY = e.clientY;
+            coverStartOffsetX = coverOffsetX;
+            coverStartOffsetY = coverOffsetY;
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (!coverDragging) return;
+            const dx = e.clientX - coverStartX;
+            const dy = e.clientY - coverStartY;
+            coverOffsetX = coverStartOffsetX + dx;
+            coverOffsetY = coverStartOffsetY + dy;
+            renderCoverTransform();
+        });
+
+        window.addEventListener('pointerup', () => {
+            coverDragging = false;
+        });
+
+        const applyCoverCrop = async () => {
+            if (!coverImgEl || !coverOriginalFile) return;
+
+            const { width: cropW, height: cropH } = getCoverCropSize();
+            const canvas = document.createElement('canvas');
+            canvas.width = COVER_OUT_WIDTH;
+            canvas.height = COVER_OUT_HEIGHT;
+
+            const ctx = canvas.getContext('2d', { alpha: true });
+            if (!ctx) return;
+
+            const scale = coverBaseScale * coverZoom;
+            const ratioX = COVER_OUT_WIDTH / cropW;
+            const ratioY = COVER_OUT_HEIGHT / cropH;
+
+            ctx.clearRect(0, 0, COVER_OUT_WIDTH, COVER_OUT_HEIGHT);
+            ctx.save();
+            ctx.translate((COVER_OUT_WIDTH / 2) + (coverOffsetX * ratioX), (COVER_OUT_HEIGHT / 2) + (coverOffsetY * ratioY));
+            ctx.scale(scale * ratioX, scale * ratioY);
+            ctx.drawImage(coverImgEl, -coverImgW / 2, -coverImgH / 2);
+            ctx.restore();
+
+            const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+            if (!blob) return;
+            if (blob.size > COVER_MAX_BYTES) {
+                setCoverFileMessage('Cropped file exceeds 1MB. Zoom/crop less and try again.', true);
+                if (typeof window.showToast === 'function') {
+                    window.showToast('Cropped background must be under 1MB.');
+                }
+                return;
+            }
+
+            const baseName = (coverOriginalFile.name || 'cover').replace(/\.[^/.]+$/, '');
+            const croppedFile = new File([blob], `${baseName}-cropped.jpg`, { type: 'image/jpeg' });
+
+            const dt = new DataTransfer();
+            dt.items.add(croppedFile);
+            coverInput.files = dt.files;
+            syncCoverState();
+
+            if (coverPreview) {
+                try {
+                    const previewUrl = URL.createObjectURL(croppedFile);
+                    coverPreview.src = previewUrl;
+                    coverPreview.classList.remove('hidden');
+                    if (coverFallback) coverFallback.classList.add('hidden');
+                } catch {}
+            }
+
+            closeCoverModal();
+        };
+
+        const cancelCoverCrop = () => {
+            closeCoverModal();
+            clearCoverSelection();
+        };
+
+        coverCloseBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            cancelCoverCrop();
+        });
+
+        coverCancelBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            cancelCoverCrop();
+        });
+
+        coverApplyBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            await applyCoverCrop();
+        });
+
+        coverModal.addEventListener('click', (e) => {
+            if (e.target === coverModal || e.target === coverModal.firstElementChild) {
+                cancelCoverCrop();
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !coverModal.classList.contains('hidden')) {
+                cancelCoverCrop();
+            }
+        });
+    }
+
     const fileInput = document.getElementById('id_image') || document.querySelector('input[type="file"][name="image"]');
     if (!fileInput) return;
 
@@ -321,8 +696,18 @@
     const cropImg = document.getElementById('avatar_crop_img');
     const zoomInput = document.getElementById('avatar_crop_zoom');
     const avatarPreview = document.getElementById('current_avatar_preview');
+    const profileForm = fileInput.closest('form');
+    const DEFAULT_LOADING_TEXT = 'Saving changes…';
+    const AVATAR_REVIEW_LOADING_TEXT = 'Pic is under review please wait for a while';
 
     if (!modal || !closeBtn || !cancelBtn || !applyBtn || !cropArea || !cropImg || !zoomInput) return;
+
+    const syncLoadingText = () => {
+        if (!profileForm) return;
+        const hasAvatarFile = Boolean(fileInput.files && fileInput.files.length);
+        profileForm.setAttribute('data-loading-text', hasAvatarFile ? AVATAR_REVIEW_LOADING_TEXT : DEFAULT_LOADING_TEXT);
+    };
+    syncLoadingText();
 
     const OUT_SIZE = 512;
 
@@ -423,6 +808,7 @@
         fileInput.value = '';
         originalFile = null;
         cleanupObjectUrl();
+        syncLoadingText();
     };
 
     fileInput.addEventListener('change', async () => {
@@ -435,6 +821,7 @@
 
         try {
             const im = await loadImageFromFile(file);
+            syncLoadingText();
             open();
             // Wait for the modal to be visible so cropArea has a real size.
             requestAnimationFrame(() => {
@@ -516,6 +903,7 @@
         const dt = new DataTransfer();
         dt.items.add(croppedFile);
         fileInput.files = dt.files;
+        syncLoadingText();
 
         if (avatarPreview) {
             try {
@@ -552,6 +940,109 @@
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && !modal.classList.contains('hidden')) cancelCrop();
     });
+})();
+</script>
+
+{# ── Avatar review polling ────────────────────────────────────── #}
+<script>
+(() => {
+    const STATUS_URL = "{% url 'avatar-review-status' %}";
+    const initialStatus = "{{ profile.avatar_review_status|escapejs }}";
+
+    const showResultPopup = (approved) => {
+        const overlay = document.createElement('div');
+        overlay.id = 'avatar-review-result-modal';
+        overlay.className = 'fixed inset-0 z-[65] flex items-center justify-center p-4 sm:p-6';
+
+        const backdrop = document.createElement('div');
+        backdrop.className = 'absolute inset-0 bg-gray-950/75 backdrop-blur-sm';
+        backdrop.addEventListener('click', () => overlay.remove());
+
+        const borderCls = approved ? 'border-emerald-400/40' : 'border-red-400/40';
+        const barCls    = approved ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400'
+                                   : 'bg-gradient-to-r from-red-500 via-rose-400 to-orange-400';
+        const dotCls    = approved ? 'bg-emerald-400'  : 'bg-red-400';
+        const titleCls  = approved ? 'text-emerald-300': 'text-red-300';
+        const titleText = approved ? 'Photo Approved \u2713' : 'Photo Not Allowed';
+        const bodyText  = approved
+            ? 'Your profile photo has been approved and is now live.'
+            : 'This photo violates our community guidelines. Please upload a different photo.';
+        const okBtnCls  = approved ? 'bg-gray-700 hover:bg-gray-600' : 'bg-indigo-600 hover:bg-indigo-500';
+
+        const card = document.createElement('div');
+        card.className = `relative z-10 w-full max-w-md overflow-hidden rounded-2xl border ${borderCls} bg-gradient-to-br from-[#0b1228] via-[#101a36] to-[#0f172a] text-gray-100 shadow-2xl shadow-black/40`;
+        card.innerHTML = `
+            <div aria-hidden="true" class="h-[2px] w-full ${barCls}"></div>
+            <div class="p-5 sm:p-6">
+                <div class="flex items-start gap-3">
+                    <div class="mt-1 h-2.5 w-2.5 flex-none rounded-full ${dotCls}"></div>
+                    <div class="min-w-0 flex-1">
+                        <h3 class="text-base font-extrabold tracking-wide ${titleCls}">${titleText}</h3>
+                        <p class="mt-2 text-sm leading-6 text-gray-200">${bodyText}</p>
+                    </div>
+                    <button type="button"
+                            class="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60 transition"
+                            onclick="document.getElementById('avatar-review-result-modal').remove()">
+                        <span aria-hidden="true" class="text-xl leading-none">&times;</span>
+                    </button>
+                </div>
+                <div class="mt-5 flex items-center gap-3 justify-end">
+                    <button type="button"
+                            class="inline-flex items-center rounded-lg ${okBtnCls} px-4 py-2 text-sm font-semibold text-white transition"
+                            onclick="document.getElementById('avatar-review-result-modal').remove()">
+                        Okay
+                    </button>
+                </div>
+            </div>`;
+
+        overlay.appendChild(backdrop);
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        if (approved) {
+            // Reload so the new avatar image and cleared overlay render correctly.
+            setTimeout(() => location.reload(), 1800);
+        }
+    };
+
+    const clearServerStatus = async () => {
+        try {
+            await fetch(STATUS_URL, { credentials: 'same-origin' });
+        } catch (_) {}
+    };
+
+    if (initialStatus === 'approved' || initialStatus === 'rejected') {
+        clearServerStatus();
+        showResultPopup(initialStatus === 'approved');
+        return;
+    }
+
+    if (initialStatus !== 'pending') return;
+
+    let attempts = 0;
+    const MAX_ATTEMPTS = 60; // poll every 3 s for up to 3 min
+
+    const doPoll = async () => {
+        attempts++;
+        if (attempts > MAX_ATTEMPTS) {
+            clearInterval(pollTimer);
+            return;
+        }
+        try {
+            const resp = await fetch(STATUS_URL, { credentials: 'same-origin' });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (data.status === 'approved' || data.status === 'rejected') {
+                clearInterval(pollTimer);
+                // Remove overlay if still present
+                const ov = document.getElementById('avatar-review-overlay');
+                if (ov) ov.parentElement.querySelectorAll(':scope > div').forEach(el => el.remove());
+                showResultPopup(data.status === 'approved');
+            }
+        } catch (_) {}
+    };
+
+    const pollTimer = setInterval(doPoll, 3000);
 })();
 </script>
 </wrapper>

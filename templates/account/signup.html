@@ -36,7 +36,7 @@
         <p class="text-sm text-gray-300 mt-1">{% trans "Create your account and start chatting." %}</p>
       </div>
       <div class="h-[52px] w-[52px] rounded-full bg-gray-800/90 border border-gray-700 flex items-center justify-center shrink-0 ring-1 ring-white/10 shadow-lg shadow-black/25
-                  motion-safe:animate-[pulse_2.2s_ease-in-out_infinite] transition-transform duration-200 hover:scale-105 active:scale-95">
+          transition-transform duration-200 hover:scale-105 active:scale-95">
         <img src="{% static 'favicon.png' %}" alt="Vixogram" class="h-[42px] w-[42px] object-contain" loading="lazy" decoding="async" />
       </div>
     </div>
@@ -47,7 +47,7 @@
       {% if form.email %}
         <div class="space-y-1">
           <label class="sr-only" for="{{ form.email.id_for_label }}">{% trans "Email" %}</label>
-          <div class="relative vixo-field-with-icon">
+          <div class="relative vixo-field-with-icon{% if form.email.errors %} vixo-field-invalid{% endif %}">
             <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-300">
               <i data-lucide="mail" class="w-5 h-5"></i>
             </span>
@@ -59,10 +59,38 @@
         </div>
       {% endif %}
 
+      {% if form.location_query %}
+        <div class="space-y-1">
+          <label class="sr-only" for="{{ form.location_query.id_for_label }}">Select city</label>
+          <div id="signup_location_field_wrap" class="relative vixo-field-with-icon signup-location-pristine">
+            <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-300">
+              <i data-lucide="map-pin" class="w-5 h-5"></i>
+            </span>
+            {{ form.location_query }}
+          </div>
+          {{ form.preferred_location_country }}
+          {{ form.preferred_location_state }}
+          {{ form.preferred_location_city }}
+          <div id="signup_location_suggestions" class="hidden mt-2 rounded-xl border border-gray-700 bg-gray-900/95 max-h-44 overflow-auto"></div>
+          <div id="signup_location_loading" class="hidden mt-2 text-xs text-gray-300">Loading...</div>
+          <div id="signup_location_inline_error" class="hidden text-xs text-red-400">Please choose city from dropdown suggestions.</div>
+          {% if form.location_query.errors %}
+            <div class="text-xs text-red-400">{{ form.location_query.errors|first }}</div>
+          {% endif %}
+          {% if form.non_field_errors %}
+            {% for err in form.non_field_errors %}
+              {% if 'city' in err|lower or 'location' in err|lower %}
+                <div class="text-xs text-red-400">{{ err }}</div>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+        </div>
+      {% endif %}
+
       {% if form.username %}
         <div class="space-y-1">
           <label class="sr-only" for="{{ form.username.id_for_label }}">{% trans "Username" %}</label>
-          <div class="relative vixo-field-with-icon">
+          <div class="relative vixo-field-with-icon{% if form.username.errors %} vixo-field-invalid{% endif %}">
             <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-300">
               <i data-lucide="circle-user-round" class="w-5 h-5"></i>
             </span>
@@ -77,7 +105,7 @@
       {% if form.password1 %}
         <div class="space-y-1">
           <label class="sr-only" for="{{ form.password1.id_for_label }}">{% trans "Password" %}</label>
-          <div class="relative vixo-field-with-icon">
+          <div class="relative vixo-field-with-icon{% if form.password1.errors %} vixo-field-invalid{% endif %}">
             <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-300">
               <i data-lucide="lock-keyhole" class="w-5 h-5"></i>
             </span>
@@ -92,7 +120,7 @@
       {% if form.password2 %}
         <div class="space-y-1">
           <label class="sr-only" for="{{ form.password2.id_for_label }}">{% trans "Confirm password" %}</label>
-          <div class="relative vixo-field-with-icon">
+          <div class="relative vixo-field-with-icon{% if form.password2.errors %} vixo-field-invalid{% endif %}">
             <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-300">
               <i data-lucide="lock-keyhole" class="w-5 h-5"></i>
             </span>
@@ -140,13 +168,21 @@
       {% endif %}
       {% endcomment %}
 
-      <button type="submit" class="w-full bg-gradient-to-r from-[#8E2DE2] to-[#4A00E0] text-white font-semibold rounded-xl py-3 transition motion-safe:transition-transform motion-safe:duration-200 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(142,45,226,0.35)] active:scale-[0.99]">
+      <button type="submit" class="vixo-auth-cta w-full bg-gradient-to-r from-[#8E2DE2] to-[#4A00E0] text-white font-semibold rounded-xl py-3 transition motion-safe:transition-transform motion-safe:duration-200 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(142,45,226,0.35)] active:scale-[0.99]">
         {% trans "Create account" %}
       </button>
 
       <p class="text-sm text-gray-300 text-center">
         {% blocktrans %}Already have an account? <a class="text-indigo-200 hover:text-indigo-100 font-semibold" href="{{ login_url }}">Sign in</a>{% endblocktrans %}
       </p>
+
+      <div class="sm:hidden pt-2">
+        <a href="{% url 'random-video' %}" class="vixo-rv-floating-btn inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white transition-all duration-200 ease-out active:scale-[0.98]">
+          <span class="text-[11px] font-extrabold uppercase tracking-wide text-cyan-100/95">Try</span>
+          <span aria-hidden="true">🎥</span>
+          <span>Random Video Chat</span>
+        </a>
+      </div>
     </form>
       </div>
     </div>
@@ -156,6 +192,12 @@
 
 {% block extra_body %}
   {{ block.super }}
+  <style>
+    #signup_location_field_wrap.signup-location-pristine > input:not(:focus) {
+      border-color: rgba(55, 65, 81, 1) !important;
+      box-shadow: none !important;
+    }
+  </style>
   {% comment %}
   reCAPTCHA (temporarily disabled in UI)
   - Re-enable later by uncommenting this block AND setting RECAPTCHA_ENABLED=1 in .env
@@ -215,5 +257,177 @@
   {% endif %}
   {% endcomment %}
   <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    (() => {
+      const input = document.getElementById('id_location_query');
+      const countryInput = document.getElementById('id_preferred_location_country');
+      const stateInput = document.getElementById('id_preferred_location_state');
+      const cityInput = document.getElementById('id_preferred_location_city');
+      const box = document.getElementById('signup_location_suggestions');
+      const loading = document.getElementById('signup_location_loading');
+      const inlineError = document.getElementById('signup_location_inline_error');
+      const fieldWrap = document.getElementById('signup_location_field_wrap');
+      if (!input || !countryInput || !stateInput || !cityInput || !box || !loading) return;
+      const form = input.closest('form');
+      const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+
+      const endpoint = "{% url 'profile-location-suggest' %}";
+      let timer = null;
+      let seq = 0;
+      let selectedFromDropdown = false;
+      let shouldShowLocationValidation = false;
+      let lastSuggestionCount = 0;
+      let isSuggestionLoading = false;
+
+      const updateSubmitState = () => {
+        if (!submitBtn) return;
+        submitBtn.disabled = !selectedFromDropdown;
+        submitBtn.classList.toggle('opacity-60', !selectedFromDropdown);
+        submitBtn.classList.toggle('cursor-not-allowed', !selectedFromDropdown);
+      };
+
+      const showInlineError = (show) => {
+        if (!inlineError) return;
+        if (show) {
+          inlineError.classList.remove('hidden');
+        } else {
+          inlineError.classList.add('hidden');
+        }
+      };
+
+      const updateLocationInvalidUI = () => {
+        const hasTypedValue = Boolean((input.value || '').trim());
+        const queryLongEnough = (input.value || '').trim().length >= 2;
+        const invalid = shouldShowLocationValidation && hasTypedValue && !selectedFromDropdown;
+        const showText = invalid && queryLongEnough && !isSuggestionLoading && lastSuggestionCount === 0;
+        if (fieldWrap) {
+          fieldWrap.classList.toggle('signup-location-pristine', !shouldShowLocationValidation);
+        }
+        if (fieldWrap) {
+          fieldWrap.classList.toggle('vixo-field-invalid', invalid);
+        }
+        showInlineError(showText);
+      };
+
+      if ((input.value || '').trim() && (cityInput.value || '').trim()) {
+        selectedFromDropdown = true;
+      }
+      if (fieldWrap) {
+        fieldWrap.classList.remove('vixo-field-invalid');
+      }
+      showInlineError(false);
+      updateSubmitState();
+      updateLocationInvalidUI();
+
+      const hide = () => {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        loading.classList.add('hidden');
+        lastSuggestionCount = 0;
+      };
+
+      const render = (items) => {
+        lastSuggestionCount = Array.isArray(items) ? items.length : 0;
+        if (!items || !items.length) {
+          hide();
+          return;
+        }
+        box.innerHTML = '';
+        items.forEach((item) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-gray-800';
+          button.textContent = String(item.label || '');
+          button.dataset.city = String(item.city || '');
+          button.dataset.state = String(item.state || '');
+          button.dataset.country = String(item.country || '');
+          button.dataset.label = String(item.label || '');
+          box.appendChild(button);
+        });
+        box.classList.remove('hidden');
+      };
+
+      const run = async () => {
+        const q = (input.value || '').trim();
+        if (q.length < 2) {
+          hide();
+          return;
+        }
+        const mySeq = ++seq;
+        isSuggestionLoading = true;
+        loading.classList.remove('hidden');
+        updateLocationInvalidUI();
+        try {
+          const res = await fetch(`${endpoint}?q=${encodeURIComponent(q)}`, { credentials: 'same-origin' });
+          if (mySeq !== seq || !res.ok) return;
+          const data = await res.json();
+          if (mySeq !== seq) return;
+          render(Array.isArray(data.results) ? data.results : []);
+          updateLocationInvalidUI();
+        } catch {
+          hide();
+          updateLocationInvalidUI();
+        } finally {
+          if (mySeq === seq) {
+            isSuggestionLoading = false;
+            loading.classList.add('hidden');
+            updateLocationInvalidUI();
+          }
+        }
+      };
+
+      input.addEventListener('input', () => {
+        countryInput.value = '';
+        stateInput.value = '';
+        cityInput.value = '';
+        selectedFromDropdown = false;
+        shouldShowLocationValidation = false;
+        lastSuggestionCount = 0;
+        updateSubmitState();
+        updateLocationInvalidUI();
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(run, 220);
+      });
+
+      box.addEventListener('click', (ev) => {
+        const button = ev.target.closest('button[data-city]');
+        if (!button) return;
+        input.value = button.getAttribute('data-label') || '';
+        cityInput.value = button.getAttribute('data-city') || '';
+        stateInput.value = button.getAttribute('data-state') || '';
+        countryInput.value = button.getAttribute('data-country') || '';
+        selectedFromDropdown = Boolean(cityInput.value && input.value);
+        shouldShowLocationValidation = false;
+        lastSuggestionCount = 1;
+        updateSubmitState();
+        updateLocationInvalidUI();
+        hide();
+      });
+
+      input.addEventListener('blur', () => {
+        shouldShowLocationValidation = true;
+        updateLocationInvalidUI();
+      });
+
+      if (form) {
+        form.addEventListener('submit', (ev) => {
+          if (!selectedFromDropdown) {
+            ev.preventDefault();
+            shouldShowLocationValidation = true;
+            updateLocationInvalidUI();
+            input.focus();
+            return;
+          }
+          shouldShowLocationValidation = false;
+          updateLocationInvalidUI();
+        });
+      }
+
+      document.addEventListener('click', (ev) => {
+        if (ev.target === input || box.contains(ev.target)) return;
+        hide();
+      });
+    })();
+  </script>
   <script src="{% static 'js/account.js' %}" defer></script>
 {% endblock %}

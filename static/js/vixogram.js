@@ -93,6 +93,18 @@
         if (icon) icon.textContent = (t === 'light') ? '☀️' : '🌙';
         if (label) label.textContent = (t === 'light') ? 'Light' : 'Dark';
       }
+
+      const themedLogos = Array.from(document.querySelectorAll('[data-theme-logo]'));
+      themedLogos.forEach((img) => {
+        if (!img || !img.getAttribute) return;
+        const darkSrc = String(img.getAttribute('data-logo-dark') || '').trim();
+        const lightSrc = String(img.getAttribute('data-logo-light') || '').trim();
+        const nextSrc = (t === 'light' && lightSrc) ? lightSrc : darkSrc;
+        if (!nextSrc) return;
+        if (img.getAttribute('src') !== nextSrc) {
+          img.setAttribute('src', nextSrc);
+        }
+      });
     } catch {
       // ignore
     }
@@ -113,6 +125,10 @@
   applyTheme(getStoredTheme());
 
   function initThemeToggle() {
+    // Re-apply theme after DOM is ready so theme-dependent elements
+    // (like logos rendered in templates) always sync on refresh.
+    applyTheme(getStoredTheme());
+
     const ids = ['theme_toggle', 'theme_toggle_menu', 'theme_toggle_profile', 'theme_toggle_menu_mobile'];
     ids.forEach((id) => {
       const btn = document.getElementById(id);
@@ -156,6 +172,344 @@
 
   // Expose for other scripts.
   window.getCookie = window.getCookie || getCookie;
+
+  function initSitewideIplWidget(baseCfg) {
+    const statusUrl = String(baseCfg && baseCfg.iplWidgetStatusUrl ? baseCfg.iplWidgetStatusUrl : '').trim();
+    if (!statusUrl) return;
+    if (window.__vixoSitewideIplWidgetApi && typeof window.__vixoSitewideIplWidgetApi.ensure === 'function') return;
+
+    const storageKey = 'vixo:ipl-widget:v2:sitewide';
+
+    function readState() {
+      try {
+        const raw = window.localStorage ? window.localStorage.getItem(storageKey) : '';
+        const parsed = raw ? JSON.parse(raw) : {};
+        return {
+          minimized: !!parsed.minimized,
+          position: String(parsed.position || 'top-center'),
+          x: Number.isFinite(parsed.x) ? Number(parsed.x) : null,
+          y: Number.isFinite(parsed.y) ? Number(parsed.y) : null,
+        };
+      } catch {
+        return { minimized: false, position: 'top-center', x: null, y: null };
+      }
+    }
+
+    function saveState(next) {
+      try {
+        if (!window.localStorage) return;
+        window.localStorage.setItem(storageKey, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+    }
+
+    const state = readState();
+    const runtime = {
+      enabled: false,
+      pollSeconds: 30,
+      score: null,
+      intervalId: null,
+      initialized: false,
+      root: null,
+      update: null,
+      setEnabled: null,
+    };
+
+    function sanitizeText(input) {
+      return String(input || '').replace(/[&<>"']/g, (c) => {
+        if (c === '&') return '&amp;';
+        if (c === '<') return '&lt;';
+        if (c === '>') return '&gt;';
+        if (c === '"') return '&quot;';
+        return '&#39;';
+      });
+    }
+
+    function teamCompact(score, key) {
+      const raw = String((score && score[key]) || '').trim();
+      return raw || '0/0';
+    }
+
+    function createDomIfNeeded() {
+      if (runtime.initialized && runtime.root) return;
+
+      const root = document.createElement('div');
+      root.id = 'vixo_sitewide_ipl_widget';
+      root.className = 'hidden fixed z-40 pointer-events-auto';
+      root.innerHTML = `
+        <div data-ipl-box class="relative rounded-full border border-fuchsia-400/70 bg-gray-950/90 shadow-2xl px-4 py-2 flex items-center gap-3 min-w-[18rem] max-w-[48rem]">
+          <button type="button" data-ipl-drag class="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-300 hover:text-white hover:bg-white/10" aria-label="Move score box" title="Drag">
+            <span aria-hidden="true">⋮⋮</span>
+          </button>
+          <div data-ipl-full class="flex items-center gap-3 min-w-0">
+            <div class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-300 text-[10px] font-black text-gray-900" data-ipl-team1-badge>T1</div>
+            <div class="text-base font-black text-white" data-ipl-team1>0/0</div>
+            <div class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 motion-safe:animate-pulse" aria-hidden="true"></div>
+            <div class="text-sm font-semibold text-emerald-300" data-ipl-live-label>LIVE</div>
+            <div class="text-base font-black text-white" data-ipl-team2>0/0</div>
+            <div class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-200 text-[10px] font-black text-gray-900" data-ipl-team2-badge>T2</div>
+            <div class="text-[11px] text-gray-300 truncate max-w-[16rem]" data-ipl-status>No Live match yet</div>
+          </div>
+          <div data-ipl-mini class="hidden items-center gap-2 min-w-0">
+            <div class="text-sm font-black text-white truncate" data-ipl-mini-text>0/0 vs 0/0</div>
+          </div>
+          <button type="button" data-ipl-toggle class="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-200 hover:text-white hover:bg-white/10" aria-label="Toggle compact mode" title="Minimize">—</button>
+        </div>
+      `;
+      document.body.appendChild(root);
+
+      const box = root.querySelector('[data-ipl-box]');
+      const dragBtn = root.querySelector('[data-ipl-drag]');
+      const toggleBtn = root.querySelector('[data-ipl-toggle]');
+      const fullEl = root.querySelector('[data-ipl-full]');
+      const miniEl = root.querySelector('[data-ipl-mini]');
+      const t1El = root.querySelector('[data-ipl-team1]');
+      const t2El = root.querySelector('[data-ipl-team2]');
+      const t1Badge = root.querySelector('[data-ipl-team1-badge]');
+      const t2Badge = root.querySelector('[data-ipl-team2-badge]');
+      const statusEl = root.querySelector('[data-ipl-status]');
+      const miniTextEl = root.querySelector('[data-ipl-mini-text]');
+      const liveLabelEl = root.querySelector('[data-ipl-live-label]');
+
+      function applyPresetPosition(preset) {
+        root.style.left = '';
+        root.style.right = '';
+        root.style.top = '';
+        root.style.bottom = '';
+        root.style.transform = '';
+
+        if (preset === 'top-left') {
+          root.style.top = '86px';
+          root.style.left = '20px';
+          return;
+        }
+        if (preset === 'top-right') {
+          root.style.top = '86px';
+          root.style.right = '20px';
+          return;
+        }
+        if (preset === 'bottom-center') {
+          root.style.bottom = '24px';
+          root.style.left = '50%';
+          root.style.transform = 'translateX(-50%)';
+          return;
+        }
+        root.style.top = '86px';
+        root.style.left = '50%';
+        root.style.transform = 'translateX(-50%)';
+      }
+
+      function applyPosition() {
+        if (Number.isFinite(state.x) && Number.isFinite(state.y)) {
+          root.style.left = `${Math.max(8, state.x)}px`;
+          root.style.top = `${Math.max(8, state.y)}px`;
+          root.style.right = '';
+          root.style.bottom = '';
+          root.style.transform = '';
+          return;
+        }
+        applyPresetPosition(state.position);
+      }
+
+      function applySizeMode() {
+        const mini = !!state.minimized;
+        if (fullEl) fullEl.classList.toggle('hidden', mini);
+        if (miniEl) miniEl.classList.toggle('hidden', !mini);
+        if (toggleBtn) {
+          toggleBtn.textContent = mini ? '+' : '—';
+          toggleBtn.title = mini ? 'Expand' : 'Minimize';
+          toggleBtn.setAttribute('aria-label', mini ? 'Expand score box' : 'Minimize score box');
+        }
+        if (box) {
+          box.classList.toggle('min-w-[18rem]', !mini);
+          box.classList.toggle('min-w-[10.5rem]', mini);
+        }
+      }
+
+      function renderScore(score) {
+        runtime.score = score && typeof score === 'object' ? score : null;
+        if (!runtime.enabled) {
+          root.classList.add('hidden');
+          return;
+        }
+
+        const isLive = !!(runtime.score && runtime.score.is_live);
+        const team1Short = String((runtime.score && runtime.score.team1_short) || 'T1').toUpperCase();
+        const team2Short = String((runtime.score && runtime.score.team2_short) || 'T2').toUpperCase();
+        const team1Score = teamCompact(runtime.score, 'team1_score');
+        const team2Score = teamCompact(runtime.score, 'team2_score');
+        const statusText = isLive
+          ? String((runtime.score && runtime.score.status) || 'LIVE').trim() || 'LIVE'
+          : 'No Live match yet';
+
+        if (t1El) t1El.textContent = team1Score;
+        if (t2El) t2El.textContent = team2Score;
+        if (t1Badge) t1Badge.textContent = sanitizeText(team1Short.slice(0, 3));
+        if (t2Badge) t2Badge.textContent = sanitizeText(team2Short.slice(0, 3));
+        if (statusEl) statusEl.textContent = statusText;
+        if (miniTextEl) miniTextEl.textContent = `${team1Score} vs ${team2Score}`;
+        if (liveLabelEl) liveLabelEl.textContent = isLive ? 'LIVE' : 'IPL';
+
+        root.classList.remove('hidden');
+        applySizeMode();
+        applyPosition();
+      }
+
+      let dragging = false;
+      let dragDx = 0;
+      let dragDy = 0;
+
+      function onPointerMove(e) {
+        if (!dragging) return;
+        state.x = Math.max(8, Math.round(e.clientX - dragDx));
+        state.y = Math.max(8, Math.round(e.clientY - dragDy));
+        applyPosition();
+      }
+
+      function stopDrag() {
+        if (!dragging) return;
+        dragging = false;
+        saveState(state);
+        window.removeEventListener('pointermove', onPointerMove, true);
+        window.removeEventListener('pointerup', stopDrag, true);
+        window.removeEventListener('pointercancel', stopDrag, true);
+      }
+
+      if (dragBtn) {
+        dragBtn.addEventListener('pointerdown', (e) => {
+          const r = root.getBoundingClientRect();
+          dragging = true;
+          state.x = r.left;
+          state.y = r.top;
+          dragDx = e.clientX - r.left;
+          dragDy = e.clientY - r.top;
+          state.position = 'custom';
+          root.style.transform = '';
+          window.addEventListener('pointermove', onPointerMove, true);
+          window.addEventListener('pointerup', stopDrag, true);
+          window.addEventListener('pointercancel', stopDrag, true);
+        });
+      }
+
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+          state.minimized = !state.minimized;
+          applySizeMode();
+          saveState(state);
+        });
+      }
+
+      runtime.root = root;
+      runtime.update = renderScore;
+      runtime.setEnabled = (enabled) => {
+        runtime.enabled = !!enabled;
+        if (!runtime.enabled) {
+          root.classList.add('hidden');
+          return;
+        }
+        renderScore(runtime.score || null);
+      };
+
+      window.__vixoSetIplWidgetPosition = function (preset) {
+        const next = String(preset || '').trim().toLowerCase();
+        if (!next) return;
+        state.position = next;
+        state.x = null;
+        state.y = null;
+        applyPosition();
+        saveState(state);
+      };
+
+      runtime.initialized = true;
+    }
+
+    async function refreshFromServer() {
+      try {
+        const res = await fetch(statusUrl, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+          credentials: 'same-origin',
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        createDomIfNeeded();
+
+        if (typeof data.pollSeconds === 'number' && Number.isFinite(data.pollSeconds)) {
+          runtime.pollSeconds = Math.max(15, Math.min(300, Math.round(data.pollSeconds)));
+        }
+
+        if (!Number.isFinite(state.x) && !Number.isFinite(state.y)) {
+          if (!state.position || state.position === 'top-center') {
+            state.position = String(data.position || state.position || 'top-center');
+          }
+          if (!state.minimized && !!data.minimized) {
+            state.minimized = true;
+          }
+        }
+
+        if (runtime.setEnabled) runtime.setEnabled(!!data.enabled);
+        if (runtime.update) runtime.update(data && data.score ? data.score : null);
+      } catch {
+        // ignore
+      }
+    }
+
+    function ensure() {
+      createDomIfNeeded();
+      return {
+        update(score) {
+          if (runtime.update) runtime.update(score || null);
+        },
+      };
+    }
+
+    function startPolling() {
+      if (runtime.intervalId) return;
+      runtime.intervalId = window.setInterval(() => {
+        refreshFromServer();
+      }, Math.max(15, runtime.pollSeconds) * 1000);
+    }
+
+    window.__vixoSitewideIplWidgetApi = {
+      ensure,
+      update(score) {
+        ensure();
+        if (runtime.update) runtime.update(score || null);
+      },
+      refresh() {
+        ensure();
+        return refreshFromServer();
+      },
+      setEnabled(enabled) {
+        ensure();
+        if (runtime.setEnabled) runtime.setEnabled(!!enabled);
+      },
+    };
+
+    document.addEventListener('vixo:ipl-score', (ev) => {
+      try {
+        const score = ev && ev.detail ? ev.detail.score : null;
+        if (!score) return;
+        window.__vixoSitewideIplWidgetApi.update(score);
+      } catch {
+        // ignore
+      }
+    });
+
+    document.addEventListener('vixo:ipl-widget-toggle', (ev) => {
+      const enabled = !!(ev && ev.detail && ev.detail.enabled);
+      try { window.__vixoSitewideIplWidgetApi.setEnabled(enabled); } catch {}
+      if (enabled) {
+        try { window.__vixoSitewideIplWidgetApi.refresh(); } catch {}
+      }
+    });
+
+    ensure();
+    refreshFromServer();
+    startPolling();
+  }
 
   // --- Small animation helpers (used by dropdowns & modals) ---
   const __vixoNextFrame = (cb) => {
@@ -1029,6 +1383,21 @@
     });
   }
 
+  // Expose image viewer close function globally for one-time photo countdown timer
+  window.closeImageViewer = window.closeImageViewer || (() => {
+    const modal = document.getElementById('image-viewer');
+    const img = document.getElementById('image-viewer-img');
+    if (!modal || !img) return;
+    try {
+      modal.classList.add('hidden');
+      modal.setAttribute('aria-hidden', 'true');
+      img.src = '';
+      img.alt = '';
+    } catch (e) {
+      // Silently ignore errors
+    }
+  });
+
   function initVideoViewer() {
     const modal = document.getElementById('video-viewer');
     const video = document.getElementById('video-viewer-video');
@@ -1112,11 +1481,12 @@
         const title = (elt && elt.getAttribute) ? (elt.getAttribute('data-confirm-title') || 'Confirm') : 'Confirm';
         window.__openConfirm({
           title,
-          message: question,
+          message: String(question),
           onConfirm: () => {
             try {
-              if (typeof e.detail.issueRequest === 'function') e.detail.issueRequest(true);
-              else if (typeof e.detail.issueRequest === 'function') e.detail.issueRequest();
+              if (typeof e.detail.issueRequest === 'function') {
+                e.detail.issueRequest(true);
+              }
             } catch {
               // ignore
             }
@@ -1126,15 +1496,6 @@
         // ignore
       }
     });
-  }
-
-  function escapeHtml(str) {
-    return String(str)
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#039;');
   }
 
   function initAuthenticatedNotifiers(baseCfg) {
@@ -2484,6 +2845,31 @@
   function initGlobalAnnouncementSocket() {
     const banner = document.getElementById('global-announcement-banner');
     if (!banner) return;
+    const marqueeTrack = banner.querySelector('.vixo-marquee-track');
+
+    const setMarqueePaused = (paused) => {
+      if (!marqueeTrack) return;
+      if (paused) marqueeTrack.classList.add('is-paused');
+      else marqueeTrack.classList.remove('is-paused');
+    };
+
+    // Desktop hover is handled by CSS; this adds mobile/pen press-and-hold pause.
+    const bindMarqueePauseEvents = () => {
+      try {
+        banner.addEventListener('touchstart', () => setMarqueePaused(true), { passive: true });
+        banner.addEventListener('touchend', () => setMarqueePaused(false), { passive: true });
+        banner.addEventListener('touchcancel', () => setMarqueePaused(false), { passive: true });
+        banner.addEventListener('pointerdown', (event) => {
+          if (event && event.pointerType && event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
+          setMarqueePaused(true);
+        }, { passive: true });
+        banner.addEventListener('pointerup', () => setMarqueePaused(false), { passive: true });
+        banner.addEventListener('pointercancel', () => setMarqueePaused(false), { passive: true });
+      } catch {
+        // ignore
+      }
+    };
+    bindMarqueePauseEvents();
 
     // Prevent duplicates (in case this script is loaded twice).
     if (window.__globalAnnouncementSocketStarted) return;
@@ -2518,13 +2904,114 @@
       __gaReconnectTimer = setTimeout(() => { __gaReconnectTimer = null; connectFn(); }, delay);
     };
 
-    const applyState = (active, message) => {
+    const __GA_URL_RE = /((?:https?:\/\/|www\.)[^\s<]+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<]*)?)/gi;
+    const __GA_MARKDOWN_LINK_RE = /\[(?<label>[^\]\n]{1,80})\]\((?<url>(?:https?:\/\/|www\.)[^\s)]+)\)/gi;
+
+    const __gaNormalizeHref = (rawUrl) => {
+      const value = String(rawUrl || '').trim();
+      if (!value) return '';
+      return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    };
+
+    const __gaAppendPlainWithUrls = (el, text) => {
+      if (!el || !text) return;
+      const input = String(text || '');
+      __GA_URL_RE.lastIndex = 0;
+      let cursor = 0;
+      let match;
+
+      while ((match = __GA_URL_RE.exec(input)) !== null) {
+        const start = match.index;
+        let token = match[0] || '';
+        let suffix = '';
+
+        while (token && /[),.;!?]$/.test(token)) {
+          suffix = token.slice(-1) + suffix;
+          token = token.slice(0, -1);
+        }
+
+        if (!token) continue;
+
+        if (start > cursor) {
+          el.appendChild(document.createTextNode(input.slice(cursor, start)));
+        }
+
+        const link = document.createElement('a');
+        link.href = __gaNormalizeHref(token);
+        link.textContent = token;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer nofollow';
+        link.className = 'text-cyan-300 hover:text-cyan-200 no-underline';
+        el.appendChild(link);
+
+        if (suffix) {
+          el.appendChild(document.createTextNode(suffix));
+        }
+
+        cursor = start + (match[0] || '').length;
+      }
+
+      if (cursor < input.length) {
+        el.appendChild(document.createTextNode(input.slice(cursor)));
+      }
+    };
+
+    const __gaRenderMessage = (el, text) => {
+      if (!el) return;
+      const input = String(text || '');
+      __GA_MARKDOWN_LINK_RE.lastIndex = 0;
+      let cursor = 0;
+      let match;
+
+      el.textContent = '';
+
+      while ((match = __GA_MARKDOWN_LINK_RE.exec(input)) !== null) {
+        const start = match.index;
+        const full = match[0] || '';
+        const groups = match.groups || {};
+        const label = String(groups.label || '').trim();
+        const url = String(groups.url || '').trim();
+
+        if (start > cursor) {
+          __gaAppendPlainWithUrls(el, input.slice(cursor, start));
+        }
+
+        if (label && url) {
+          const link = document.createElement('a');
+          link.href = __gaNormalizeHref(url);
+          link.textContent = label;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer nofollow';
+          link.className = 'text-cyan-300 hover:text-cyan-200 no-underline';
+          el.appendChild(link);
+        } else {
+          el.appendChild(document.createTextNode(full));
+        }
+
+        cursor = start + full.length;
+      }
+
+      if (cursor < input.length) {
+        __gaAppendPlainWithUrls(el, input.slice(cursor));
+      }
+    };
+
+    const applyState = (active, prefix, message) => {
       const text = String(message || '');
+      const label = String(prefix || 'Team Vixogram:').trim() || 'Team Vixogram:';
       const shouldShow = Boolean(active) && text.trim().length > 0;
 
       try {
+        banner.querySelectorAll('.global-announcement-prefix').forEach((el) => {
+          el.textContent = label;
+        });
+      } catch {
+        // ignore
+      }
+
+      try {
         banner.querySelectorAll('.global-announcement-msg').forEach((el) => {
-          el.textContent = text;
+          __gaRenderMessage(el, text);
         });
       } catch {
         // ignore
@@ -2564,7 +3051,7 @@
         let payload;
         try { payload = JSON.parse(event.data); } catch { return; }
         if (!payload || payload.type !== 'global_announcement') return;
-        applyState(payload.active, payload.message);
+        applyState(payload.active, payload.prefix, payload.message);
       };
 
       socket.onclose = () => {
@@ -2890,6 +3377,7 @@
         let index = 0;
         let startedAt = 0;
         let tickTimer = null;
+        let safetyTimeout = null;
 
         // Hold-to-pause (desktop + mobile via Pointer Events)
         // Also suppress the synthetic click fired after a long-press release.
@@ -2952,6 +3440,11 @@
                       </div>
                     </div>
                   </div>
+                  <div data-story-like-wrap class="absolute bottom-3 right-3" style="z-index: 40; pointer-events: auto;">
+                    <button type="button" data-story-like-btn class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/35 text-white/95 border border-white/10 backdrop-blur-sm" aria-label="Like story">
+                      <span data-story-like-heart class="text-lg leading-none">♡</span>
+                    </button>
+                  </div>
                   <div data-story-ad class="absolute inset-0 hidden bg-gradient-to-b from-gray-900/80 via-black to-black">
                     <div class="w-full h-full flex items-center justify-center p-6">
                       <div class="w-full max-w-sm text-center">
@@ -2962,22 +3455,14 @@
                       </div>
                     </div>
                   </div>
+
+                  <button type="button" data-story-prev class="absolute left-0 top-0 bottom-0 w-1/2 z-[20]" aria-label="Previous story"></button>
+                  <button type="button" data-story-next class="absolute right-0 top-0 bottom-0 w-1/2 z-[20]" aria-label="Next story"></button>
                 </div>
               </div>
             </div>
 
-            <button type="button" data-story-prev class="absolute left-0 top-0 bottom-0 w-1/3 z-0" style="z-index: 5;" aria-label="Previous story">
-              <span data-story-prev-arrow class="absolute left-3 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/35 text-white/90 border border-white/10 backdrop-blur-sm">
-                <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-              </span>
-            </button>
-            <button type="button" data-story-next class="absolute right-0 top-0 bottom-0 w-1/3 z-0" style="z-index: 5;" aria-label="Next story">
-              <span data-story-next-arrow class="absolute right-3 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/35 text-white/90 border border-white/10 backdrop-blur-sm">
-                <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
-              </span>
-            </button>
-
-            <div data-story-delete-confirm class="hidden absolute inset-0 z-[6] bg-black/70 backdrop-blur-[1px]">
+            <div data-story-delete-confirm class="hidden absolute inset-0 z-[60] bg-black/70 backdrop-blur-[1px]">
               <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-white/10 bg-gray-950/95 p-4 shadow-2xl shadow-black/60">
                 <div class="text-sm font-semibold text-white">Delete this story?</div>
                 <div class="mt-1 text-xs text-white/70" data-story-delete-countdown>Deleting in 5s…</div>
@@ -3028,6 +3513,9 @@
         const viewersPanel = root.querySelector('[data-story-viewers-panel]');
         const viewersList = root.querySelector('[data-story-viewers-list]');
         const viewersMoreBtn = root.querySelector('[data-story-viewers-more]');
+        const likeWrap = root.querySelector('[data-story-like-wrap]');
+        const likeBtn = root.querySelector('[data-story-like-btn]');
+        const likeHeart = root.querySelector('[data-story-like-heart]');
 
         // Show viewers UI only for the story owner.
         try {
@@ -3092,6 +3580,13 @@
                 meta.appendChild(u1);
                 a.appendChild(imgEl);
                 a.appendChild(meta);
+                if (v && v.liked) {
+                  const liked = document.createElement('span');
+                  liked.className = 'ml-auto text-rose-400 text-base leading-none';
+                  liked.textContent = '♥';
+                  liked.setAttribute('aria-label', 'Liked');
+                  a.appendChild(liked);
+                }
                 viewersList.appendChild(a);
               } catch {}
             });
@@ -3168,6 +3663,93 @@
           }
         };
 
+        const syncLikeUi = (storyObj) => {
+          try {
+            if (!likeWrap || !likeBtn || !likeHeart) return;
+            if (!storyObj || !storyObj.id) {
+              likeWrap.classList.add('hidden');
+              return;
+            }
+            likeWrap.classList.remove('hidden');
+
+            const liked = !!storyObj.liked_by_me;
+
+            likeHeart.textContent = liked ? '♥' : '♡';
+            likeHeart.className = liked ? 'text-lg leading-none text-rose-400' : 'text-lg leading-none';
+
+            likeBtn.classList.toggle('bg-rose-500/30', liked);
+            likeBtn.classList.toggle('border-rose-300/40', liked);
+            likeBtn.classList.toggle('bg-black/35', !liked);
+            likeBtn.classList.toggle('border-white/10', !liked);
+          } catch {
+            // ignore
+          }
+        };
+
+        const animateLikeHeart = (liked) => {
+          try {
+            if (!likeHeart || !likeBtn) return;
+            if (likeHeart.animate) {
+              likeHeart.animate(
+                liked
+                  ? [
+                      { transform: 'scale(1)', filter: 'drop-shadow(0 0 0 rgba(244,63,94,0))' },
+                      { transform: 'scale(1.45)', filter: 'drop-shadow(0 0 10px rgba(244,63,94,0.55))' },
+                      { transform: 'scale(1)', filter: 'drop-shadow(0 0 0 rgba(244,63,94,0))' },
+                    ]
+                  : [
+                      { transform: 'scale(1)' },
+                      { transform: 'scale(0.88)' },
+                      { transform: 'scale(1)' },
+                    ],
+                { duration: liked ? 260 : 170, easing: 'ease-out' }
+              );
+            }
+            if (likeBtn.animate && liked) {
+              likeBtn.animate(
+                [
+                  { transform: 'scale(1)' },
+                  { transform: 'scale(1.08)' },
+                  { transform: 'scale(1)' },
+                ],
+                { duration: 220, easing: 'ease-out' }
+              );
+            }
+          } catch {
+            // ignore
+          }
+        };
+
+        const toggleLike = async () => {
+          const item = items[index];
+          const storyObj = (item && item.type === 'story' && item.story) ? item.story : null;
+          const sid = storyObj && storyObj.id ? Number(storyObj.id) : 0;
+          if (!sid) return;
+
+          try {
+            if (likeBtn) likeBtn.disabled = true;
+            const r = await fetch(`/profile/story/${sid}/like/`, {
+              method: 'POST',
+              headers: {
+                'Accept': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken') || '',
+              },
+              credentials: 'same-origin',
+            });
+            if (!r.ok) return;
+
+            const data = await r.json();
+            storyObj.liked_by_me = !!(data && data.liked);
+            storyObj.likes_count = Math.max(0, Number(data && data.likes_count || 0));
+            syncLikeUi(storyObj);
+            animateLikeHeart(storyObj.liked_by_me);
+          } catch {
+            // ignore
+          } finally {
+            try { if (likeBtn) likeBtn.disabled = false; } catch {}
+          }
+        };
+
         const getCurrentStoryIdSafe = () => {
           try {
             const item = items[index];
@@ -3199,7 +3781,7 @@
         const isInteractiveHoldIgnore = (target) => {
           try {
             if (!target || !target.closest) return false;
-            return !!target.closest('[data-story-menu-btn],[data-story-menu-panel],[data-story-delete-confirm],[data-story-delete-now],[data-story-delete-cancel],[data-story-viewers-btn],[data-story-viewers-panel],[data-story-viewers-more]');
+            return !!target.closest('[data-story-close],[data-story-menu-btn],[data-story-menu-panel],[data-story-delete-confirm],[data-story-delete-now],[data-story-delete-cancel],[data-story-viewers-btn],[data-story-viewers-panel],[data-story-viewers-more],[data-story-like-btn],[data-story-like-wrap]');
           } catch {
             return false;
           }
@@ -3254,6 +3836,7 @@
         root.addEventListener('click', (e) => {
           try {
             if (Date.now() < (suppressClickUntil || 0)) {
+              if (isInteractiveHoldIgnore(e.target)) return;
               e.preventDefault();
               e.stopPropagation();
             }
@@ -3293,6 +3876,10 @@
             try { window.clearInterval(tickTimer); } catch {}
             tickTimer = null;
           }
+          if (safetyTimeout) {
+            try { window.clearTimeout(safetyTimeout); } catch {}
+            safetyTimeout = null;
+          }
         };
 
         let deleteTimer = null;
@@ -3313,16 +3900,22 @@
           cleanupTimers();
           try { window.removeEventListener('keydown', onKeyDown); } catch {}
           try {
+            // Immediate visual close: remove from DOM quickly.
             const panel = root.querySelector('[data-story-panel]');
             root.classList.add('opacity-0');
             if (panel) {
               panel.classList.add('opacity-0', 'translate-y-1', 'scale-[0.985]');
             }
           } catch {}
+          // Remove DOM element after short delay for fade animation.
           window.setTimeout(() => {
-            try { root.remove(); } catch {}
+            try {
+              if (root && root.parentNode) {
+                root.remove();
+              }
+            } catch {}
             try { document.body.style.overflow = ''; } catch {}
-          }, 190);
+          }, 200);
         };
 
         const setSegment = (i, pct) => {
@@ -3410,6 +4003,26 @@
           pausePlayback();
         };
 
+        const syncStoryAddMenuState = (state) => {
+          const canAdd = !!(state && state.can_add_story);
+          const msg = String((state && state.limit_message) || 'Free plan limited to 1 story.').trim() || 'Free plan limited to 1 story.';
+          try {
+            document.querySelectorAll('[data-story-add-link]').forEach((el) => {
+              try { el.classList.toggle('hidden', !canAdd); } catch {}
+            });
+            document.querySelectorAll('[data-story-add-disabled]').forEach((el) => {
+              try { el.classList.toggle('hidden', canAdd); } catch {}
+              try { el.setAttribute('title', msg); } catch {}
+            });
+            document.querySelectorAll('[data-story-add-limit]').forEach((el) => {
+              try { el.classList.toggle('hidden', canAdd); } catch {}
+              try { el.textContent = msg; } catch {}
+            });
+          } catch {
+            // ignore
+          }
+        };
+
         const performDelete = async () => {
           const storyId = getCurrentStoryId();
           if (!storyId) {
@@ -3450,6 +4063,21 @@
             showMiniToast('Delete failed.');
             hideDeleteConfirm();
             return;
+          }
+
+          let deleteData = null;
+          try {
+            deleteData = await res.json();
+          } catch {
+            deleteData = null;
+          }
+
+          try {
+            if (deleteData && deleteData.story_upload) {
+              syncStoryAddMenuState(deleteData.story_upload);
+            }
+          } catch {
+            // ignore
           }
 
           showMiniToast('Story deleted.');
@@ -3535,6 +4163,7 @@
                 img.removeAttribute('src');
               }
               if (ad) ad.classList.remove('hidden');
+              syncLikeUi(null);
             } catch {}
           } else {
             try {
@@ -3543,6 +4172,7 @@
                 img.classList.remove('hidden');
                 img.src = item && item.story ? item.story.image_url : (item ? item.image_url : '');
               }
+              syncLikeUi(item && item.story ? item.story : null);
             } catch {}
           }
 
@@ -3576,9 +4206,20 @@
             const pct = (elapsed / getItemDurationMs(item)) * 100;
             setSegment(index, pct);
             if (elapsed >= getItemDurationMs(item)) {
-              goNext();
+              goNext({ auto: true });
             }
           }, 50);
+
+          // Safety fallback: ensure story advances/closes even if tick interval fails.
+          safetyTimeout = window.setTimeout(() => {
+            if (index === items.length - 1) {
+              // Must be last story in viewer; auto-close.
+              close();
+            } else if (index < items.length - 1) {
+              // Not last story; ensure we advance.
+              goNext({ auto: true });
+            }
+          }, getItemDurationMs(item) + 500);
         };
 
         const goPrev = () => {
@@ -3595,15 +4236,17 @@
           show(index - 1);
         };
 
-        const goNext = () => {
-          if (Date.now() < (suppressClickUntil || 0)) return;
-          try {
-            if (menuPanel && !menuPanel.classList.contains('hidden')) return;
-            if (deleteConfirm && !deleteConfirm.classList.contains('hidden')) return;
-            if (viewersPanel && !viewersPanel.classList.contains('hidden')) return;
-          } catch {}
+        const goNext = ({ auto = false } = {}) => {
+          if (!auto && Date.now() < (suppressClickUntil || 0)) return;
+          if (!auto) {
+            try {
+              if (menuPanel && !menuPanel.classList.contains('hidden')) return;
+              if (deleteConfirm && !deleteConfirm.classList.contains('hidden')) return;
+              if (viewersPanel && !viewersPanel.classList.contains('hidden')) return;
+            } catch {}
+          }
           if (index >= items.length - 1) {
-            close();
+            if (auto) close();
             return;
           }
           show(index + 1);
@@ -3631,7 +4274,18 @@
           if (k === 'ArrowRight') { goNext(); return; }
         };
 
-        if (closeBtn) closeBtn.addEventListener('click', close);
+        if (closeBtn) {
+          closeBtn.addEventListener('pointerup', (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            close();
+          });
+          closeBtn.addEventListener('click', (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            close();
+          });
+        }
         if (menuBtn) {
           // Hide menu entirely unless permitted.
           try { menuBtn.classList.toggle('hidden', !canDelete); } catch {}
@@ -3660,6 +4314,11 @@
           });
         }
         if (deleteCancel) {
+          deleteCancel.addEventListener('pointerup', (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            hideDeleteConfirm();
+          });
           deleteCancel.addEventListener('click', (e) => {
             try { e.preventDefault(); } catch {}
             try { e.stopPropagation(); } catch {}
@@ -3694,14 +4353,19 @@
               const inBtn = (e.target && e.target.closest) ? e.target.closest('[data-story-menu-btn]') : null;
               if (!inMenu && !inBtn) hideMenu();
             }
-            if (e.target === root) close();
+            if (e.target === root) {
+              const vw = Math.max(1, Number(window.innerWidth || 1));
+              const x = Number(e && e.clientX || 0);
+              if (x <= (vw / 2)) goPrev();
+              else goNext();
+              return;
+            }
           } catch {}
         });
 
         if (viewersBtn) {
-          viewersBtn.addEventListener('click', async (e) => {
-            try { e.preventDefault(); } catch {}
-            try { e.stopPropagation(); } catch {}
+          let viewersActionTs = 0;
+          const openOrToggleViewers = async () => {
             suppressClickUntil = Date.now() + 450;
             if (!isOwner) return;
             const sid = getCurrentStoryIdSafe();
@@ -3733,6 +4397,21 @@
 
             renderViewers(st.items);
             updateMoreBtn(st);
+          };
+
+          viewersBtn.addEventListener('pointerdown', (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            suppressClickUntil = Date.now() + 450;
+            viewersActionTs = Date.now();
+            void openOrToggleViewers();
+          });
+
+          viewersBtn.addEventListener('click', async (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            if ((Date.now() - viewersActionTs) < 220) return;
+            await openOrToggleViewers();
           });
         }
 
@@ -3785,24 +4464,28 @@
           });
         }
 
-        // Capture taps in the eye region so the overlay nav doesn't steal them.
-        // This is needed because the left/right navigation overlay covers the full height.
-        try {
-          root.addEventListener('pointerdown', (e) => {
-            try {
-              if (!isOwner || !viewersWrap || !viewersBtn) return;
-              const rect = viewersWrap.getBoundingClientRect();
-              const x = Number(e && e.clientX || 0);
-              const y = Number(e && e.clientY || 0);
-              const inside = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
-              if (!inside) return;
-              try { e.preventDefault(); } catch {}
-              try { e.stopPropagation(); } catch {}
-              try { if (e.stopImmediatePropagation) e.stopImmediatePropagation(); } catch {}
-              try { viewersBtn.click(); } catch {}
-            } catch {}
-          }, true);
-        } catch {}
+        if (likeBtn) {
+          let likeActionTs = 0;
+          const runLike = async () => {
+            suppressClickUntil = Date.now() + 250;
+            await toggleLike();
+          };
+
+          likeBtn.addEventListener('pointerdown', (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            suppressClickUntil = Date.now() + 250;
+            likeActionTs = Date.now();
+            void runLike();
+          });
+
+          likeBtn.addEventListener('click', async (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            if ((Date.now() - likeActionTs) < 220) return;
+            await runLike();
+          });
+        }
 
         window.addEventListener('keydown', onKeyDown);
         show(0);
@@ -3915,3 +4598,18 @@
     initAuthenticatedNotifiers(baseCfg);
   });
 })();
+
+  // Expose image viewer close function globally for one-time photo countdown timer
+  window.closeImageViewer = window.closeImageViewer || (() => {
+    const modal = document.getElementById('image-viewer');
+    const img = document.getElementById('image-viewer-img');
+    if (!modal || !img) return;
+    try {
+      modal.classList.add('hidden');
+      modal.setAttribute('aria-hidden', 'true');
+      img.src = '';
+      img.alt = '';
+    } catch (e) {
+      // Silently ignore errors
+    }
+  });

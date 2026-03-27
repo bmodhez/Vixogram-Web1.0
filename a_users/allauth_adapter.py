@@ -21,6 +21,39 @@ logger = logging.getLogger(__name__)
 
 class CustomAccountAdapter(DefaultAccountAdapter):
     @staticmethod
+    def _is_signup_verification_message(message_template: str | None) -> bool:
+        text = str(message_template or '').lower()
+        if not text:
+            return False
+        return 'email_confirmation_sent' in text or 'email_confirmation' in text
+
+    def add_message(self, request, level, message_template=None, message_context=None, extra_tags='', **kwargs):
+        """Avoid showing auto verification-sent toasts during signup.
+
+        Users can still manually trigger verification from /accounts/email/.
+        """
+        message_text = kwargs.get('message')
+        template_or_message = message_template if message_template is not None else message_text
+
+        try:
+            if bool(getattr(settings, 'ALLAUTH_SUPPRESS_SIGNUP_CONFIRMATION_EMAIL', False)):
+                rm = getattr(request, 'resolver_match', None)
+                is_signup_view = bool(rm and getattr(rm, 'view_name', '') == 'account_signup')
+                if is_signup_view and self._is_signup_verification_message(template_or_message):
+                    return None
+        except Exception:
+            pass
+
+        return super().add_message(
+            request,
+            level,
+            message_template=message_template,
+            message_context=message_context,
+            extra_tags=extra_tags,
+            **kwargs,
+        )
+
+    @staticmethod
     def _username_base_from_email(email: str) -> str:
         try:
             local = (email or '').split('@', 1)[0]

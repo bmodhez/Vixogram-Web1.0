@@ -99,6 +99,6 @@
     {% endif %}
 
     {% if message.file_caption %}
-        <div class="mt-2 text-xs leading-snug {% if message.author == user %}text-white/80{% else %}text-gray-600{% endif %}">{{ message.file_caption|escape|highlight_mentions|urlize|linebreaksbr }}</div>
+        <div class="mt-2 text-xs leading-snug font-medium {% if message.author == user %}text-white/90{% else %}text-gray-300{% endif %}">{{ message.file_caption|escape|highlight_mentions|urlize|linebreaksbr }}</div>
     {% endif %}
 {% endif %}

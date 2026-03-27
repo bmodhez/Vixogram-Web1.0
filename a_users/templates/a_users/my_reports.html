@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<style>
+    html.theme-light .my-reports-page .my-report-admin-note {
+        background: transparent;
+        border-color: rgba(16, 185, 129, 0.45);
+        color: #065f46;
+    }
+
+    html.theme-light .my-reports-page .my-report-admin-note-label {
+        color: #334155;
+    }
+</style>
+
+<div class="my-reports-page min-h-[calc(100vh-7rem)] py-6">
+    <div class="w-full max-w-5xl mx-auto rounded-2xl border border-gray-800 bg-gray-900/60 shadow-2xl p-6">
+        <div class="flex items-start justify-between gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-emerald-400">My reports</h1>
+                <p class="mt-1 text-sm text-gray-300">See every report you have submitted and its current status.</p>
+            </div>
+            <a href="{% url 'home' %}" class="text-sm bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors">Back to chat</a>
+        </div>
+
+        <div class="mt-6 space-y-4">
+            {% for report in reports %}
+                <div class="rounded-2xl border border-gray-800 bg-gray-950/40 p-4 sm:p-5">
+                    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div class="min-w-0">
+                            <div class="text-sm text-gray-400">Reported user</div>
+                            <div class="mt-1 text-lg font-bold text-white break-words">@{{ report.reported_user.username }}</div>
+                            <div class="mt-1 text-xs text-gray-500">{{ report.created_at|date:"M d, Y • h:i A" }}</div>
+                        </div>
+                        <div class="sm:text-right">
+                            <div class="text-sm text-gray-400">Status</div>
+                            {% if report.status == 'open' %}
+                                <div class="mt-1 text-sm font-semibold text-amber-400">Open</div>
+                            {% elif report.status == 'resolved' %}
+                                <div class="mt-1 text-sm font-semibold text-emerald-400">Resolved</div>
+                            {% else %}
+                                <div class="mt-1 text-sm font-semibold text-gray-300">Dismissed</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <div class="text-sm text-gray-400">Reason</div>
+                            <div class="mt-1 font-semibold text-white">{{ report.get_reason_display }}</div>
+                        </div>
+                        {% if report.handled_by %}
+                            <div>
+                                <div class="text-sm text-gray-400">Handled by</div>
+                                <div class="mt-1 font-semibold text-white">@{{ report.handled_by.username }}</div>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mt-4">
+                        <div class="text-sm text-gray-400">Your message</div>
+                        <div class="mt-2 rounded-xl border border-gray-800 bg-gray-900/60 px-4 py-3 text-sm leading-6 text-gray-200 whitespace-pre-wrap">{{ report.details|default:'No message added.' }}</div>
+                    </div>
+
+                    {% if report.resolution_note %}
+                        <div class="mt-4">
+                            <div class="my-report-admin-note-label text-sm text-gray-400">Admin note</div>
+                            <div class="my-report-admin-note mt-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm leading-6 text-emerald-100 whitespace-pre-wrap">{{ report.resolution_note }}</div>
+                        </div>
+                    {% endif %}
+                </div>
+            {% empty %}
+                <div class="rounded-2xl border border-gray-800 bg-gray-950/40 px-6 py-10 text-center">
+                    <div class="text-lg font-semibold text-white">No reports yet</div>
+                    <p class="mt-2 text-sm text-gray-400">When you report someone, it will show up here with your message and status.</p>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

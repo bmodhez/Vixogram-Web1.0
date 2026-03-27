@@ -1,0 +1,205 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block html_class %}vixo-rv-page{% endblock %}
+{% block body_class %}vixo-rv-page{% endblock %}
+
+{% block content %}
+<style>
+  html.vixo-rv-page,
+  body.vixo-rv-page {
+    -ms-overflow-style: none; /* IE and old Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
+  html.vixo-rv-page::-webkit-scrollbar,
+  body.vixo-rv-page::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
+
+  body.vixo-rv-page main.self-stretch {
+    height: calc(100dvh - var(--vixo-rv-topbar-h, 72px)) !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  body.vixo-rv-page main.self-stretch > section {
+    height: 100% !important;
+    min-height: 0 !important;
+  }
+
+  #rv_chat_wrap {
+    overflow: hidden;
+  }
+
+  #rv_chat_messages {
+    min-height: 0;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+  }
+</style>
+<section class="h-full min-h-0 w-full px-0 py-0">
+  <div class="vixo-rv-shell h-full min-h-0 rounded-xl sm:rounded-2xl border-0 bg-gray-950/70 p-1.5 sm:p-3 shadow-none flex flex-col">
+    <div class="grid grid-cols-1 lg:grid-cols-[380px_minmax(0,1fr)] gap-2 sm:gap-3 flex-1 min-h-0">
+      <div class="vixo-rv-cam-stack grid grid-cols-1 gap-2 sm:gap-3">
+        <div class="vixo-rv-video-card">
+          <div class="vixo-rv-label">Stranger</div>
+          <video id="rv_remote_video" class="vixo-rv-video" autoplay playsinline></video>
+          <div id="rv_remote_placeholder" class="vixo-rv-placeholder">
+            <div id="rv_remote_idle" class="vixo-rv-placeholder-inner">
+              <button id="rv_remote_start_btn" type="button" class="vixo-rv-btn vixo-rv-btn--primary" data-tooltip="Start Video Chat&#10;Ctrl+B">Start Video Chat</button>
+            </div>
+            <div id="rv_remote_waiting" class="vixo-rv-placeholder-inner hidden">
+              <span id="rv_waiting_text"><span>Waiting for stranger</span><span id="rv_waiting_dots">...</span></span>
+              <button id="rv_remote_retry_btn" type="button" class="vixo-rv-btn hidden ml-2">Retry</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="vixo-rv-video-card vixo-rv-video-card--me">
+          <div class="vixo-rv-label">You</div>
+          <video id="rv_local_video" class="vixo-rv-video" autoplay muted playsinline></video>
+          <div class="vixo-rv-media-controls">
+            <button id="rv_device_btn" type="button" class="vixo-rv-media-btn" aria-label="Device settings" title="Device settings">⟳</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="vixo-rv-chat-card px-2 py-2 sm:px-3 sm:py-3 flex flex-col">
+        <div id="rv_status_panel" class="flex-1 flex flex-col items-center justify-center text-center">
+          <div id="rv_connection_state" class="text-sm font-bold text-gray-300">Not connected</div>
+          <div id="rv_status" class="mt-2 text-sm text-gray-200">Press Start to begin random matching.</div>
+        </div>
+        <div id="rv_chat_wrap" class="hidden vixo-rv-chat-wrap flex-1 min-h-0 rounded-lg border-0 bg-gray-950/40">
+          <div id="rv_chat_messages" class="flex-1 min-h-0 overflow-y-auto px-2 py-2 text-sm"></div>
+          <div id="rv_typing_indicator" class="hidden px-3 pb-1 text-xs font-semibold text-cyan-200/90">Stranger is typing...</div>
+          <form id="rv_chat_form" class="vixo-rv-chat-composer h-14 shrink-0 border-t-0 px-1.5 py-1.5 flex items-center gap-2">
+            <input id="rv_chat_input" type="text" maxlength="500" autocomplete="off" placeholder="Type message..." class="vixo-rv-chat-input flex-1 rounded-lg border-0 bg-gray-900/70 px-3 py-2 text-base text-gray-100 placeholder:text-gray-500 focus:outline-none" />
+            <button type="submit" class="vixo-rv-chat-send rounded-lg bg-cyan-500/80 hover:bg-cyan-400 text-white text-sm font-semibold px-4 py-2">Send</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3 sm:mt-4 flex flex-wrap items-center justify-center gap-2 px-1 sm:px-2">
+      <button id="rv_connect_btn" type="button" class="vixo-rv-btn vixo-rv-btn--primary" data-tooltip="Start&#10;Ctrl+B">Start</button>
+      <button id="rv_next_btn" type="button" class="vixo-rv-btn">Skip</button>
+      <button id="rv_end_btn" type="button" class="vixo-rv-btn vixo-rv-btn--danger">Stop</button>
+      {% if random_video_is_superuser %}
+      <button id="rv_warn_btn" type="button" class="vixo-rv-btn vixo-rv-btn--warn">Warn</button>
+      {% endif %}
+    </div>
+
+  </div>
+</section>
+
+<div id="rv_device_modal" class="hidden fixed inset-0 z-[120]" aria-hidden="true">
+  <div id="rv_device_backdrop" class="absolute inset-0 bg-slate-950/75 backdrop-blur-[2px]"></div>
+  <div class="relative min-h-full flex items-center justify-center p-3 sm:p-4">
+    <div id="rv_device_panel" class="w-full max-w-[560px] rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-slate-900/95 via-slate-900/95 to-indigo-950/95 text-slate-100 shadow-[0_24px_70px_rgba(15,23,42,0.75)] overflow-hidden">
+      <div class="px-4 sm:px-6 py-4 border-b border-cyan-300/15 text-center text-2xl font-semibold tracking-tight text-cyan-100">Select your camera</div>
+      <div class="px-4 sm:px-5 py-4 space-y-3">
+        <div class="grid grid-cols-[100px_minmax(0,1fr)] items-center gap-2.5">
+          <label for="rv_camera_select" class="text-[0.98rem] font-semibold text-slate-200">Camera:</label>
+          <select id="rv_camera_select" class="h-10 w-full rounded-lg border border-slate-600/70 bg-slate-950/70 px-3 text-[0.95rem] text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400/35 focus:border-cyan-400/50"></select>
+        </div>
+        <div class="grid grid-cols-[100px_minmax(0,1fr)] items-center gap-2.5">
+          <label for="rv_mic_select" class="text-[0.98rem] font-semibold text-slate-200">Microphone:</label>
+          <select id="rv_mic_select" class="h-10 w-full rounded-lg border border-slate-600/70 bg-slate-950/70 px-3 text-[0.95rem] text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-400/35 focus:border-cyan-400/50"></select>
+        </div>
+      </div>
+      <div class="px-4 sm:px-6 py-3.5 border-t border-cyan-300/15 flex items-center justify-end gap-2.5 bg-slate-900/70">
+        <button id="rv_device_apply" type="button" class="rounded-lg bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-white font-semibold px-5 py-2 text-sm shadow-[0_8px_20px_rgba(34,211,238,0.28)] transition-all duration-200">Select</button>
+        <button id="rv_device_close" type="button" class="rounded-lg border border-slate-600 bg-slate-800/80 hover:bg-slate-700 text-slate-200 font-semibold px-5 py-2 text-sm transition-colors duration-200">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="rv_chat_promo_modal" class="hidden fixed inset-0 z-[125]" aria-hidden="true">
+  <div id="rv_chat_promo_backdrop" class="absolute inset-0 bg-slate-950/75 backdrop-blur-[2px]"></div>
+  <div class="relative min-h-full flex items-center justify-center p-4">
+    <div class="w-full max-w-[560px] rounded-2xl border border-cyan-400/25 bg-gradient-to-br from-slate-900/95 via-indigo-950/90 to-slate-900/95 text-slate-100 shadow-[0_24px_70px_rgba(15,23,42,0.78)] overflow-hidden">
+      <div class="px-5 sm:px-6 py-5 sm:py-6 text-center">
+        <h2 class="text-xl sm:text-2xl font-extrabold tracking-tight text-cyan-100">Wanna chat with random personalities? 👀</h2>
+        <p class="mt-3 text-sm sm:text-base leading-snug text-slate-200/95">Discover real people &amp; real vibes — not just video, but live communities too.</p>
+      </div>
+      <div class="px-5 sm:px-6 pb-5 sm:pb-6 pt-1 flex flex-col sm:flex-row items-stretch gap-2.5 sm:gap-3 bg-slate-900/55 border-t border-cyan-300/15">
+        <a id="rv_chat_promo_explore" href="{% url 'chatroom' 'public-chat' %}?tab=groups" class="group flex-1 inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-white font-semibold px-4 py-2.5 text-sm shadow-[0_8px_20px_rgba(34,211,238,0.28)] hover:shadow-[0_0_28px_rgba(34,211,238,0.55)] transition-all duration-200">
+          <span class="inline-flex items-center gap-1.5">
+            <span class="transition-transform duration-200 group-hover:-translate-y-0.5">🚀</span>
+            <span>Explore Live Chats</span>
+          </span>
+        </a>
+        <button id="rv_chat_promo_later" type="button" class="flex-1 rounded-xl border border-slate-600 bg-slate-800/85 hover:bg-slate-700 text-slate-200 font-semibold px-4 py-2.5 text-sm transition-colors duration-200">
+          Maybe Later
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="rv_welcome_modal" class="hidden fixed inset-0 z-[126]" aria-hidden="true">
+  <div id="rv_welcome_backdrop" class="absolute inset-0 bg-slate-950/75 backdrop-blur-[2px]"></div>
+  <div class="relative min-h-full flex items-center justify-center p-4">
+    <div class="w-full max-w-[560px] rounded-2xl border border-cyan-400/25 bg-gradient-to-br from-slate-900/95 via-indigo-950/90 to-slate-900/95 text-slate-100 shadow-[0_24px_70px_rgba(15,23,42,0.78)] overflow-hidden">
+      <div class="px-5 sm:px-6 py-5 sm:py-6 text-center">
+        <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-cyan-100">VixoConnect</h2>
+        <p class="mt-3 text-sm sm:text-base leading-snug text-slate-200/95">Start a one-to-one video chat with a random user.<br>Meet new people instantly and connect in real time.</p>
+      </div>
+      <div class="px-5 sm:px-6 pb-5 sm:pb-6 pt-1 bg-slate-900/55 border-t border-cyan-300/15">
+        <button id="rv_welcome_continue" type="button" class="w-full inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 text-white font-semibold px-4 py-2.5 text-sm shadow-[0_8px_20px_rgba(34,211,238,0.28)] transition-all duration-200">
+          Continue
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if random_video_is_superuser %}
+<div id="rv_warn_modal" class="hidden fixed inset-0 z-[128]" aria-hidden="true">
+  <div id="rv_warn_backdrop" class="absolute inset-0 bg-slate-950/75 backdrop-blur-[2px]"></div>
+  <div class="relative min-h-full flex items-center justify-center p-4">
+    <div class="w-full max-w-[560px] rounded-2xl border border-red-400/35 bg-gradient-to-br from-slate-900/95 via-red-950/40 to-slate-900/95 text-slate-100 shadow-[0_24px_70px_rgba(15,23,42,0.78)] overflow-hidden">
+      <div class="px-5 sm:px-6 py-4 border-b border-red-300/20">
+        <h3 class="text-lg sm:text-xl font-extrabold tracking-tight text-red-100">Warn User</h3>
+        <p class="mt-1 text-sm text-slate-200/90">Message Vixogram ke naam se samne wale user ko popup me dikhaya jayega.</p>
+      </div>
+      <div class="px-5 sm:px-6 py-4">
+        <textarea id="rv_warn_input" rows="5" maxlength="400" class="w-full rounded-xl border border-slate-600/70 bg-slate-950/80 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-400/35 focus:border-red-400/50" placeholder="Warning message likho..."></textarea>
+      </div>
+      <div class="px-5 sm:px-6 pb-5 pt-1 flex items-center justify-end gap-2.5 bg-slate-900/55 border-t border-red-300/20">
+        <button id="rv_warn_cancel" type="button" class="rounded-xl border border-slate-600 bg-slate-800/85 hover:bg-slate-700 text-slate-200 font-semibold px-4 py-2 text-sm transition-colors duration-200">Cancel</button>
+        <button id="rv_warn_send" type="button" class="rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold px-4 py-2 text-sm shadow-[0_8px_20px_rgba(220,38,38,0.35)] transition-all duration-200">Warn User</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div id="rv_warn_alert_modal" class="hidden fixed inset-0 z-[129]" aria-hidden="true">
+  <div id="rv_warn_alert_backdrop" class="absolute inset-0 bg-slate-950/80 backdrop-blur-[2px]"></div>
+  <div class="relative min-h-full flex items-center justify-center p-4">
+    <div class="w-full max-w-[560px] rounded-2xl border border-amber-400/35 bg-gradient-to-br from-slate-900/95 via-amber-950/25 to-slate-900/95 text-slate-100 shadow-[0_24px_70px_rgba(15,23,42,0.8)] overflow-hidden">
+      <div class="px-5 sm:px-6 py-4 border-b border-amber-300/20">
+        <h3 id="rv_warn_alert_title" class="text-lg sm:text-xl font-extrabold tracking-tight text-amber-100">Vixogram</h3>
+      </div>
+      <div class="px-5 sm:px-6 py-4">
+        <p id="rv_warn_alert_message" class="text-sm sm:text-base leading-relaxed text-slate-100 whitespace-pre-wrap break-words max-h-56 overflow-y-auto pr-1" style="overflow-wrap:anywhere;"></p>
+      </div>
+      <div class="px-5 sm:px-6 pb-5 pt-1 flex items-center justify-end bg-slate-900/55 border-t border-amber-300/20">
+        <button id="rv_warn_alert_ok" type="button" class="rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold px-4 py-2 text-sm transition-colors duration-200">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script id="rv-config" type="application/json">{"wsPath":"{{ random_video_ws_path }}","iceServers":{{ random_video_ice_servers_json|safe }},"isSuperuser":{% if random_video_is_superuser %}true{% else %}false{% endif %}}</script>
+{% endblock %}
+
+{% block extra_body %}
+  {{ block.super }}
+  <script src="{% static 'js/random_video.js' %}?v=20260323e" defer></script>
+{% endblock %}

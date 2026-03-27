@@ -23,6 +23,7 @@ IPL_SCORE_GLOBAL_GROUP = 'ipl_live_scores'
 IPL_CACHE_KEY_STATE = 'ipl:live:state:v1'
 IPL_CACHE_KEY_HASH = 'ipl:live:hash:v1'
 IPL_CACHE_KEY_LAST_BROADCAST = 'ipl:live:last_broadcast:v1'
+IPL_WIDGET_ENABLED_CACHE_KEY = 'ipl:widget:enabled:v1'
 
 
 @dataclass
@@ -198,6 +199,25 @@ def get_cached_ipl_state() -> dict[str, Any] | None:
     if isinstance(cached, dict):
         return cached
     return None
+
+
+def is_ipl_widget_enabled() -> bool:
+    try:
+        cached = cache.get(IPL_WIDGET_ENABLED_CACHE_KEY)
+        if cached is None:
+            return bool(getattr(settings, 'IPL_WIDGET_ENABLED_DEFAULT', False))
+        return bool(cached)
+    except Exception:
+        return bool(getattr(settings, 'IPL_WIDGET_ENABLED_DEFAULT', False))
+
+
+def set_ipl_widget_enabled(enabled: bool) -> bool:
+    value = bool(enabled)
+    try:
+        cache.set(IPL_WIDGET_ENABLED_CACHE_KEY, value, timeout=None)
+        return value
+    except Exception:
+        return value
 
 
 def _broadcast_global_score(snapshot: dict[str, Any]) -> bool:

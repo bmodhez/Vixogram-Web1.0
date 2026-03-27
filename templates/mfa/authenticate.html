@@ -1,0 +1,150 @@
+{% extends "mfa/base_entrance.html" %}
+{% load i18n %}
+{% load allauth static %}
+
+{% block head_title %}
+    {% trans "Sign In" %}
+{% endblock head_title %}
+
+{% block content %}
+<div class="vixo-mfa-phone-wrap">
+    <div class="vixo-mfa-phone">
+        <img src="{% static 'phonevirt.png' %}" alt="Phone" class="vixo-mfa-phone-img" />
+
+        <div class="vixo-mfa-screen">
+            <div class="vixo-mfa-screen-inner">
+                <h1>{% trans "Two-Factor Authentication" %}</h1>
+                <p class="vixo-mfa-desc">{% blocktranslate %}Your account is protected by two-factor authentication. Please enter an authenticator code:{% endblocktranslate %}</p>
+
+                {% url 'mfa_authenticate' as action_url %}
+                {% element form form=form method="post" action=action_url %}
+                    {% slot body %}
+                        {% csrf_token %}
+                        {% element fields form=form unlabeled=True %}
+                        {% endelement %}
+                    {% endslot %}
+                    {% slot actions %}
+                        {% element button type="submit" tags="primary,mfa,login" %}
+                            {% trans "Sign In" %}
+                        {% endelement %}
+                        {% if "webauthn" not in MFA_SUPPORTED_TYPES %}
+                            {% element button type="submit" form="logout-from-stage" tags="link,mfa,cancel" %}
+                                {% trans "Cancel" %}
+                            {% endelement %}
+                        {% endif %}
+                    {% endslot %}
+                {% endelement %}
+
+                {% if "webauthn" in MFA_SUPPORTED_TYPES %}
+                    {% element hr %}{% endelement %}
+                    {% element h2 %}{% translate "Alternative options" %}{% endelement %}
+                    {% element button_group vertical=True %}
+                        {% element button form="webauthn_form" id="mfa_webauthn_authenticate" type="button" tags="outline,primary" %}
+                            {% trans "Use a security key" %}
+                        {% endelement %}
+                        {% element button type="submit" form="logout-from-stage" tags="outline,primary,mfa,cancel" %}
+                            {% trans "Cancel" %}
+                        {% endelement %}
+                    {% endelement %}
+
+                    {% element form id="webauthn_form" form=webauthn_form method="post" action=action_url no_visible_fields=True %}
+                        {% slot body %}
+                            {% csrf_token %}
+                            {% element fields form=webauthn_form %}
+                            {% endelement %}
+                        {% endslot %}
+                    {% endelement %}
+
+                    {{ js_data|json_script:"js_data" }}
+                    {% include "mfa/webauthn/snippets/scripts.html" %}
+                    <script data-allauth-onload="allauth.webauthn.forms.authenticateForm" type="application/json">{
+    "ids": {
+        "authenticate": "mfa_webauthn_authenticate",
+        "credential": "{{ webauthn_form.credential.auto_id }}",
+        "data": "js_data"
+    }
+}
+                    </script>
+                {% endif %}
+
+                <form id="logout-from-stage" method="post" action="{% url 'mfa_cancel_to_login' %}">
+                    {% csrf_token %}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .vixo-mfa-phone-wrap { display:flex; justify-content:center; width:100%; padding:.25rem 0 .75rem; }
+    .vixo-mfa-phone { position:relative; width:min(100%, 430px); margin-inline:auto; }
+    .vixo-mfa-phone-img { display:block; width:100%; height:auto; pointer-events:none; user-select:none; }
+    .vixo-mfa-screen { position:absolute; left:16.2%; right:16.2%; top:8.8%; bottom:8.8%; border-radius:1.25rem; overflow:hidden; z-index:2; }
+    .vixo-mfa-screen-inner {
+        height:100%; overflow-y:auto; padding:.9rem .75rem 1.05rem;
+        background:linear-gradient(180deg, rgba(2, 6, 23, 0.68), rgba(2, 6, 23, 0.5));
+        text-align:center;
+    }
+    .vixo-mfa-screen-inner h1 { margin:0 0 .5rem; color:#f3f4f6; font-size:1.2rem; line-height:1.25; font-weight:800; }
+    .vixo-mfa-screen-inner h2 { margin:.7rem 0 .45rem; color:#e5e7eb; font-size:1rem; font-weight:700; }
+    .vixo-mfa-desc,
+    .vixo-mfa-screen-inner p,
+    .vixo-mfa-screen-inner label,
+    .vixo-mfa-screen-inner li,
+    .vixo-mfa-screen-inner div { color:#cbd5e1; }
+    .vixo-mfa-screen-inner form { margin-top:.55rem; }
+    .vixo-mfa-screen-inner input,
+    .vixo-mfa-screen-inner select,
+    .vixo-mfa-screen-inner textarea {
+        width:100%; border-radius:.75rem; border:1px solid rgba(100, 116, 139, .85);
+        background:rgba(15, 23, 42, .72); color:#f8fafc; padding:.55rem .65rem; font-size:.9rem; outline:none;
+    }
+    .vixo-mfa-screen-inner input::placeholder { color:#94a3b8; }
+    .vixo-mfa-screen-inner input:focus,
+    .vixo-mfa-screen-inner select:focus,
+    .vixo-mfa-screen-inner textarea:focus {
+        border-color:rgba(129, 140, 248, .95); box-shadow:0 0 0 3px rgba(99, 102, 241, .2);
+    }
+    .vixo-mfa-screen-inner .errorlist,
+    .vixo-mfa-screen-inner .errorlist li,
+    .vixo-mfa-screen-inner .alert-danger,
+    .vixo-mfa-screen-inner .text-danger,
+    .vixo-mfa-screen-inner .text-red-500 { color:#ef4444 !important; font-weight:700 !important; }
+    .vixo-mfa-screen-inner button,
+    .vixo-mfa-screen-inner .button,
+    .vixo-mfa-screen-inner a[role='button'] {
+        display:inline-flex; align-items:center; justify-content:center;
+        border-radius:.7rem; border:1px solid rgba(79, 70, 229, .55);
+        background:linear-gradient(90deg, rgba(139, 92, 246, .95), rgba(79, 70, 229, .95));
+        color:#fff !important; text-decoration:none; font-size:.86rem; font-weight:700;
+        padding:.52rem .86rem; cursor:pointer; margin-top:.45rem;
+    }
+    .vixo-mfa-screen-inner button:hover,
+    .vixo-mfa-screen-inner .button:hover,
+    .vixo-mfa-screen-inner a[role='button']:hover { filter:brightness(1.06); transform:translateY(-1px); }
+    .vixo-mfa-screen-inner hr { border:0; border-top:1px solid rgba(75,85,99,.8); margin:.7rem 0; }
+    .vixo-mfa-screen-inner::-webkit-scrollbar { width:6px; }
+    .vixo-mfa-screen-inner::-webkit-scrollbar-thumb { background:rgba(148,163,184,.35); border-radius:999px; }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var codeInput = document.querySelector('.vixo-mfa-screen-inner input[name="code"]');
+        if (!codeInput) {
+            return;
+        }
+
+        var requiredMessage = "{% trans 'Please enter your authenticator code.' %}";
+
+        codeInput.addEventListener('invalid', function () {
+            if (!this.value.trim()) {
+                this.setCustomValidity(requiredMessage);
+            }
+        });
+
+        codeInput.addEventListener('input', function () {
+            this.setCustomValidity('');
+        });
+    });
+</script>
+{% endblock content %}

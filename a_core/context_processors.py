@@ -72,6 +72,15 @@ def welcome_popup(request):
         if not sess:
             return {'SHOW_WELCOME_POPUP': False, 'WELCOME_POPUP_SOURCE': ''}
 
+        # Never show/consume welcome popup during auth gates.
+        # This keeps MFA/reauth screens first in the flow.
+        try:
+            path = str(getattr(request, 'path', '') or '')
+            if path.startswith('/accounts/2fa/') or path.startswith('/accounts/reauthenticate/'):
+                return {'SHOW_WELCOME_POPUP': False, 'WELCOME_POPUP_SOURCE': ''}
+        except Exception:
+            pass
+
         show = bool(sess.get('show_welcome_popup'))
         source = (sess.get('welcome_popup_source') or '').strip()
         if show:
@@ -260,6 +269,7 @@ def vpn_proxy_popup(request):
 
     return {
         'VPN_PROXY_GUARD_ENABLED': bool(getattr(settings, 'VPN_PROXY_GUARD_ENABLED', True)),
+        'VPN_PROXY_CLIENT_PROBE_ENABLED': bool(getattr(settings, 'VPN_PROXY_CLIENT_PROBE_ENABLED', False)),
         'VPN_PROXY_BLOCKED': bool(blocked),
         'VPN_PROXY_WARNING_MESSAGE': (
             getattr(request, 'vixo_vpn_proxy_warning_message', '')

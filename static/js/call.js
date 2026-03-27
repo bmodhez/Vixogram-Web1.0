@@ -1,4 +1,11 @@
 (function () {
+    try {
+        if (typeof AgoraRTC !== 'undefined' && AgoraRTC && typeof AgoraRTC.setLogLevel === 'function') {
+            // 4 = NONE in Agora Web SDK NG
+            AgoraRTC.setLogLevel(4);
+        }
+    } catch {}
+
     function readJsonScript(id) {
         try {
             const el = document.getElementById(id);

@@ -9,8 +9,11 @@ from allauth.account.views import LoginView
 from allauth.account.views import SignupView
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import logout as django_logout
 from django.core.cache import cache
 from django.http import HttpResponseRedirect
+from django.shortcuts import redirect
+from django.views import View
 
 try:
     from urllib.parse import urlencode
@@ -73,35 +76,83 @@ class CooldownEmailView(EmailView):
 
     COOLDOWN_SECONDS = 240  # 4 minutes
 
+    def _cooldown_cache_key(self, request) -> str | None:
+        user_id = getattr(getattr(request, 'user', None), 'id', None)
+        if not user_id:
+            return None
+        return f"allauth:email_resend_cooldown:user:{user_id}"
+
+    def _cooldown_remaining_seconds(self, request) -> int:
+        key = self._cooldown_cache_key(request)
+        if not key:
+            return 0
+        try:
+            started_at = cache.get(key)
+            if started_at is None:
+                return 0
+            now = int(time.time())
+            started_at = int(started_at)
+            remaining = int(self.COOLDOWN_SECONDS - max(0, now - started_at))
+            return max(0, remaining)
+        except Exception:
+            return 0
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        remaining = self._cooldown_remaining_seconds(self.request)
+        ctx['email_resend_cooldown_remaining'] = int(remaining)
+        return ctx
+
     def post(self, request, *args, **kwargs):
         # allauth uses submit button name="action_send" for resend verification.
         if 'action_send' in request.POST:
-            user_id = getattr(getattr(request, 'user', None), 'id', None)
-            if user_id:
-                key = f"allauth:email_resend_cooldown:user:{user_id}"
+            key = self._cooldown_cache_key(request)
+            if key:
                 now = int(time.time())
 
                 # Atomic set: if already set, block.
                 if not cache.add(key, now, timeout=self.COOLDOWN_SECONDS):
-                    messages.info(request, 'Please wait for 4 min and try again.')
-                    # Re-render via redirect (same behavior as allauth).
-                    return self.get(request, *args, **kwargs)
+                    remaining = self._cooldown_remaining_seconds(request)
+                    if remaining > 0:
+                        messages.error(request, f'Please wait {remaining}s before resending verification.')
+                    else:
+                        messages.error(request, 'Please wait before resending verification.')
+                    # PRG: avoid browser "Confirm Form Resubmission" on refresh/back.
+                    return redirect('account_email')
 
         try:
             response = super().post(request, *args, **kwargs)
+
+            # allauth may return a raw 429 page on burst actions.
+            # Keep UX consistent by redirecting back with a friendly message.
+            try:
+                status_code = int(getattr(response, 'status_code', 200) or 200)
+            except Exception:
+                status_code = 200
+            if status_code == 429:
+                remaining = self._cooldown_remaining_seconds(request)
+                if remaining > 0:
+                    messages.error(request, f'Please wait {remaining}s before resending verification.')
+                else:
+                    messages.error(request, 'Too many requests. Please try again after a few seconds.')
+                return redirect('account_email')
 
             # Suppress the "confirmation email sent" banner for resend action.
             if 'action_send' in request.POST:
                 try:
                     storage = messages.get_messages(request)
                     kept = []
+                    removed_confirmation = False
                     for msg in storage:
                         text = str(getattr(msg, 'message', msg))
                         if 'confirmation email sent' in text.lower():
+                            removed_confirmation = True
                             continue
                         kept.append(msg)
                     for msg in kept:
                         messages.add_message(request, msg.level, msg.message, extra_tags=msg.tags)
+                    if removed_confirmation:
+                        messages.success(request, 'Verification email sent successfully.')
                 except Exception:
                     pass
 
@@ -112,11 +163,11 @@ class CooldownEmailView(EmailView):
                 request,
                 "Email login failed (SMTP). If you're using Gmail, set an App Password in EMAIL_HOST_PASSWORD.",
             )
-            return self.get(request, *args, **kwargs)
+            return redirect('account_email')
         except smtplib.SMTPException:
             logger.exception("SMTP error while sending allauth email")
             messages.error(request, "Could not send email right now. Please try again later.")
-            return self.get(request, *args, **kwargs)
+            return redirect('account_email')
 
 
 class PRGLoginView(LoginView):
@@ -198,11 +249,25 @@ class WelcomeLoginView(PRGLoginView):
         except Exception:
             pass
 
-        resp = super().form_valid(form)
+        return super().form_valid(form)
+
+
+class MFACancelToLoginView(View):
+    """Cancel MFA stage and force redirect to plain login page."""
+
+    def post(self, request, *args, **kwargs):
         try:
-            loc = str(resp.get('Location') or '')
-            if loc:
-                resp['Location'] = _add_query_param(loc, 'welcome', 'login')
+            django_logout(request)
         except Exception:
             pass
-        return resp
+
+        try:
+            sess = getattr(request, 'session', None)
+            if sess is not None:
+                sess.pop('show_welcome_popup', None)
+                sess.pop('welcome_popup_source', None)
+                sess.pop('post_auth_chat_tutorial', None)
+        except Exception:
+            pass
+
+        return redirect('/accounts/login/')

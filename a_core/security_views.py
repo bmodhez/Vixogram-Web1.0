@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from django.conf import settings
+from django.http import HttpResponse
 from django.http import JsonResponse
+from django.shortcuts import render
 from django.views.decorators.http import require_POST
 
 from a_rtchat.rate_limit import get_client_ip
@@ -13,6 +15,31 @@ VPN_PROXY_WARNING_MESSAGE = (
     'Please disable your VPN to continue using all features.'
 )
 VPN_PROXY_CLIENT_BLOCKED_SESSION_KEY = 'vixo_vpn_proxy_client_blocked'
+
+
+def robots_txt_view(request):
+    admin_path = str(getattr(settings, 'ADMIN_URL', 'admin')).strip().strip('/') or 'admin'
+    lines = [
+        'User-agent: *',
+        'Disallow: /admin/',
+        f'Disallow: /{admin_path}/',
+    ]
+    return HttpResponse('\n'.join(lines) + '\n', content_type='text/plain; charset=utf-8')
+
+
+def axes_lockout_response(request, credentials=None, *args, **kwargs):
+    """Render a styled lockout page for admin brute-force protection."""
+    try:
+        cooloff_hours = float(getattr(settings, 'AXES_COOLOFF_TIME').total_seconds() / 3600.0)
+    except Exception:
+        cooloff_hours = 12.0
+
+    context = {
+        'cooloff_hours': int(cooloff_hours) if cooloff_hours.is_integer() else cooloff_hours,
+        'admin_login_path': str(getattr(settings, 'ADMIN_URL_PREFIX', '/admin/')),
+        'retry_path': request.get_full_path() if request else '/',
+    }
+    return render(request, 'axes/lockout.html', context=context, status=429)
 
 
 def network_security_status_view(request):

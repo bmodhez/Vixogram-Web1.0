@@ -9,9 +9,6 @@
                 <div class="text-sm text-gray-300">{% if call_type == 'video' %}Video call{% else %}Voice call{% endif %}</div>
                 <div class="text-xs text-gray-500">Room: {{ chatroom_name }}</div>
             </div>
-            <a id="call_end_back" href="{% url 'chatroom' chatroom_name %}" class="text-sm bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors">
-                End / Back
-            </a>
         </div>
 
         <div class="p-5">

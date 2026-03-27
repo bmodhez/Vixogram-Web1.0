@@ -6,9 +6,11 @@ from django.utils import timezone
 from django.core.validators import MaxLengthValidator
 
 from datetime import timedelta
+import os
 
 import base64
 import hashlib
+import time
 
 class Profile(models.Model):
     NAME_GLOW_NONE = 'none'
@@ -35,6 +37,17 @@ class Profile(models.Model):
         (NAME_GLOW_COSMIC, 'Cosmic'),
     )
 
+    CHAT_THEME_DEFAULT = 'default'
+    CHAT_THEME_1 = 'theme1'
+    CHAT_THEME_2 = 'theme2'
+    CHAT_THEME_3 = 'theme3'
+    CHAT_THEME_CHOICES = (
+        (CHAT_THEME_DEFAULT, 'Default'),
+        (CHAT_THEME_1, 'Cyber Grid'),
+        (CHAT_THEME_2, 'Aurora Night'),
+        (CHAT_THEME_3, 'Neon Wave'),
+    )
+
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     image = models.ImageField(upload_to='avatars/', null=True, blank=True)
     cover_image = models.ImageField(upload_to='profile_covers/', null=True, blank=True)
@@ -45,6 +58,25 @@ class Profile(models.Model):
         max_length=200,
         validators=[MaxLengthValidator(200)],
     )
+    # Avatar moderation (NudeNet async review)
+    AVATAR_REVIEW_NONE = 'none'
+    AVATAR_REVIEW_PENDING = 'pending'
+    AVATAR_REVIEW_APPROVED = 'approved'
+    AVATAR_REVIEW_REJECTED = 'rejected'
+    AVATAR_REVIEW_CHOICES = [
+        ('none', 'None'),
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+    avatar_review_status = models.CharField(
+        max_length=10,
+        choices=AVATAR_REVIEW_CHOICES,
+        default='none',
+        db_index=True,
+    )
+    avatar_pending_local = models.CharField(max_length=500, blank=True, default='')
+
     chat_blocked = models.BooleanField(default=False)
     chat_banned_until = models.DateTimeField(null=True, blank=True)
     is_private_account = models.BooleanField(default=False)
@@ -52,11 +84,31 @@ class Profile(models.Model):
     is_bot = models.BooleanField(default=False)
     is_dnd = models.BooleanField(default=False)
     name_glow_color = models.CharField(max_length=16, choices=NAME_GLOW_CHOICES, default=NAME_GLOW_NONE)
+    chat_theme = models.CharField(max_length=12, choices=CHAT_THEME_CHOICES, default=CHAT_THEME_DEFAULT)
     referral_points = models.PositiveIntegerField(default=0)
+    private_rooms_created_total = models.PositiveIntegerField(default=0)
 
     def save(self, *args, **kwargs):
         old_image_name = None
         old_cover_name = None
+
+        # Keep a stable Cloudinary public_id for profile background updates.
+        # This makes each new cover upload overwrite the previous one.
+        try:
+            cover_field = getattr(self, 'cover_image', None)
+            is_new_cover_upload = bool(cover_field and getattr(cover_field, 'file', None) and not getattr(cover_field, '_committed', True))
+            if is_new_cover_upload:
+                storage_obj = getattr(cover_field, 'storage', None)
+                storage_module = str(getattr(getattr(storage_obj, '__class__', object), '__module__', '')).lower()
+                storage_name = str(getattr(getattr(storage_obj, '__class__', object), '__name__', '')).lower()
+                if 'cloudinary' in storage_module or 'cloudinary' in storage_name:
+                    ext = os.path.splitext(str(getattr(cover_field, 'name', '') or ''))[1].lower()
+                    if ext not in {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tif', '.tiff'}:
+                        ext = '.jpg'
+                    cover_version = int(time.time() * 1000)
+                    cover_field.name = f'profile_covers/user_{self.user_id}_cover_{cover_version}{ext}'
+        except Exception:
+            pass
 
         if self.pk:
             try:
@@ -96,6 +148,10 @@ class Profile(models.Model):
     last_location_at = models.DateTimeField(null=True, blank=True)
     last_location_city = models.CharField(max_length=80, null=True, blank=True)
     last_location_country = models.CharField(max_length=80, null=True, blank=True)
+    preferred_location_country = models.CharField(max_length=80, null=True, blank=True)
+    preferred_location_state = models.CharField(max_length=80, null=True, blank=True)
+    preferred_location_city = models.CharField(max_length=80, null=True, blank=True)
+    preferred_location_last_changed_at = models.DateTimeField(null=True, blank=True)
 
     # Founder Club (invite rewards)
     is_founder_club = models.BooleanField(default=False)
@@ -143,7 +199,9 @@ class Profile(models.Model):
         if not self.cover_image:
             return None
         try:
-            return self.cover_image.url
+            base_url = str(self.cover_image.url)
+            sep = '&' if '?' in base_url else '?'
+            return f"{base_url}{sep}v={time.time_ns()}"
         except Exception:
             return None
 
@@ -234,6 +292,26 @@ class StoryView(models.Model):
         return f"StoryView(story={self.story_id}, viewer={self.viewer_id})"
 
 
+class StoryLike(models.Model):
+    """Tracks which users liked a specific story."""
+
+    story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name='likes')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='story_likes')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['story', 'user'], name='uniq_story_like'),
+        ]
+        indexes = [
+            models.Index(fields=['story', '-created_at'], name='storylike_story_created_idx'),
+            models.Index(fields=['user', '-created_at'], name='storylike_user_created_idx'),
+        ]
+
+    def __str__(self):
+        return f"StoryLike(story={self.story_id}, user={self.user_id})"
+
+
 _DEFAULT_AVATAR_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128' role='img' aria-label='User avatar'>
 <circle cx='64' cy='64' r='60' fill='#4B5563'/>
 <circle cx='64' cy='52' r='20' fill='#F3F4F6'/>
@@ -309,6 +387,7 @@ class ChatBanHistory(models.Model):
         on_delete=models.SET_NULL,
         related_name='issued_chat_ban_history',
     )
+    note = models.TextField(blank=True, default='')
     admin_ip = models.GenericIPAddressField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
@@ -407,11 +486,6 @@ class UserReport(models.Model):
         ]
         constraints = [
             models.CheckConstraint(check=~Q(reporter=models.F('reported_user')), name='userreport_no_self'),
-            models.UniqueConstraint(
-                fields=['reporter', 'reported_user'],
-                condition=Q(status='open'),
-                name='userreport_unique_open_report',
-            ),
         ]
 
     def __str__(self):

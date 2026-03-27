@@ -9,7 +9,7 @@
     <div class="flex flex-col lg:flex-row lg:items-stretch gap-0 sm:gap-4 lg:gap-6 min-w-0 max-w-full">
 
         <aside id="chat_sidebar" class="hidden lg:block w-full lg:w-72 shrink-0">
-            <div id="chat_sidebar_panel" data-chat-list class="vixo-chat-surface w-full max-w-none lg:max-w-none lg:w-72 h-[100dvh] lg:h-[calc(100dvh-6rem)] min-h-0 bg-gray-800/70 border-0 lg:border border-gray-800 rounded-none lg:rounded-2xl shadow-2xl p-3 lg:p-4 overflow-y-auto">
+            <div id="chat_sidebar_panel" data-chat-list class="vixo-chat-surface w-full max-w-none lg:max-w-none lg:w-72 h-[100dvh] lg:h-[calc(100dvh-4rem)] min-h-0 bg-gray-800/70 border-0 lg:border border-gray-800 rounded-none lg:rounded-2xl shadow-2xl p-3 lg:p-4 overflow-y-auto">
                 <div class="flex items-center justify-between gap-2 mb-3">
                     <div class="text-base font-semibold text-gray-200">Chats</div>
                 </div>
@@ -83,6 +83,21 @@
                 </div>
             {% endif %}
 
+            {% if support_chat_username %}
+            <div class="text-sm font-semibold text-gray-400 mb-2">Support</div>
+            <div class="mb-4">
+                <a data-chat-list-item href="{% url 'chatroom' 'TeamSupport' %}"
+                         class="vixo-chat-room-link group flex items-center gap-3 rounded-xl border transition-colors
+                         {% if is_support_private_chat %}vixo-chat-room-link-active{% else %}vixo-chat-room-link-idle{% endif %}">
+                    <span class="vixo-chat-room-avatar">🛠</span>
+                    <span class="min-w-0 flex-1">
+                        <span class="vixo-chat-room-title">{{ support_chat_label }}</span>
+                        <span class="vixo-chat-room-subtitle">Private support chat</span>
+                    </span>
+                </a>
+            </div>
+            {% endif %}
+
             <div class="mb-4">
                 <a data-chat-list-item href="{% url 'chatroom' 'public-chat' %}"
                          class="vixo-chat-room-link group flex items-center gap-3 rounded-xl border transition-colors
@@ -94,6 +109,44 @@
                     </span>
                 </a>
             </div>
+
+            {% if sidebar_local_communities %}
+                <div class="text-sm font-semibold text-gray-400 mb-2">📍 Local Communities</div>
+                <ul class="space-y-1 mb-4">
+                    {% for room in sidebar_local_communities %}
+                        <li>
+                            <a data-chat-list-item data-chat-list-scope="group" href="{% url 'chatroom' room.group_name %}"
+                                class="vixo-groupchat-link vixo-chat-room-link group flex items-center gap-3 rounded-xl border transition-colors
+                                {% if chat_group.group_name == room.group_name %}vixo-chat-room-link-active{% else %}vixo-chat-room-link-idle{% endif %}">
+                                <span class="vixo-chat-room-avatar">{{ room.groupchat_name|default:room.group_name|first|upper }}</span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="vixo-chat-room-title">{{ room.groupchat_name|default:room.group_name|slice:":30" }}</span>
+                                    <span class="vixo-chat-room-subtitle">Local community</span>
+                                </span>
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+
+            {% if sidebar_nearby_active_rooms %}
+                <div class="text-sm font-semibold text-gray-400 mb-2">Nearby Active Rooms</div>
+                <ul class="space-y-1 mb-4">
+                    {% for room in sidebar_nearby_active_rooms %}
+                        <li>
+                            <a data-chat-list-item data-chat-list-scope="group" href="{% url 'chatroom' room.group_name %}"
+                                class="vixo-groupchat-link vixo-chat-room-link group flex items-center gap-3 rounded-xl border transition-colors
+                                {% if chat_group.group_name == room.group_name %}vixo-chat-room-link-active{% else %}vixo-chat-room-link-idle{% endif %}">
+                                <span class="vixo-chat-room-avatar">{{ room.groupchat_name|default:room.group_name|first|upper }}</span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="vixo-chat-room-title">{{ room.groupchat_name|default:room.group_name|slice:":30" }}</span>
+                                    <span class="vixo-chat-room-subtitle">Active near you</span>
+                                </span>
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
 
             {% if sidebar_groupchats %}
                 <div class="text-sm font-semibold text-gray-400 mb-2">Group chats</div>
@@ -195,12 +248,13 @@
                     </div>
                 {% else %}
                     <div class="space-y-2 mb-4">
-                        <form id="vixo-private-room-create-form" method="post" action="{% url 'private-room-create' %}" class="space-y-2" data-ajax="true">
+                        <form id="vixo-private-room-create-form" method="post" action="{% url 'private-room-create' %}" class="space-y-2" data-ajax="true" data-lifetime-limit="{{ private_room_lifetime_create_limit|default:15 }}" data-created-total="{{ private_rooms_created_total|default:0 }}">
                             {% csrf_token %}
                             {{ private_room_create_form.name }}
                             <button type="submit" class="w-full bg-gray-800 hover:bg-gray-700 text-white rounded-lg px-3 py-2 text-[15px] transition-colors">
                                 Create private room
                             </button>
+                            <p class="px-1 text-[11px] text-gray-400">Created {{ private_rooms_created_total|default:0 }}/{{ private_room_lifetime_create_limit|default:15 }} total private rooms</p>
                         </form>
 
                         <form id="vixo-private-room-join-form" method="post" action="{% url 'private-room-join' %}" class="space-y-2" novalidate>
@@ -248,8 +302,26 @@
             </div>
 
             {% if sidebar_privatechats %}
-                <div class="text-sm font-semibold text-gray-400 mb-2">Direct</div>
-                <ul class="space-y-1">
+                <div class="mt-3 mb-1">
+                    <button
+                        type="button"
+                        class="w-full flex items-center justify-between gap-2 text-sm font-semibold text-gray-400 hover:text-gray-200 transition-colors"
+                        data-vixo-collapse-toggle
+                        data-vixo-collapse-key="direct-messages"
+                        aria-expanded="true"
+                    >
+                        <span class="inline-flex min-w-0 items-center gap-2">
+                            <span class="truncate">Direct</span>
+                            {% if sidebar_private_unread_count|default:0 %}
+                                <span class="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-bold text-white">{{ sidebar_private_unread_count }}</span>
+                            {% endif %}
+                        </span>
+                        <svg class="w-3.5 h-3.5 shrink-0 transition-transform duration-200" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-vixo-collapse-chevron>
+                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.24 4.38a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+                <ul class="space-y-1" data-vixo-collapse-body data-vixo-collapse-key="direct-messages">
                     {% for room in sidebar_privatechats %}
                         <li>
                                      <a data-chat-list-item href="{% url 'chatroom' room.group_name %}"
@@ -272,7 +344,7 @@
             </div>
         </aside>
 
-        <div id="chat_window" class="vixo-chat-surface w-full min-w-0 max-w-full h-[calc(100dvh-6rem)] sm:h-[calc(100dvh-6.5rem)] min-h-0 flex flex-col bg-gray-900/60 border-0 sm:border border-gray-800 rounded-none sm:rounded-2xl shadow-none sm:shadow-2xl relative p-0 sm:p-1 grow overflow-x-hidden">
+        <div id="chat_window" class="vixo-chat-surface w-full min-w-0 max-w-full lg:ml-2 h-[calc(100dvh-6rem)] sm:h-[calc(100dvh-6.5rem)] lg:h-[calc(100dvh-4rem)] min-h-0 flex flex-col bg-gray-900/60 border-0 sm:border border-gray-800 rounded-none sm:rounded-2xl shadow-none sm:shadow-2xl relative p-0 sm:p-1 grow overflow-x-hidden">
         
         <div id="chat_topbar" class="vixo-chat-surface flex items-center justify-between gap-2 text-emerald-400 bg-gray-900/60 p-2 sticky top-0 z-10 border-b border-gray-800 rounded-none sm:rounded-t-2xl">
             <div class="flex items-center min-w-0 flex-1">
@@ -328,12 +400,25 @@
                         <span class="text-gray-300">Room:</span>
                         <span id="vixo_private_room_title" class="font-semibold text-gray-100 truncate">{{ chat_group.code_room_name|default:chat_group.room_code|default:chat_group.group_name }}</span>
                     </span>
+                {% elif is_support_private_chat %}
+                    <span class="ml-2 inline-flex text-xs text-gray-100 min-w-0 truncate items-center gap-2">
+                        <span class="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-700/80 bg-gray-800/70 overflow-hidden" title="Vixogram">
+                            <img src="{% static 'favicon.png' %}" alt="Vixogram" class="h-full w-full object-cover" />
+                        </span>
+                        <span class="font-semibold text-gray-100 truncate">Team Support</span>
+                        <span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-200">
+                            <span>Vixogram</span>
+                            <svg viewBox="0 0 20 20" class="h-3 w-3 text-emerald-300" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M16.704 5.29a1 1 0 0 1 .006 1.414l-7.25 7.312a1 1 0 0 1-1.42.003L4.29 10.317a1 1 0 1 1 1.42-1.406l3.04 3.073 6.54-6.597a1 1 0 0 1 1.414-.006Z" clip-rule="evenodd" />
+                            </svg>
+                        </span>
+                    </span>
                 {% endif %}
 
             </div>
 
             <div class="flex items-center gap-2 justify-end shrink-0 flex-nowrap whitespace-nowrap">
-                {% if chat_group.is_private and not chat_blocked %}
+                {% if chat_group.is_private and not chat_blocked and not is_support_private_chat %}
                     <button
                         type="button"
                         id="vixo_private_settings_btn"
@@ -352,10 +437,10 @@
                     <span id="challenge_countdown" class="hidden text-[10px] sm:text-[11px] font-semibold text-emerald-200 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-full transition duration-200 ease-out opacity-0 scale-95 whitespace-nowrap"></span>
 
                     <div class="flex items-center gap-2 flex-nowrap whitespace-nowrap">
-                        <a data-call-btn data-call-type="voice" href="#" class="text-[11px] sm:text-xs bg-gray-800 hover:bg-gray-700 text-white px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+                        <a data-call-btn data-call-disabled="1" data-call-type="voice" href="#" aria-disabled="true" title="This feature will be on the next update" class="text-[11px] sm:text-xs bg-gray-800 text-white px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap opacity-60 cursor-not-allowed select-none">
                             <span class="sm:hidden">Voice</span><span class="hidden sm:inline">Voice call</span>
                         </a>
-                        <a data-call-btn data-call-type="video" href="#" class="text-[11px] sm:text-xs bg-gray-800 hover:bg-gray-700 text-white px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+                        <a data-call-btn data-call-disabled="1" data-call-type="video" href="#" aria-disabled="true" title="This feature will be on the next update" class="text-[11px] sm:text-xs bg-gray-800 text-white px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap opacity-60 cursor-not-allowed select-none">
                             <span class="sm:hidden">Video</span><span class="hidden sm:inline">Video call</span>
                         </a>
                     </div>
@@ -372,17 +457,18 @@
                         <span class="hidden sm:inline">End-to-End encrypted</span>
                         <span class="sm:hidden">Encrypted</span>
 
-                        <div class="mx-1 text-gray-500">•</div>
+                        <div class="mx-1 text-gray-500{% if is_support_private_chat %} hidden{% endif %}">•</div>
 
-                        <div class="relative">
+                        <div class="relative{% if is_support_private_chat %} hidden{% endif %}">
                         <button
                             type="button"
                             id="vixo_members_btn"
-                            class="inline-flex items-center gap-2 rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-1.5 text-[11px] font-semibold text-gray-100 hover:bg-gray-900/55"
+                            class="inline-flex items-center gap-2 rounded-xl border border-gray-800 bg-gray-900/40 px-3 py-1.5 text-[11px] font-semibold text-gray-100 opacity-80 cursor-default pointer-events-none"
                             aria-haspopup="dialog"
                             aria-expanded="false"
                             aria-controls="vixo_members_panel"
                             title="Members"
+                            disabled
                         >
                             <span class="text-gray-300">Members</span>
                             <span id="vixo_members_count" class="text-[11px] font-bold text-emerald-300">{{ chat_group_members|length }}</span>
@@ -394,6 +480,12 @@
                             role="dialog"
                             aria-label="Group settings"
                             data-settings-url="{{ private_settings_url }}"
+                            data-member-invite-url="{% url 'chatroom-member-invite' chatroom_name %}"
+                            data-mention-search-url="{% url 'mention-search' %}"
+                            data-member-remove-url-template="{% url 'chatroom-member-remove' chatroom_name 0 %}"
+                            data-member-make-admin-url-template="{% url 'chatroom-member-make-admin' chatroom_name 0 %}"
+                            data-member-remove-admin-url-template="{% url 'chatroom-member-remove-admin' chatroom_name 0 %}"
+                            data-member-mute-url-template="{% url 'chatroom-member-mute' chatroom_name 0 %}"
                         >
                             <div class="px-2.5 sm:px-3 py-2 border-b border-gray-800 flex items-center justify-between gap-2">
                                 <div class="inline-flex items-center gap-1 rounded-xl bg-gray-900/60 p-1">
@@ -415,6 +507,8 @@
                                                 {% if is_room_admin_ui %}{% if m != user and m != chat_group.admin %}cursor-pointer hover:bg-gray-900/55{% endif %}{% endif %}"
                                                 data-member-row
                                                 data-member-user-id="{{ m.id }}"
+                                                data-member-username="{{ m.username|escape }}"
+                                                data-member-profile-url="/profile/u/{{ m.username|urlencode }}/"
                                                 {% if is_room_admin_ui %}
                                                     {% if m != user and m != chat_group.admin %}
                                                         data-member-actionable="1"
@@ -470,14 +564,18 @@
                                             </span>
                                         </label>
 
-                                        <label class="vixo-settings-toggle-row">
-                                            <span class="vixo-settings-row-label">🖼️ Allow Photos/Videos</span>
-                                            <span class="relative inline-flex items-center cursor-pointer select-none">
-                                                <input id="vixo_settings_media_allowed" type="checkbox" class="sr-only peer" {% if chat_group.allow_media_uploads %}checked{% endif %} />
-                                                <span class="h-6 w-11 rounded-full bg-gray-700 transition-all duration-300 peer-checked:bg-gradient-to-r peer-checked:from-purple-500 peer-checked:via-indigo-500 peer-checked:to-teal-400"></span>
-                                                <span class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-300 peer-checked:translate-x-5"></span>
-                                            </span>
-                                        </label>
+                                        {% with room_name=chat_group.groupchat_name|default:chat_group.group_name|default:'' %}
+                                            {% if "showcase your work" not in room_name|lower %}
+                                                <label class="vixo-settings-toggle-row">
+                                                    <span class="vixo-settings-row-label">🖼️ Allow Photos/Videos</span>
+                                                    <span class="relative inline-flex items-center cursor-pointer select-none">
+                                                        <input id="vixo_settings_media_allowed" type="checkbox" class="sr-only peer" {% if chat_group.allow_media_uploads %}checked{% endif %} />
+                                                        <span class="h-6 w-11 rounded-full bg-gray-700 transition-all duration-300 peer-checked:bg-gradient-to-r peer-checked:from-purple-500 peer-checked:via-indigo-500 peer-checked:to-teal-400"></span>
+                                                        <span class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-300 peer-checked:translate-x-5"></span>
+                                                    </span>
+                                                </label>
+                                            {% endif %}
+                                        {% endwith %}
 
                                         <label class="vixo-settings-toggle-row">
                                             <span class="vixo-settings-row-label">👥 Allow members to invite others</span>
@@ -670,23 +768,23 @@
                 const panel = document.getElementById('vixo_members_panel');
                 const closeBtn = document.getElementById('vixo_members_close');
                 if (!btn || !panel) return;
-
-                const tabMembersBtn = document.getElementById('vixo_panel_tab_members');
                 const tabSettingsBtn = document.getElementById('vixo_panel_tab_settings');
                 const panelMembers = document.getElementById('vixo_panel_members');
                 const panelSettings = document.getElementById('vixo_panel_settings');
                 const settingsUrl = panel.getAttribute('data-settings-url') || '';
-
-                const settingsName = document.getElementById('vixo_settings_room_name');
                 const settingsAvatarInput = document.getElementById('vixo_settings_room_avatar');
                 const settingsAvatarPreview = document.getElementById('vixo_settings_room_avatar_preview');
                 const settingsDescription = document.getElementById('vixo_settings_room_description');
-                const settingsAdminOnly = document.getElementById('vixo_settings_admin_only');
                 const settingsMediaAllowed = document.getElementById('vixo_settings_media_allowed');
                 const settingsMembersInviteAllowed = document.getElementById('vixo_settings_members_invite_allowed');
                 const settingsSlowMode = document.getElementById('vixo_settings_slow_mode');
-                const settingsSlowOptions = Array.from(document.querySelectorAll('[data-slow-option]'));
                 const settingsResetInvite = document.getElementById('vixo_settings_reset_invite');
+            try {
+                const pollBtn = document.getElementById('poll_btn');
+                if (pollBtn) pollBtn.classList.toggle('hidden', adminOnlyLocked);
+                const themeBtn = document.getElementById('vixo_chat_theme_btn');
+                if (themeBtn) themeBtn.classList.toggle('hidden', adminOnlyLocked);
+            } catch {}
                 const settingsSave = document.getElementById('vixo_settings_save');
                 const settingsStatus = document.getElementById('vixo_settings_status');
 
@@ -847,12 +945,14 @@
                 btn.addEventListener('click', (e) => {
                     try { e.preventDefault(); } catch {}
                     try { e.stopPropagation(); } catch {}
+                    toggle('members');
                 });
                 if (tabMembersBtn) tabMembersBtn.addEventListener('click', () => setActiveTab('members'));
                 if (tabSettingsBtn) tabSettingsBtn.addEventListener('click', () => setActiveTab('settings'));
                 if (settingsBtn) {
                     settingsBtn.addEventListener('click', (e) => {
                         try { e.preventDefault(); } catch {}
+                        try { e.stopPropagation(); } catch {}
                         open('settings');
                     });
                 }
@@ -2054,7 +2154,15 @@
             </div>
         {% endif %}
 
-        <div id='chat_container' class="vixo-chat-bg overflow-y-auto overflow-x-hidden overscroll-x-none grow min-h-0 p-2 sm:p-4 vixo-chat-init-hidden">
+        <div id='chat_container'
+            class="vixo-chat-bg overflow-y-auto overflow-x-hidden overscroll-x-none grow min-h-0 p-2 sm:p-4 vixo-chat-init-hidden"
+            data-chat-theme="{{ current_chat_theme|default:'default' }}"
+            data-chat-theme-update-url="{{ chat_theme_update_url }}"
+            data-default-theme-url="{% static 'chatbg.jpg' %}"
+            data-theme1-url="{% static 'theme1.jpeg' %}"
+            data-theme2-url="{% static 'theme2.jpeg' %}"
+            data-theme3-url="{% static 'theme3.jpeg' %}"
+            style="--vixo-chat-theme-url: url('{% if current_chat_theme == 'theme2' %}{% static 'theme2.jpeg' %}{% elif current_chat_theme == 'theme3' %}{% static 'theme3.jpeg' %}{% elif current_chat_theme == 'theme1' %}{% static 'theme1.jpeg' %}{% else %}{% static 'chatbg.jpg' %}{% endif %}');">
             <div id="challenge_banner" class="hidden sticky top-0 z-10 mb-3 transition duration-200 ease-out opacity-0 -translate-y-1">
                 <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-50">
                     <div class="flex items-start justify-between gap-3">
@@ -2064,30 +2172,6 @@
                             <div class="mt-1 text-[11px] font-semibold" id="challenge_banner_self"></div>
                         </div>
                         <div class="shrink-0 text-[11px] font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-full" id="challenge_banner_time"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div
-                id="vixo_public_group_ad_banner"
-                class="hidden sticky top-0 z-10 mb-3 transition duration-200 ease-out opacity-0 -translate-y-1"
-                data-ad-initial-delay-ms="0"
-                {% if chat_group.is_private %}
-                    data-ad-visible-ms="15000"
-                    data-ad-hidden-ms="20000"
-                {% else %}
-                    data-ad-visible-ms="60000"
-                    data-ad-hidden-ms="22000"
-                {% endif %}
-                aria-label="Advertisement"
-            >
-                <div class="rounded-xl border border-gray-800 bg-gray-900/50 px-3 py-2">
-                    <div class="flex items-center justify-between gap-3">
-                        <div class="min-w-0">
-                            <div class="text-[10px] font-extrabold tracking-wide text-gray-400">ADVERTISEMENT</div>
-                            <div class="mt-0.5 text-xs text-gray-200 truncate">Sponsored content</div>
-                        </div>
-                        <div class="shrink-0 rounded-full border border-gray-800 bg-gray-900/60 px-2 py-1 text-[10px] font-bold text-gray-300">Ad</div>
                     </div>
                 </div>
             </div>
@@ -2118,6 +2202,8 @@
                         <div class="text-2xl font-extrabold text-gray-100">
                             {% if chat_group.groupchat_name %}
                                 {{ chat_group.groupchat_name }}
+                            {% elif is_support_private_chat %}
+                                Vixogram Support
                             {% elif chat_group.is_private %}
                                 Private Space
                             {% elif chat_group.is_code_room and chat_group.code_room_name %}
@@ -2130,8 +2216,13 @@
                                 {{ chat_group.group_name }}
                             {% endif %}
                         </div>
-                        <div class="mt-3 text-sm text-gray-300">Talk about anything. Chill vibes only.</div>
-                        <div class="mt-2 text-sm text-gray-400">Say hi to start the conversation</div>
+                        {% if is_support_private_chat %}
+                            <div class="mt-3 text-sm text-gray-300">Need help or want to report something?</div>
+                            <div class="mt-2 text-sm text-gray-400">Our team is here to assist you. Send a message and we&rsquo;ll respond soon.</div>
+                        {% else %}
+                            <div class="mt-3 text-sm text-gray-300">Talk about anything. Chill vibes only.</div>
+                            <div class="mt-2 text-sm text-gray-400">Say hi to start the conversation</div>
+                        {% endif %}
                     </div>
                 </div>
             {% endif %}
@@ -2176,7 +2267,7 @@
                 </div>
             </div>
 
-            <div id="typing_indicator" class="hidden mb-2 text-[11px] text-gray-400">
+            <div id="typing_indicator" class="vixo-typing-indicator text-[11px] text-gray-400" aria-hidden="true">
                 <span id="typing_indicator_text"></span>
             </div>
 
@@ -2207,7 +2298,63 @@
                     <input type="hidden" id="chat_file_caption" name="caption" value="" />
                     <input type="hidden" id="chat_one_time_seconds" name="one_time_seconds" value="" />
 
-                    <div id="chat_composer_row" class="flex items-center gap-2 flex-nowrap{% if chat_group.is_private and chat_group.only_admins_can_send and not is_room_admin %} hidden{% endif %}">
+                    {% if is_support_private_chat %}
+                    <div id="support_issue_picker" class="mb-1 flex items-center gap-2">
+                        <div class="relative flex-1 min-w-0">
+                            <input type="hidden" id="support_issue_value" value="" />
+                            <button
+                                type="button"
+                                id="support_issue_trigger"
+                                class="group flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-700/80 bg-gradient-to-r from-gray-950/95 via-slate-900/95 to-gray-900/95 px-4 py-3 text-left text-sm text-gray-100 shadow-[0_12px_30px_rgba(0,0,0,0.24)] transition duration-200 ease-out hover:border-emerald-500/35 hover:shadow-[0_16px_36px_rgba(16,185,129,0.12)] focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                                aria-haspopup="listbox"
+                                aria-expanded="false"
+                                aria-controls="support_issue_menu"
+                            >
+                                <span class="min-w-0">
+                                    <span class="block text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-300/80">Support Topic</span>
+                                    <span id="support_issue_label" class="mt-1 block truncate text-sm font-semibold text-gray-100">Select support topic</span>
+                                </span>
+                                <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-700/70 bg-white/5 text-gray-300 transition duration-200 group-hover:border-emerald-500/35 group-hover:text-emerald-200">
+                                    <svg id="support_issue_chevron" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 transition duration-200 ease-out" aria-hidden="true">
+                                        <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.24 4.38a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd" />
+                                    </svg>
+                                </span>
+                            </button>
+
+                            <div
+                                id="support_issue_menu"
+                                class="pointer-events-none absolute bottom-[calc(100%+0.55rem)] left-0 right-0 z-30 rounded-2xl border border-gray-700/70 bg-gray-950/96 p-2 opacity-0 shadow-[0_18px_40px_rgba(0,0,0,0.36)] backdrop-blur-xl transition duration-200 ease-out translate-y-2 scale-[0.98]"
+                                role="listbox"
+                                aria-label="Support topic"
+                            >
+                                <button type="button" class="support-topic-option group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition duration-150 ease-out hover:bg-white/5 focus:outline-none focus:bg-white/5" data-support-option="🐞 Report a Bug">
+                                    <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-rose-500/20 bg-rose-500/10 text-lg shadow-inner shadow-rose-500/10">🐞</span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block text-sm font-semibold text-gray-100">Report a Bug</span>
+                                        <span class="block text-[11px] text-gray-400">Broken flows, UI issues, or unexpected errors</span>
+                                    </span>
+                                </button>
+                                <button type="button" class="support-topic-option group mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition duration-150 ease-out hover:bg-white/5 focus:outline-none focus:bg-white/5" data-support-option="💡 Suggest Feature">
+                                    <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-lg shadow-inner shadow-amber-500/10">💡</span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block text-sm font-semibold text-gray-100">Suggest Feature</span>
+                                        <span class="block text-[11px] text-gray-400">Share ideas that can improve Vixogram</span>
+                                    </span>
+                                </button>
+                                <button type="button" class="support-topic-option group mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition duration-150 ease-out hover:bg-white/5 focus:outline-none focus:bg-white/5" data-support-option="🛡️ Account Security">
+                                    <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-lg shadow-inner shadow-emerald-500/10">🛡️</span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block text-sm font-semibold text-gray-100">Account Security</span>
+                                        <span class="block text-[11px] text-gray-400">Login issues, safety concerns, or account access</span>
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                        <button type="button" id="support_issue_send_btn" class="inline-flex items-center rounded-2xl bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(16,185,129,0.22)] transition duration-200 ease-out hover:scale-[1.02] hover:from-emerald-400 hover:via-green-400 hover:to-teal-400 active:scale-[0.98]">Send</button>
+                    </div>
+                    {% endif %}
+
+                    <div id="chat_composer_row" class="flex items-center gap-2 flex-nowrap{% if chat_group.is_private and chat_group.only_admins_can_send and not is_room_admin %} hidden{% endif %}{% if is_support_private_chat %} hidden{% endif %}">
                         <div id="chat_body_wrap" class="flex-1 min-w-0">
                             <div class="relative flex items-center gap-2">
                                 {{ form.body }}
@@ -2236,7 +2383,7 @@
                                     <button
                                         type="button"
                                         id="poll_btn"
-                                        class="absolute {% if gifs_allowed %}right-20{% else %}right-12{% endif %} top-1/2 -translate-y-1/2 h-8 w-8 inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-gray-300 hover:text-gray-100 hover:bg-white/5 transition focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                                        class="absolute {% if gifs_allowed %}right-28{% else %}right-20{% endif %} top-1/2 -translate-y-1/2 h-8 w-8 inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-gray-300 hover:text-gray-100 hover:bg-white/5 transition focus:outline-none focus:ring-2 focus:ring-emerald-500/30{% if is_support_private_chat %} hidden{% endif %}"
                                         aria-label="Create Poll"
                                         title="Create Poll"
                                     >
@@ -2244,12 +2391,33 @@
                                     </button>
                                 {% endif %}
 
+                                <button
+                                    type="button"
+                                    id="vixo_chat_theme_btn"
+                                    class="vixo-chat-theme-fab absolute {% if gifs_allowed %}right-20{% else %}right-12{% endif %} top-1/2 -translate-y-1/2 h-8 w-8 inline-flex items-center justify-center rounded-full border border-gray-700/60 bg-gray-900/70 text-gray-200 hover:bg-gray-800/90 hover:text-gray-100 transition{% if is_support_private_chat %} hidden{% endif %}"
+                                    aria-label="Chat theme settings"
+                                    title="Theme settings"
+                                >
+                                    <span aria-hidden="true" class="text-[13px]">⚙️</span>
+                                </button>
+
+                                <div
+                                    id="vixo_chat_theme_menu"
+                                    class="hidden pointer-events-none opacity-0 scale-95 -translate-y-1 fixed sm:absolute bottom-24 sm:bottom-full right-3 sm:right-8 sm:mb-2 w-44 rounded-xl border border-gray-800 bg-gray-900/95 p-2 shadow-2xl backdrop-blur-sm origin-bottom-right transition duration-200 ease-out z-50"
+                                >
+                                    <div class="px-1 pb-1 text-[11px] font-semibold text-gray-300">Change theme</div>
+                                    <button type="button" class="vixo-chat-theme-option w-full rounded-lg border border-gray-800 px-2 py-1.5 text-left text-xs text-gray-100 hover:bg-gray-800/60" data-chat-theme-option="default">Default</button>
+                                    <button type="button" class="vixo-chat-theme-option mt-1 w-full rounded-lg border border-gray-800 px-2 py-1.5 text-left text-xs text-gray-100 hover:bg-gray-800/60" data-chat-theme-option="theme1">🟣 Cyber Grid</button>
+                                    <button type="button" class="vixo-chat-theme-option mt-1 w-full rounded-lg border border-gray-800 px-2 py-1.5 text-left text-xs text-gray-100 hover:bg-gray-800/60" data-chat-theme-option="theme2">🌌 Aurora Night</button>
+                                    <button type="button" class="vixo-chat-theme-option mt-1 w-full rounded-lg border border-gray-800 px-2 py-1.5 text-left text-xs text-gray-100 hover:bg-gray-800/60" data-chat-theme-option="theme3">🌊 Neon Wave</button>
+                                </div>
+
                                 {% if gifs_allowed %}
 
                                     <button
                                         type="button"
                                         id="gif_btn"
-                                        class="absolute right-12 top-1/2 -translate-y-1/2 h-8 w-8 inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-gray-300 hover:text-gray-100 hover:bg-white/5 transition focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                                        class="absolute right-12 top-1/2 -translate-y-1/2 h-8 w-8 inline-flex items-center justify-center rounded-full border border-transparent bg-transparent text-gray-300 hover:text-gray-100 hover:bg-white/5 transition focus:outline-none focus:ring-2 focus:ring-emerald-500/30{% if is_support_private_chat %} hidden{% endif %}"
                                         aria-label="GIF"
                                         title="GIF"
                                     >
@@ -2406,7 +2574,7 @@
 
                     {% if uploads_allowed %}
                         <div id="chat_upload_aux" class="mt-1 sm:mt-0{% if chat_group.is_private and chat_group.only_admins_can_send and not is_room_admin %} hidden{% endif %}">
-                            <input id="chat_file_input" name="file" type="file" accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime" class="sr-only" {% if uploads_remaining == 0 or chat_group.is_private and chat_group.only_admins_can_send and not is_room_admin %}disabled{% endif %} />
+                            <input id="chat_file_input" name="file" type="file" accept="image/*" class="sr-only" {% if uploads_remaining == 0 or chat_group.is_private and chat_group.only_admins_can_send and not is_room_admin %}disabled{% endif %} />
 
                             {% if upload_limit %}
                                 <div id="upload_counter" class="w-full pr-1 mt-0.5 text-[10px] leading-none text-right text-gray-500 select-none pointer-events-none" data-used="{{ uploads_used }}" data-limit="{{ upload_limit }}">
@@ -2419,6 +2587,223 @@
                         </div>
                     {% endif %}
                 </form>
+
+                {% if is_support_private_chat %}
+                <script>
+                    (function () {
+                        const form = document.getElementById('chat_message_form');
+                        if (!form) return;
+                        const bodyInput = form.querySelector('textarea[name="body"], input[name="body"]');
+                        if (!bodyInput) return;
+                        const composerRow = document.getElementById('chat_composer_row');
+                        const pickerWrap = document.getElementById('support_issue_picker');
+                        const issueValue = document.getElementById('support_issue_value');
+                        const issueTrigger = document.getElementById('support_issue_trigger');
+                        const issueLabel = document.getElementById('support_issue_label');
+                        const issueMenu = document.getElementById('support_issue_menu');
+                        const issueChevron = document.getElementById('support_issue_chevron');
+                        const issueSendBtn = document.getElementById('support_issue_send_btn');
+                        const issueOptions = Array.from(document.querySelectorAll('.support-topic-option'));
+
+                        bodyInput.setAttribute('placeholder', 'Describe your problem here...');
+
+                        function closeMenu() {
+                            if (!issueMenu || !issueTrigger) return;
+                            issueTrigger.setAttribute('aria-expanded', 'false');
+                            issueMenu.classList.add('pointer-events-none', 'opacity-0', 'translate-y-2', 'scale-[0.98]');
+                            issueMenu.classList.remove('translate-y-0', 'scale-100');
+                            if (issueChevron) issueChevron.classList.remove('rotate-180');
+                        }
+
+                        function openMenu() {
+                            if (!issueMenu || !issueTrigger) return;
+                            issueTrigger.setAttribute('aria-expanded', 'true');
+                            issueMenu.classList.remove('pointer-events-none', 'opacity-0', 'translate-y-2', 'scale-[0.98]');
+                            issueMenu.classList.add('translate-y-0', 'scale-100');
+                            if (issueChevron) issueChevron.classList.add('rotate-180');
+                        }
+
+                        function setSelectedIssue(value) {
+                            if (!issueValue || !issueLabel) return;
+                            issueValue.value = value;
+                            if (value) {
+                                issueLabel.textContent = value;
+                            } else {
+                                issueLabel.textContent = 'Select support topic';
+                            }
+                        }
+
+                        async function submitSupportTopicInstant(selected) {
+                            const chatMessages = document.getElementById('chat_messages');
+                            const emptyState = document.getElementById('empty_state');
+                            const chatContainer = document.getElementById('chat_container');
+                            const csrfToken = form.querySelector('input[name="csrfmiddlewaretoken"]');
+
+                            const formData = new FormData();
+                            formData.append('csrfmiddlewaretoken', csrfToken ? (csrfToken.value || '') : '');
+                            formData.append('body', selected);
+                            formData.append('reply_to_id', '');
+                            formData.append('typed_ms', '0');
+
+                            if (issueSendBtn) {
+                                issueSendBtn.disabled = true;
+                                issueSendBtn.classList.add('opacity-70', 'cursor-wait');
+                            }
+
+                            try {
+                                const response = await fetch(form.getAttribute('hx-post') || window.location.pathname, {
+                                    method: 'POST',
+                                    credentials: 'same-origin',
+                                    headers: { 'HX-Request': 'true' },
+                                    body: formData,
+                                });
+
+                                const html = await response.text();
+                                if (!response.ok || !html.trim()) { return; }
+
+                                if (emptyState) emptyState.remove();
+                                if (chatMessages && chatMessages.classList.contains('hidden')) {
+                                    chatMessages.classList.remove('hidden');
+                                }
+                                if (chatMessages) {
+                                    chatMessages.insertAdjacentHTML('beforeend', html);
+                                }
+
+                                // Inline describe widget for "Report a Bug" and "Suggest Feature"
+                                const selLower = selected.toLowerCase();
+                                const isBugReport = selLower.includes('report a bug') || selLower.includes('\uD83D\uDC1E');
+                                const isFeature  = selLower.includes('suggest feature') || selLower.includes('\uD83D\uDCA1');
+                                const needsWidget = (isBugReport || isFeature) && chatMessages && !document.getElementById('bug_describe_widget');
+                                if (needsWidget) {
+                                    const widgetTitle = isBugReport ? 'Describe your bug' : 'Describe your feature idea';
+                                    const widgetBtn   = isBugReport ? 'Send Report' : 'Send Suggestion';
+                                    const widget = document.createElement('div');
+                                    widget.id = 'bug_describe_widget';
+                                    widget.className = 'mx-3 mb-3 mt-1 rounded-2xl border border-emerald-500/25 bg-gray-900/70 p-3 flex flex-col gap-2 shadow-md';
+                                    widget.innerHTML = `
+                                        <p class="text-[11px] font-semibold uppercase tracking-widest text-emerald-300/80 mb-0.5">${widgetTitle}</p>
+                                        <textarea
+                                            id="bug_describe_input"
+                                            rows="3"
+                                            placeholder="Type here..."
+                                            class="w-full rounded-xl border border-gray-700/80 bg-gray-950/70 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                        ></textarea>
+                                        <div class="flex justify-end">
+                                            <button
+                                                id="bug_describe_send_btn"
+                                                type="button"
+                                                class="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2 text-xs font-bold text-white shadow hover:from-emerald-400 hover:to-teal-400 active:scale-95 transition duration-150"
+                                            >${widgetBtn}</button>
+                                        </div>
+                                    `;
+                                    chatMessages.appendChild(widget);
+                                    setTimeout(() => {
+                                        try { document.getElementById('bug_describe_input').focus(); } catch {}
+                                    }, 80);
+
+                                    document.getElementById('bug_describe_send_btn').addEventListener('click', async () => {
+                                        const bugInput = document.getElementById('bug_describe_input');
+                                        const bugText = bugInput ? bugInput.value.trim() : '';
+                                        if (!bugText) { if (bugInput) bugInput.focus(); return; }
+
+                                        const bugBtn = document.getElementById('bug_describe_send_btn');
+                                        if (bugBtn) { bugBtn.disabled = true; bugBtn.textContent = 'Sending…'; }
+
+                                        const bugForm = new FormData();
+                                        bugForm.append('csrfmiddlewaretoken', csrfToken ? (csrfToken.value || '') : '');
+                                        bugForm.append('body', bugText);
+                                        bugForm.append('reply_to_id', '');
+                                        bugForm.append('typed_ms', '0');
+                                        bugForm.append('bug_follow_up', '1');
+                                        bugForm.append('bug_follow_up_type', isFeature ? 'feature' : 'bug');
+
+                                        try {
+                                            const bugResp = await fetch(form.getAttribute('hx-post') || window.location.pathname, {
+                                                method: 'POST',
+                                                credentials: 'same-origin',
+                                                headers: { 'HX-Request': 'true' },
+                                                body: bugForm,
+                                            });
+                                            const bugHtml = await bugResp.text();
+                                            if (bugResp.ok && bugHtml.trim()) {
+                                                const w = document.getElementById('bug_describe_widget');
+                                                if (w) w.remove();
+                                                chatMessages.insertAdjacentHTML('beforeend', bugHtml);
+                                                requestAnimationFrame(() => {
+                                                    try { chatContainer.scrollTop = chatContainer.scrollHeight; } catch {}
+                                                });
+                                            }
+                                        } catch {}
+                                        finally {
+                                            const origLabel = isBugReport ? 'Send Report' : 'Send Suggestion';
+                                            if (bugBtn) { bugBtn.disabled = false; bugBtn.textContent = origLabel; }
+                                        }
+                                    });
+                                }
+
+                                if (chatContainer) {
+                                    requestAnimationFrame(() => {
+                                        try { chatContainer.scrollTop = chatContainer.scrollHeight; } catch {}
+                                    });
+                                }
+                            } catch {}
+                            finally {
+                                if (issueSendBtn) {
+                                    issueSendBtn.disabled = false;
+                                    issueSendBtn.classList.remove('opacity-70', 'cursor-wait');
+                                }
+                            }
+                        }
+
+                        if (issueTrigger && issueMenu) {
+                            issueTrigger.addEventListener('click', () => {
+                                const expanded = issueTrigger.getAttribute('aria-expanded') === 'true';
+                                if (expanded) {
+                                    closeMenu();
+                                } else {
+                                    openMenu();
+                                }
+                            });
+
+                            document.addEventListener('click', (event) => {
+                                const target = event.target;
+                                if (!target) return;
+                                if (issueMenu.contains(target) || issueTrigger.contains(target)) return;
+                                closeMenu();
+                            });
+                        }
+
+                        issueOptions.forEach((option) => {
+                            option.addEventListener('click', () => {
+                                const value = String(option.getAttribute('data-support-option') || '').trim();
+                                setSelectedIssue(value);
+                                closeMenu();
+                            });
+                        });
+
+                        if (issueSendBtn && issueValue) {
+                            issueSendBtn.addEventListener('click', () => {
+                                const selected = String(issueValue.value || '').trim();
+                                if (!selected) {
+                                    if (issueTrigger) issueTrigger.focus();
+                                    openMenu();
+                                    return;
+                                }
+
+                                bodyInput.value = selected;
+                                try {
+                                    bodyInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                } catch {}
+                                submitSupportTopicInstant(selected);
+                                bodyInput.value = '';
+                                setSelectedIssue('');
+                            });
+                        }
+
+                        closeMenu();
+                    })();
+                </script>
+                {% endif %}
             {% endif %}
         </div>
         </div>
@@ -3046,7 +3431,20 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
                 }
             }
 
+            function checkVideoFile() {
+                const hasFile = !!(fileInput.files && fileInput.files.length);
+                if (!hasFile) return;
+                const file = fileInput.files[0];
+                const isVideo = file && (file.type.startsWith('video/') || /\.(mp4|webm|ogg|quicktime|mov)$/i.test(file.name));
+                if (isVideo) {
+                    alert('📸 Only photos are allowed in chat. Videos are not supported.');
+                    fileInput.value = '';
+                    syncUploadMode();
+                }
+            }
+
             window.__syncUploadMode = syncUploadMode;
+            fileInput.addEventListener('change', checkVideoFile);
             fileInput.addEventListener('change', syncUploadMode);
             syncUploadMode();
 
@@ -3274,16 +3672,22 @@ LEGACY INLINE SCRIPT REMOVED (moved to static/js/chat.js)
             if (!typingIndicatorEl || !typingIndicatorTextEl) return;
             const names = Array.from(typingUsers.values()).filter(Boolean);
             if (!names.length) {
-                typingIndicatorEl.classList.add('hidden');
-                typingIndicatorTextEl.textContent = '';
+                typingIndicatorEl.classList.remove('vixo-typing-indicator-active');
+                typingIndicatorEl.setAttribute('aria-hidden', 'true');
+                setTimeout(() => {
+                    if (!typingIndicatorEl.classList.contains('vixo-typing-indicator-active')) {
+                        typingIndicatorTextEl.textContent = '';
+                    }
+                }, 180);
                 return;
             }
             const visibleNames = names.slice(0, 3);
             const extraTypingCount = Math.max(0, names.length - visibleNames.length);
-            typingIndicatorEl.classList.remove('hidden');
             typingIndicatorTextEl.textContent = extraTypingCount > 0
                 ? `${visibleNames.join(', ')} +${extraTypingCount} typing...`
                 : `${visibleNames.join(', ')} typing...`;
+            typingIndicatorEl.classList.add('vixo-typing-indicator-active');
+            typingIndicatorEl.setAttribute('aria-hidden', 'false');
         }
 
         function handleTypingEvent(payload) {

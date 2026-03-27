@@ -1,0 +1,30 @@
+<div class="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Report submitted">
+    <div class="absolute inset-0 bg-black/60 vixo-modal-overlay" data-modal-backdrop></div>
+
+    <div class="relative min-h-full flex items-center justify-center px-4 py-8 pointer-events-none">
+        <div class="w-full max-w-md pointer-events-auto vixo-modal-card">
+            <div class="rounded-2xl shadow-2xl border border-white/10 overflow-hidden bg-gray-900/95">
+                <div class="px-5 py-6 sm:px-6 sm:py-7 text-center">
+                    <div class="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 border border-emerald-400/30 text-2xl text-emerald-300">
+                        ✓
+                    </div>
+
+                    <h2 class="mt-4 text-xl sm:text-2xl font-extrabold text-white">{{ success_title }}</h2>
+                    <p class="mt-3 text-sm sm:text-base leading-6 text-gray-300">
+                        {{ success_message }}
+                    </p>
+
+                    <div class="mt-6 flex justify-center">
+                        <button
+                            type="button"
+                            data-modal-close
+                            class="inline-flex items-center justify-center rounded-xl bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-bold px-6 py-2.5 transition-colors"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

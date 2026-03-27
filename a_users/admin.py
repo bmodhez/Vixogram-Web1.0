@@ -1,4 +1,7 @@
+import csv
+
 from django.contrib import admin
+from django.http import HttpResponse
 from django.utils import timezone
 
 try:
@@ -121,10 +124,18 @@ class ProfileAdmin(admin.ModelAdmin):
 
 @admin.register(UserDevice)
 class UserDeviceAdmin(admin.ModelAdmin):
-	list_display = ('user', 'device_label', 'last_ip', 'ip_city', 'first_seen', 'last_seen')
+	list_display = ('user', 'user_email', 'device_label', 'last_ip', 'ip_city', 'first_seen', 'last_seen')
 	list_filter = ('first_seen', 'last_seen')
-	search_fields = ('user__username', 'device_label', 'last_ip', 'user_agent')
+	search_fields = ('user__username', 'user__email', 'device_label', 'last_ip', 'user_agent')
 	readonly_fields = ('user', 'ua_hash', 'user_agent', 'device_label', 'first_seen', 'last_seen', 'last_ip')
+	actions = ('export_selected_as_csv',)
+
+	@admin.display(description='Email')
+	def user_email(self, obj):
+		try:
+			return str(getattr(getattr(obj, 'user', None), 'email', '') or '-')
+		except Exception:
+			return '-'
 
 	@admin.display(description='City / Location')
 	def ip_city(self, obj):
@@ -157,6 +168,35 @@ class UserDeviceAdmin(admin.ModelAdmin):
 
 	def has_add_permission(self, request):
 		return False
+
+	@admin.action(description='Export selected user devices (CSV)')
+	def export_selected_as_csv(self, request, queryset):
+		response = HttpResponse(content_type='text/csv; charset=utf-8')
+		response['Content-Disposition'] = 'attachment; filename="user_devices_export.csv"'
+
+		writer = csv.writer(response)
+		writer.writerow([
+			'username',
+			'device_label',
+			'last_ip',
+			'city_location',
+			'first_seen',
+			'last_seen',
+			'user_agent',
+		])
+
+		for obj in queryset.select_related('user').order_by('-last_seen'):
+			writer.writerow([
+				str(getattr(getattr(obj, 'user', None), 'username', '') or ''),
+				str(getattr(obj, 'device_label', '') or ''),
+				str(getattr(obj, 'last_ip', '') or ''),
+				str(self.ip_city(obj) or ''),
+				str(getattr(obj, 'first_seen', '') or ''),
+				str(getattr(obj, 'last_seen', '') or ''),
+				str(getattr(obj, 'user_agent', '') or ''),
+			])
+
+		return response
 
 
 @admin.register(ChatBanHistory)

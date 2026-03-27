@@ -36,12 +36,12 @@
         <p class="text-sm text-gray-300 mt-1">{% trans "Welcome back — start chatting." %}</p>
       </div>
       <div class="h-[52px] w-[52px] rounded-full bg-gray-800/90 border border-gray-700 flex items-center justify-center shrink-0 ring-1 ring-white/10 shadow-lg shadow-black/25
-                  motion-safe:animate-[pulse_2.2s_ease-in-out_infinite] transition-transform duration-200 hover:scale-105 active:scale-95">
+          transition-transform duration-200 hover:scale-105 active:scale-95">
         <img src="{% static 'favicon.png' %}" alt="Vixogram" class="h-[42px] w-[42px] object-contain" loading="lazy" decoding="async" />
       </div>
     </div>
 
-    <form method="post" action="{% url 'account_login' %}" class="mt-6 space-y-4" novalidate data-loading-text="Signing in…">
+    <form method="post" action="{% url 'account_login' %}" class="mt-6 space-y-4{% if form.non_field_errors %} vixo-auth-login-form--invalid{% endif %}" novalidate data-loading-text="Signing in…">
       {% csrf_token %}
 
       {% if form.non_field_errors %}
@@ -52,7 +52,7 @@
 
       <div class="space-y-1">
         <label class="sr-only" for="{{ form.login.id_for_label }}">{% trans "Username or email" %}</label>
-        <div class="relative vixo-field-with-icon">
+        <div class="relative vixo-field-with-icon{% if form.login.errors or form.non_field_errors %} vixo-field-invalid{% endif %}">
           <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-300">
             <i data-lucide="circle-user-round" class="w-5 h-5"></i>
           </span>
@@ -65,7 +65,7 @@
 
       <div class="space-y-1">
         <label class="sr-only" for="{{ form.password.id_for_label }}">{% trans "Password" %}</label>
-        <div class="relative vixo-field-with-icon">
+        <div class="relative vixo-field-with-icon{% if form.password.errors or form.non_field_errors %} vixo-field-invalid{% endif %}">
           <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-300">
             <i data-lucide="lock-keyhole" class="w-5 h-5"></i>
           </span>
@@ -91,13 +91,21 @@
         <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
       {% endif %}
 
-      <button type="submit" class="w-full bg-gradient-to-r from-[#8E2DE2] to-[#4A00E0] text-white font-semibold rounded-xl py-3 transition motion-safe:transition-transform motion-safe:duration-200 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(142,45,226,0.35)] active:scale-[0.99]">
+      <button type="submit" class="vixo-auth-cta w-full bg-gradient-to-r from-[#8E2DE2] to-[#4A00E0] text-white font-semibold rounded-xl py-3 transition motion-safe:transition-transform motion-safe:duration-200 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(142,45,226,0.35)] active:scale-[0.99]">
         {% trans "Sign in" %}
       </button>
 
       <p class="text-sm text-gray-300 text-center">
         {% blocktrans %}New here? <a class="text-indigo-200 hover:text-indigo-100 font-semibold" href="{{ signup_url }}">Create an account</a>{% endblocktrans %}
       </p>
+
+      <div class="sm:hidden pt-2">
+        <a href="{% url 'random-video' %}" class="vixo-rv-floating-btn inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white transition-all duration-200 ease-out active:scale-[0.98]">
+          <span class="text-[11px] font-extrabold uppercase tracking-wide text-cyan-100/95">Try</span>
+          <span aria-hidden="true">🎥</span>
+          <span>Random Video Chat</span>
+        </a>
+      </div>
     </form>
       </div>
     </div>

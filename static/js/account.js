@@ -14,6 +14,75 @@
         }
     }
 
+    function applyAuthFieldErrorHighlights() {
+        if (!isAuthPage()) return;
+        let fields = [];
+        try {
+            fields = Array.from(document.querySelectorAll('.vixo-field-with-icon'));
+        } catch {
+            fields = [];
+        }
+        fields.forEach((field) => {
+            let container = null;
+            try {
+                container = field.closest('.space-y-1') || field.parentElement || field;
+            } catch {
+                container = field;
+            }
+            let hasError = false;
+            try {
+                hasError = !!(container && container.querySelector('.text-red-400, .errorlist, .error'));
+            } catch {
+                hasError = false;
+            }
+            if (hasError) {
+                try { field.classList.add('vixo-field-invalid'); } catch {}
+            }
+        });
+    }
+
+    function installInvalidLoginFieldFeedback() {
+        if (!isAuthPage()) return;
+
+        let loginForm = null;
+        try {
+            loginForm = document.querySelector('form[action*="/accounts/login"]');
+        } catch {
+            loginForm = null;
+        }
+        if (!loginForm) return;
+
+        let hasInlineAuthError = false;
+        try {
+            hasInlineAuthError = !!loginForm.querySelector('.text-red-400, .errorlist, .error');
+        } catch {
+            hasInlineAuthError = false;
+        }
+
+        let hasInvalidLoginToast = false;
+        try {
+            const toasts = Array.from(document.querySelectorAll('#toast-container .toast'));
+            hasInvalidLoginToast = toasts.some((toast) => {
+                const text = (toast.textContent || '').toLowerCase();
+                const looksAuthMsg = text.includes('invalid login')
+                    || text.includes('invalid login details')
+                    || text.includes('please try again');
+                const isErrorToast = !!toast.querySelector('.bg-red-500');
+                return isErrorToast && looksAuthMsg;
+            });
+        } catch {
+            hasInvalidLoginToast = false;
+        }
+
+        if (hasInlineAuthError || hasInvalidLoginToast) {
+            loginForm.classList.add('vixo-auth-login-form--invalid');
+            try {
+                const fields = loginForm.querySelectorAll('.vixo-field-with-icon');
+                fields.forEach((field) => field.classList.add('vixo-field-invalid'));
+            } catch {}
+        }
+    }
+
     let progressRunning = false;
     function showAuthProgress() {
         if (progressRunning) return;
@@ -138,6 +207,7 @@
             // Only for account forms (avoid interfering with other pages using vixo-auth-page).
             const action = (form.getAttribute('action') || '').toLowerCase();
             if (action && !action.includes('/accounts/')) return;
+            if (action.includes('/accounts/email/')) return;
 
             // If we've already delayed once, allow the submit to proceed.
             if (form.dataset && form.dataset.vixoSubmitDelayed === '1') return;
@@ -210,9 +280,73 @@
             if (!form) return;
             const action = (form.getAttribute('action') || '').toLowerCase();
             if (action && !action.includes('/accounts/')) return;
+            if (action.includes('/accounts/email/')) return;
             try { form.__vixoLastSubmitter = btn; } catch {}
             showAuthProgress();
         }, true);
+    }
+
+    function installAuthEmojiParticles() {
+        if (!isAuthPage()) return;
+
+        let bg = null;
+        try {
+            bg = document.querySelector('.vixo-auth-bg');
+        } catch {
+            bg = null;
+        }
+        if (!bg) return;
+
+        let root = null;
+        try {
+            root = bg.querySelector('.vixo-auth-bg-particles');
+        } catch {
+            root = null;
+        }
+        if (!root) {
+            try {
+                root = document.createElement('div');
+                root.className = 'vixo-auth-bg-particles';
+                root.setAttribute('aria-hidden', 'true');
+                bg.insertBefore(root, bg.firstChild || null);
+            } catch {
+                return;
+            }
+        }
+
+        let existing = 0;
+        try {
+            existing = root.querySelectorAll('.vixo-auth-bg-particle').length;
+        } catch {
+            existing = 0;
+        }
+        if (existing > 0) return;
+
+        const symbols = ['✨', '🤍', '❄️', '✦', '⭐'];
+        const count = window.matchMedia && window.matchMedia('(max-width: 767px)').matches ? 14 : 24;
+
+        for (let i = 0; i < count; i += 1) {
+            const item = document.createElement('span');
+            item.className = 'vixo-auth-bg-particle';
+            item.textContent = symbols[Math.floor(Math.random() * symbols.length)];
+
+            const x = Math.random() * 100;
+            const y = Math.random() * 100;
+            const drift = (Math.random() * 36 - 18).toFixed(2);
+            const scale = (0.72 + Math.random() * 0.92).toFixed(2);
+            const delay = (Math.random() * 8).toFixed(2);
+            const duration = (7 + Math.random() * 7).toFixed(2);
+
+            item.style.left = `${x.toFixed(2)}%`;
+            item.style.top = `${y.toFixed(2)}%`;
+            item.style.setProperty('--vixo-particle-drift', `${drift}px`);
+            item.style.setProperty('--vixo-particle-scale', scale);
+            item.style.animationDelay = `-${delay}s`;
+            item.style.animationDuration = `${duration}s`;
+            item.style.opacity = (0.16 + Math.random() * 0.46).toFixed(2);
+
+            root.appendChild(item);
+        }
     }
 
     function installFloatingAuthBubbles() {
@@ -512,6 +646,9 @@
     // Password show/hide toggle is initialized globally in vixogram.js.
     // Keep account.js lean to avoid duplicate event handlers.
 
+    installAuthEmojiParticles();
     installFloatingAuthBubbles();
     installPageSwapTransitions();
+    installInvalidLoginFieldFeedback();
+    applyAuthFieldErrorHighlights();
 })();

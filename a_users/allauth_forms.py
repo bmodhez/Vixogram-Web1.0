@@ -4,9 +4,11 @@ from allauth.account.forms import LoginForm, SignupForm, ResetPasswordForm, Rese
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django import forms
 
 from .username_policy import validate_public_username
 from .recaptcha import verify_recaptcha
+from .location_preferences import clean_location_name, ensure_local_community_membership
 
 
 _BASE_INPUT_CLASS = (
@@ -62,8 +64,31 @@ class CustomLoginForm(LoginForm):
 
 
 class CustomSignupForm(SignupForm):
+    location_query = forms.CharField(required=True, max_length=120)
+    preferred_location_country = forms.CharField(required=False, max_length=80)
+    preferred_location_state = forms.CharField(required=False, max_length=80)
+    preferred_location_city = forms.CharField(required=False, max_length=80)
+
     def clean(self):
         cleaned = super().clean()
+
+        city = clean_location_name(cleaned.get('preferred_location_city') or '')
+        state = clean_location_name(cleaned.get('preferred_location_state') or '')
+        country = clean_location_name(cleaned.get('preferred_location_country') or '')
+        query = clean_location_name(cleaned.get('location_query') or '', max_len=120)
+
+        if not city:
+            raise ValidationError('Please select your city from the dropdown suggestions.')
+
+        expected_label_parts = [part for part in [city, state, country] if part]
+        expected_label = ', '.join(expected_label_parts)
+        if not query or query != expected_label:
+            raise ValidationError('Please choose your city only from the dropdown list.')
+
+        cleaned['preferred_location_city'] = city
+        cleaned['preferred_location_state'] = state
+        cleaned['preferred_location_country'] = country
+        cleaned['location_query'] = expected_label
 
         if bool(getattr(settings, 'RECAPTCHA_REQUIRED', False)):
             token = (self.data.get('g-recaptcha-response') or '').strip()
@@ -142,7 +167,48 @@ class CustomSignupForm(SignupForm):
                 )
                 continue
 
+            if name == "location_query":
+                field.widget.attrs.update(
+                    {
+                        "class": f"{_BASE_INPUT_CLASS} !pl-12",
+                        "placeholder": "Select your city (for local groups & events)",
+                        "autocomplete": "off",
+                    }
+                )
+                continue
+
+            if name in {"preferred_location_country", "preferred_location_state", "preferred_location_city"}:
+                field.widget = forms.HiddenInput()
+                continue
+
             field.widget.attrs.update({"class": _BASE_INPUT_CLASS})
+
+    def signup(self, request, user):
+        country = clean_location_name(self.cleaned_data.get('preferred_location_country') or '')
+        state = clean_location_name(self.cleaned_data.get('preferred_location_state') or '')
+        city = clean_location_name(self.cleaned_data.get('preferred_location_city') or '')
+
+        profile = getattr(user, 'profile', None)
+        if profile is not None:
+            profile.preferred_location_country = country or None
+            profile.preferred_location_state = state or None
+            profile.preferred_location_city = city or None
+            if city and not getattr(profile, 'last_location_city', None):
+                profile.last_location_city = city
+            if country and not getattr(profile, 'last_location_country', None):
+                profile.last_location_country = country
+            profile.save(update_fields=[
+                'preferred_location_country',
+                'preferred_location_state',
+                'preferred_location_city',
+                'last_location_city',
+                'last_location_country',
+            ])
+
+        try:
+            ensure_local_community_membership(user, country=country, state=state, city=city)
+        except Exception:
+            pass
 
 
 class CustomResetPasswordForm(ResetPasswordForm):

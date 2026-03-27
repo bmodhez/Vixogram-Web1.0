@@ -1,138 +1,11 @@
 (function () {
     function __escapeHtml(s) {
-        // Handles one-time photos:
-        // - Hidden bubble is rendered in HTML.
-        // - Clicking POSTs to server to record this viewer as having opened it.
-        // - Client shows photo with an animated countdown, then removes the message for this viewer.
-
-        const countdownTimers = new WeakMap();
-
-        function getCsrf() {
-            try { return (typeof getCookie === 'function' ? getCookie('csrftoken') : ''); } catch { return ''; }
-        }
-
-        function renderExpired(container) {
-            if (!container) return;
-            try {
-                container.innerHTML = '<div class="rounded-2xl border border-gray-700 bg-gray-900/40 px-4 py-4 text-sm text-gray-200" data-one-time-expired>Photo expired</div>';
-            } catch {}
-        }
-
-        function removeMessageForViewer(container) {
-            const msg = container && container.closest ? (container.closest('.vixo-msg') || container) : container;
-            if (!msg) return;
-            try {
-                msg.style.transition = 'opacity 200ms ease, transform 200ms ease';
-                msg.style.opacity = '0';
-                msg.style.transform = 'translateY(-4px)';
-            } catch {}
-            window.setTimeout(() => {
-                try { msg.remove(); } catch {}
-            }, 220);
-        }
-
-        function clearCountdown(container) {
-            const prev = countdownTimers.get(container);
-            if (!prev) return;
-            try { window.clearTimeout(prev.timeoutId); } catch {}
-            try { window.clearInterval(prev.intervalId); } catch {}
-            countdownTimers.delete(container);
-        }
-
-        function startCountdown(container, seconds, expiresAtSec) {
-            if (!container) return;
-            clearCountdown(container);
-
-            const endMs = ((expiresAtSec && expiresAtSec > 0) ? expiresAtSec : (Math.floor(Date.now() / 1000) + seconds)) * 1000;
-            let remaining = Math.max(0, Math.ceil((endMs - Date.now()) / 1000));
-            if (remaining <= 0) {
-                removeMessageForViewer(container);
-                return;
-            }
-
-            const label = container.querySelector('[data-one-time-remaining]');
-            const progress = container.querySelector('[data-one-time-progress]');
-            if (label) label.textContent = String(remaining);
-
-            try {
-                if (progress) {
-                    progress.style.width = '100%';
-                    progress.style.transition = `width ${remaining}s linear`;
-                    requestAnimationFrame(() => {
-                        try { progress.style.width = '0%'; } catch {}
-                    });
-                }
-            } catch {}
-
-            const intervalId = window.setInterval(() => {
-                remaining = Math.max(0, Math.ceil((endMs - Date.now()) / 1000));
-                if (label) label.textContent = String(remaining);
-            }, 250);
-
-            const timeoutId = window.setTimeout(() => {
-                clearCountdown(container);
-                removeMessageForViewer(container);
-            }, remaining * 1000);
-
-            countdownTimers.set(container, { intervalId, timeoutId });
-        }
-
-        async function openOneTime(btn) {
-            const container = btn.closest('[data-one-time-container]') || btn.parentElement;
-            if (!container) return;
-
-            const url = btn.getAttribute('data-one-time-open-url') || '';
-            const fileUrl = btn.getAttribute('data-one-time-file-url') || '';
-            const fallbackSeconds = parseInt(btn.getAttribute('data-one-time-seconds') || '0', 10) || 0;
-            if (!url || !fileUrl) return;
-
-            btn.disabled = true;
-            try {
-                const resp = await fetch(url, {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {
-                        'X-CSRFToken': getCsrf(),
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                });
-
-                const data = await resp.json().catch(() => null);
-                if (!resp.ok || !data || !data.ok) {
-                    renderExpired(container);
-                    return;
-                }
-
-                const seconds = parseInt(data.seconds || fallbackSeconds || '0', 10) || fallbackSeconds || 0;
-                const expiresAt = parseInt(data.expires_at || '0', 10) || 0;
-
-                container.innerHTML = `
-                    <div class="relative">
-                        <img class="w-full h-auto rounded-lg cursor-zoom-in" src="${fileUrl}" alt="Image" loading="lazy" data-image-viewer />
-                        <div class="absolute inset-0 pointer-events-none">
-                            <div class="absolute top-2 left-2 inline-flex items-center gap-2 rounded-full bg-black/60 border border-white/10 px-2.5 py-1 text-[11px] text-white">
-                                <span data-one-time-remaining>${seconds}</span><span>s</span>
-                            </div>
-                            <div class="absolute bottom-0 left-0 right-0 h-1 bg-white/10 rounded-b-lg overflow-hidden">
-                                <div data-one-time-progress class="h-full bg-emerald-400/80"></div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-
-                startCountdown(container, seconds, expiresAt);
-            } catch {
-                try { btn.disabled = false; } catch {}
-            }
-        }
-
-        document.addEventListener('click', (e) => {
-            const btn = e.target && e.target.closest ? e.target.closest('[data-one-time-open-btn]') : null;
-            if (!btn) return;
-            e.preventDefault();
-            e.stopPropagation();
-            openOneTime(btn);
-        }, true);
+        return String(s ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     try {
@@ -742,7 +615,73 @@
         if (!btn || !panel || !mount) return;
 
         let pickerEl = null;
+        let pickerLoading = false;
+        let pickerError = false;
         const ANIM_MS = 160;
+        const EMOJI_MART_BROWSER_URL = 'https://cdn.jsdelivr.net/npm/emoji-mart@latest/dist/browser.js';
+        const EMOJI_MART_DATA_URL = 'https://cdn.jsdelivr.net/npm/@emoji-mart/data';
+        let emojiMartDataPromise = null;
+
+        function getEmojiMartData() {
+            if (!emojiMartDataPromise) {
+                emojiMartDataPromise = fetch(EMOJI_MART_DATA_URL, {
+                    credentials: 'omit',
+                    cache: 'force-cache',
+                }).then((res) => {
+                    if (!res.ok) throw new Error('emoji_data_fetch_failed');
+                    return res.json();
+                });
+            }
+            return emojiMartDataPromise;
+        }
+
+        async function waitForEmojiMartReady(maxMs) {
+            const timeoutMs = Math.max(300, parseInt(maxMs || 0, 10) || 2500);
+            const startedAt = Date.now();
+            return new Promise((resolve, reject) => {
+                const tick = () => {
+                    try {
+                        if (window.EmojiMart && window.EmojiMart.Picker) {
+                            resolve();
+                            return;
+                        }
+                    } catch {
+                        // ignore
+                    }
+                    if ((Date.now() - startedAt) >= timeoutMs) {
+                        reject(new Error('emoji_mart_not_ready'));
+                        return;
+                    }
+                    window.setTimeout(tick, 60);
+                };
+                tick();
+            });
+        }
+
+        async function ensureEmojiMartScript() {
+            if (window.EmojiMart && window.EmojiMart.Picker) return;
+
+            const existing = document.querySelector(`script[src="${EMOJI_MART_BROWSER_URL}"]`);
+            if (existing) {
+                try {
+                    await waitForEmojiMartReady(1800);
+                    return;
+                } catch {
+                    try { existing.remove(); } catch {}
+                }
+            }
+
+            await new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = EMOJI_MART_BROWSER_URL;
+                s.async = true;
+                s.onload = () => resolve();
+                s.onerror = () => reject(new Error('emoji_mart_script_failed'));
+                document.head.appendChild(s);
+            });
+
+            await waitForEmojiMartReady(2500);
+        }
 
         function getActiveInput() {
             const captionWrap = document.getElementById('chat_file_caption_wrap');
@@ -769,13 +708,25 @@
             } catch (e) {}
         }
 
-        function ensurePicker() {
-            if (pickerEl) return;
+        async function ensurePicker() {
+            if (pickerEl || pickerLoading) return;
+            pickerLoading = true;
+            pickerError = false;
             mount.innerHTML = '';
 
-            // Primary: emoji-mart
-            if (window.EmojiMart && window.EmojiMart.Picker) {
+            const loading = document.createElement('div');
+            loading.className = 'px-3 py-2 text-xs text-gray-400';
+            loading.textContent = 'Loading emojis...';
+            mount.appendChild(loading);
+
+            try {
+                await ensureEmojiMartScript();
+                if (!(window.EmojiMart && window.EmojiMart.Picker)) {
+                    throw new Error('emoji_mart_unavailable');
+                }
+
                 pickerEl = new window.EmojiMart.Picker({
+                    data: async () => getEmojiMartData(),
                     theme: 'dark',
                     set: 'native',
                     dynamicWidth: true,
@@ -791,33 +742,22 @@
                 try {
                     pickerEl.style.width = '100%';
                     pickerEl.style.height = '320px';
-                } catch (e) {}
+                } catch {
+                    // ignore
+                }
 
+                mount.innerHTML = '';
                 mount.appendChild(pickerEl);
-                return;
+            } catch {
+                pickerError = true;
+                mount.innerHTML = '';
+                const errorEl = document.createElement('div');
+                errorEl.className = 'px-3 py-2 text-xs text-rose-300';
+                errorEl.textContent = 'Emoji picker failed to load. Please check network and try again.';
+                mount.appendChild(errorEl);
+            } finally {
+                pickerLoading = false;
             }
-
-            // Fallback: small built-in emoji grid (works offline / when CDN is blocked)
-            const fallback = document.createElement('div');
-            fallback.className = 'grid grid-cols-8 gap-1 text-lg select-none';
-            const emojis = [
-                '😀','😁','😂','🤣','😊','😍','😘','😎',
-                '😅','😇','🙂','😉','😋','😜','🤔','😴',
-                '😢','😭','😡','🤯','👍','👎','🙏','👏',
-                '🔥','✨','💯','❤️','💔','🎉','😮','🤝',
-            ];
-            emojis.forEach((em) => {
-                const b = document.createElement('button');
-                b.type = 'button';
-                b.textContent = em;
-                b.className = 'h-9 w-9 rounded-lg hover:bg-gray-800/60';
-                b.addEventListener('click', () => {
-                    insertAtCursor(getActiveInput(), em);
-                });
-                fallback.appendChild(b);
-            });
-            pickerEl = fallback;
-            mount.appendChild(fallback);
         }
 
         function ensureInViewport() {
@@ -1825,9 +1765,6 @@
         const href = a.getAttribute('href') || '';
         if (!(href.startsWith('http://') || href.startsWith('https://'))) return;
 
-        e.preventDefault();
-        e.stopPropagation();
-
         const openLink = () => {
             try {
                 window.open(href, '_blank', 'noopener');
@@ -1835,6 +1772,17 @@
                 window.location.href = href;
             }
         };
+
+        // Banner links should open directly without confirmation.
+        if (a.closest && a.closest('#global-announcement-banner')) {
+            e.preventDefault();
+            e.stopPropagation();
+            openLink();
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
 
         if (typeof window.__openConfirm === 'function') {
             window.__openConfirm({
@@ -2112,12 +2060,18 @@
         if (!typingIndicatorEl || !typingIndicatorTextEl) return;
         const names = Array.from(typingUsers.values()).filter(Boolean);
         if (!names.length) {
-            typingIndicatorEl.classList.add('hidden');
-            typingIndicatorTextEl.textContent = '';
+            typingIndicatorEl.classList.remove('vixo-typing-indicator-active');
+            typingIndicatorEl.setAttribute('aria-hidden', 'true');
+            setTimeout(() => {
+                if (!typingIndicatorEl.classList.contains('vixo-typing-indicator-active')) {
+                    typingIndicatorTextEl.textContent = '';
+                }
+            }, 180);
             return;
         }
-        typingIndicatorEl.classList.remove('hidden');
         typingIndicatorTextEl.textContent = `${names.join(', ')} typing...`;
+        typingIndicatorEl.classList.add('vixo-typing-indicator-active');
+        typingIndicatorEl.setAttribute('aria-hidden', 'false');
     }
 
     function handleTypingEvent(payload) {
@@ -4565,7 +4519,7 @@
     (function initGifPicker() {
         const gifsAllowed = !!cfg.gifsAllowed;
         const apiKey = String(cfg.giphyApiKey || '').trim();
-        const limit = parseInt(cfg.giphyLimit || '30', 10) || 30;
+        const limit = parseInt(cfg.giphyLimit || '45', 10) || 45;
 
         if (!gifsAllowed || !apiKey) return;
 

@@ -1,0 +1,46 @@
+<div class="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Ban user">
+    <div class="absolute inset-0 bg-black/60 vixo-modal-overlay" data-modal-backdrop></div>
+
+    <div class="relative min-h-full flex items-center justify-center px-4 py-8 pointer-events-none">
+        <div class="w-full max-w-md pointer-events-auto vixo-modal-card">
+            <div class="rounded-2xl shadow-2xl border border-white/10 overflow-hidden bg-gray-900/95">
+                <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-800">
+                    <div>
+                        <h1 class="text-base sm:text-lg font-extrabold text-white">Ban @{{ target_user.username }}</h1>
+                        <p class="text-xs text-gray-400 mt-0.5">Choose a duration and optionally add a reason.</p>
+                    </div>
+                    <button type="button" data-modal-close class="bg-gray-800 hover:bg-gray-700 text-white rounded-lg px-4 py-2 transition-colors text-xs sm:text-sm">
+                        Back
+                    </button>
+                </div>
+
+                <form method="post" action="{% url 'admin-user-ban' target_user.id %}" class="px-5 py-5 space-y-4">
+                    {% csrf_token %}
+                    {% if next_url %}
+                        <input type="hidden" name="next" value="{{ next_url }}" />
+                    {% endif %}
+
+                    <div>
+                        <label class="block text-sm text-gray-300 mb-2">Duration</label>
+                        <select name="minutes" class="w-full bg-gray-800/60 border border-gray-700 text-gray-100 rounded-lg px-3 py-3 outline-none focus:border-red-500">
+                            <option value="10">10 min</option>
+                            <option value="60">1 hour</option>
+                            <option value="1440">1 day</option>
+                            <option value="10080">7 days</option>
+                            <option value="43200">30 days</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-gray-300 mb-2">Reason (optional)</label>
+                        <textarea name="note" rows="4" placeholder="Write a reason if needed" class="w-full bg-gray-800/60 border border-gray-700 text-gray-100 rounded-lg px-4 py-3 outline-none focus:border-red-500"></textarea>
+                    </div>
+
+                    <button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-6 rounded-lg transition-colors">
+                        Ban user
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

@@ -8,6 +8,11 @@
 /* Smooth scrolling site-wide (anchors/programmatic scroll). */
 html { scroll-behavior: smooth; }
 
+html,
+body {
+  background-color: rgb(2 6 23);
+}
+
 /* Chat container should snap instantly (JS provides any desired animation).
    Also prevent horizontal overflow (mobile swipe gestures can cause a side-scroll glow/line). */
 #chat_container {
@@ -125,6 +130,19 @@ html.theme-dark .vixo-msg [data-msg-actions] [data-message-menu-toggle]:hover {
   animation: vixoPollOptionSelected 620ms cubic-bezier(0.2, 0.9, 0.25, 1);
 }
 
+/* Poll modal validation error readability */
+#chat_poll_error {
+  color: rgb(127 29 29) !important;
+  background: rgb(254 242 242 / 0.96) !important;
+  border-color: rgb(252 165 165 / 0.9) !important;
+}
+
+html.theme-dark #chat_poll_error {
+  color: rgb(254 202 202) !important;
+  background: rgb(190 24 93 / 0.14) !important;
+  border-color: rgb(251 113 133 / 0.42) !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .vixo-poll-pop-in,
   .vixo-poll-refresh-pulse,
@@ -135,6 +153,7 @@ html.theme-dark .vixo-msg [data-msg-actions] [data-message-menu-toggle]:hover {
 }
 
 body {
+  margin: 0;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -529,6 +548,11 @@ body {
   animation: vixoMarquee 22s linear infinite;
 }
 
+.vixo-global-banner:hover .vixo-marquee-track,
+.vixo-marquee-track.is-paused {
+  animation-play-state: paused;
+}
+
 @keyframes vixoMarquee {
   0% { transform: translateX(0); }
   100% { transform: translateX(-100%); }
@@ -610,12 +634,43 @@ body {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.55;
+  opacity: 1;
 }
 
-.vixo-auth-bg-particles canvas {
-  width: 100% !important;
-  height: 100% !important;
+.vixo-auth-bg-particle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: inline-block;
+  font-size: clamp(0.78rem, 1.2vw, 1.15rem);
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.38),
+    0 0 20px rgba(255, 255, 255, 0.24);
+  transform: translate3d(0, 0, 0) scale(var(--vixo-particle-scale, 1));
+  will-change: transform, opacity;
+  animation-name: vixoAuthEmojiFloat;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+@keyframes vixoAuthEmojiFloat {
+  0% {
+    transform: translate3d(0, 8px, 0) scale(var(--vixo-particle-scale, 1));
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  48% {
+    transform: translate3d(var(--vixo-particle-drift, 0px), -10px, 0) scale(var(--vixo-particle-scale, 1));
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(calc(var(--vixo-particle-drift, 0px) * -0.4), -30px, 0) scale(var(--vixo-particle-scale, 1));
+    opacity: 0;
+  }
 }
 
 /* Auth pages: video background (keeps content layout unchanged). */
@@ -834,14 +889,12 @@ body {
   font-size: clamp(2.1rem, 5.2vw, 5.6rem);
   transform: rotate(-7deg);
 
-  /* Gradient text + glow, kept subtle so it never overpowers the UI */
+  /* Subtle cinematic gradient text (white -> light grey). */
   background: linear-gradient(
-    110deg,
-    rgba(255, 255, 255, 0.24) 0%,
-    rgba(253, 224, 71, 0.46) 30%,
-    rgba(250, 204, 21, 0.42) 52%,
-    rgba(142, 45, 226, 0.34) 78%,
-    rgba(255, 255, 255, 0.20) 100%
+    112deg,
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(244, 244, 248, 0.78) 45%,
+    rgba(229, 231, 235, 0.72) 100%
   );
   background-size: 260% 260%;
   background-position: 0% 50%;
@@ -849,16 +902,16 @@ body {
   color: transparent;
   -webkit-background-clip: text;
   background-clip: text;
-  opacity: 0.45;
+  opacity: 0.34;
 
   /* Helps readability over the bg image without becoming “loud”. */
-  -webkit-text-stroke: 1px rgba(255, 255, 255, 0.10);
+  -webkit-text-stroke: 1px rgba(255, 255, 255, 0.16);
 
   text-shadow:
-    0 0 28px rgba(255, 255, 255, 0.10),
-    0 0 58px rgba(250, 204, 21, 0.32),
-    0 0 92px rgba(253, 224, 71, 0.22),
-    0 0 120px rgba(142, 45, 226, 0.16);
+    0 0 18px rgba(255, 215, 0, 0.42),
+    0 0 42px rgba(255, 193, 7, 0.46),
+    0 0 76px rgba(255, 160, 0, 0.4),
+    0 0 116px rgba(212, 140, 0, 0.34);
 
   filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.22));
   will-change: transform, background-position, filter, opacity;
@@ -963,6 +1016,10 @@ body {
 
 /* Auth card: success-leave transition (slide up + fade) before redirect. */
 .vixo-auth-card {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+
   transition:
     transform 240ms ease,
     opacity 240ms ease,
@@ -972,6 +1029,84 @@ body {
   position: relative;
   isolation: isolate;
   overflow: hidden;
+}
+
+/* Auth fields: soft neon-purple focus glow for username/password and related inputs. */
+.vixo-auth-page .vixo-field-with-icon > input,
+.vixo-auth-page .vixo-field-with-icon > select,
+.vixo-auth-page .vixo-field-with-icon > textarea {
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.vixo-auth-page .vixo-field-with-icon > input:focus,
+.vixo-auth-page .vixo-field-with-icon > select:focus,
+.vixo-auth-page .vixo-field-with-icon > textarea:focus {
+  border-color: rgba(167, 139, 250, 0.78) !important;
+  box-shadow:
+    0 0 0 1px rgba(167, 139, 250, 0.48),
+    0 0 18px rgba(142, 45, 226, 0.34),
+    0 0 36px rgba(142, 45, 226, 0.18);
+}
+
+/* Login/auth failure: show subtle red field feedback on invalid fields. */
+.vixo-auth-login-form--invalid .vixo-field-with-icon > input,
+.vixo-auth-page .vixo-field-with-icon.vixo-field-invalid > input,
+.vixo-auth-page .vixo-field-with-icon.vixo-field-invalid > select,
+.vixo-auth-page .vixo-field-with-icon.vixo-field-invalid > textarea {
+  border-color: rgba(248, 113, 113, 0.88) !important;
+  box-shadow:
+    0 0 0 1px rgba(248, 113, 113, 0.55),
+    0 0 20px rgba(239, 68, 68, 0.36),
+    0 0 38px rgba(220, 38, 38, 0.24);
+}
+
+.vixo-auth-login-form--invalid .vixo-field-with-icon > input:focus,
+.vixo-auth-page .vixo-field-with-icon.vixo-field-invalid > input:focus,
+.vixo-auth-page .vixo-field-with-icon.vixo-field-invalid > select:focus,
+.vixo-auth-page .vixo-field-with-icon.vixo-field-invalid > textarea:focus {
+  border-color: rgba(254, 202, 202, 0.95) !important;
+  box-shadow:
+    0 0 0 1px rgba(252, 165, 165, 0.62),
+    0 0 26px rgba(239, 68, 68, 0.42),
+    0 0 44px rgba(220, 38, 38, 0.28);
+}
+
+/* Auth CTA shimmer effect. */
+.vixo-auth-cta {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.vixo-auth-cta::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -130%;
+  width: 55%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.38) 48%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: skewX(-22deg);
+  pointer-events: none;
+}
+
+.vixo-auth-cta:hover::before,
+.vixo-auth-cta:focus-visible::before {
+  animation: vixoAuthCtaShimmer 900ms ease forwards;
+}
+
+@keyframes vixoAuthCtaShimmer {
+  0% {
+    left: -130%;
+  }
+  100% {
+    left: 150%;
+  }
 }
 
 /* Keep all card content above the particles layer. */
@@ -1026,17 +1161,19 @@ body {
 
 @keyframes vixoAuthWatermarkGlowPulse {
   0%, 100% {
-    opacity: 0.42;
+    opacity: 0.30;
     filter:
       drop-shadow(0 14px 30px rgba(0, 0, 0, 0.22))
-      drop-shadow(0 0 34px rgba(250, 204, 21, 0.10));
+      drop-shadow(0 0 34px rgba(255, 215, 0, 0.22))
+      drop-shadow(0 0 52px rgba(255, 179, 0, 0.18));
   }
   50% {
-    opacity: 0.58;
+    opacity: 0.5;
     filter:
       drop-shadow(0 18px 44px rgba(0, 0, 0, 0.24))
-      drop-shadow(0 0 64px rgba(253, 224, 71, 0.18))
-      drop-shadow(0 0 86px rgba(142, 45, 226, 0.16));
+      drop-shadow(0 0 68px rgba(255, 193, 7, 0.34))
+      drop-shadow(0 0 104px rgba(255, 160, 0, 0.3))
+      drop-shadow(0 0 140px rgba(212, 140, 0, 0.26));
   }
 }
 
@@ -1486,27 +1623,17 @@ body {
 
 /* Custom Scrollbar for Chat */
 
-/* Global scrollbar (WebKit). */
-*::-webkit-scrollbar { width: 10px; height: 10px; }
-*::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg,
-    rgb(16 185 129) 0%,   /* emerald-500 */
-    rgb(99 102 241) 50%, /* indigo-500 */
-    rgb(168 85 247) 100% /* purple-500 */
-  );
-  border-radius: 9999px;
-}
-*::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg,
-    rgb(52 211 153) 0%,  /* emerald-400 */
-    rgb(129 140 248) 50%,/* indigo-400 */
-    rgb(192 132 252) 100%/* purple-400 */
-  );
+/* Global scrollbar: hide visuals everywhere but keep scrolling functional. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-/* Firefox fallback (no gradient support). */
-html { scrollbar-width: thin; scrollbar-color: rgb(16 185 129) transparent; }
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
 
 /* Utility: hide scrollbar visuals but keep scrolling enabled. */
 .vixo-scrollbar-none {
@@ -1662,6 +1789,37 @@ html.vixo-chat-page *::-webkit-scrollbar-track {
 #chat_composer_bar {
   bottom: env(safe-area-inset-bottom);
   padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+}
+
+#typing_indicator.vixo-typing-indicator {
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: calc(100% - 0.25rem);
+  padding: 0.25rem 0.6rem;
+  border-radius: 0.6rem;
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.92), rgba(15, 23, 42, 0.86));
+  border: 1px solid rgba(71, 85, 105, 0.35);
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.45);
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 220ms ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#typing_indicator.vixo-typing-indicator.vixo-typing-indicator-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (min-width: 640px) {
+  #typing_indicator.vixo-typing-indicator {
+    left: 1rem;
+    right: 1rem;
+  }
 }
 
 /* Mobile chat: size the chat panels to the real header height (navbar + announcement banner).
@@ -1841,10 +1999,19 @@ html.vixo-chat-page *::-webkit-scrollbar-track {
 
 /* Decorative chat background (dark mode/default) */
 .vixo-chat-bg {
-  background-image: linear-gradient(rgba(2, 6, 23, 0.78), rgba(2, 6, 23, 0.78)), url('../chatbg.jpg');
+  background-image: linear-gradient(rgba(2, 6, 23, 0.78), rgba(2, 6, 23, 0.78)), var(--vixo-chat-theme-url, url('../chatbg.jpg'));
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
+}
+
+.vixo-chat-theme-fab {
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.35);
+}
+
+.vixo-chat-theme-option.is-active {
+  border-color: rgba(16, 185, 129, 0.55);
+  background: linear-gradient(to right, rgba(16, 185, 129, 0.2), rgba(45, 212, 191, 0.2));
 }
 
 /* Light theme (applied by adding .theme-light on <html>)
@@ -1944,7 +2111,7 @@ html.vixo-chat-page *::-webkit-scrollbar-track {
 
 /* Decorative chat background: keep dark chatbg even in light theme */
 .theme-light .vixo-chat-bg {
-  background-image: linear-gradient(rgba(2, 6, 23, 0.78), rgba(2, 6, 23, 0.78)), url('../blackchatbg.jpg') !important;
+  background-image: linear-gradient(rgba(2, 6, 23, 0.78), rgba(2, 6, 23, 0.78)), var(--vixo-chat-theme-url, url('../blackchatbg.jpg')) !important;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -1952,32 +2119,539 @@ html.vixo-chat-page *::-webkit-scrollbar-track {
 
 /* Light-mode surfaces (chat/nav panels) */
 .theme-light .vixo-topbar {
-  /* Not pure white: add a subtle brand-tinted surface so the logo pops. */
+  /* White-theme navbar styling only (dark theme remains unchanged). */
   background:
-    radial-gradient(900px circle at 18% 10%, rgba(14, 165, 233, 0.10), transparent 55%),
-    radial-gradient(900px circle at 82% 30%, rgba(99, 102, 241, 0.08), transparent 58%),
-    linear-gradient(to bottom, rgba(186, 230, 253, 0.78), rgba(241, 245, 249, 0.96)) !important;
-  border-bottom-color: rgb(186 230 253) !important; /* sky-200 */
-  box-shadow: 0 10px 28px rgba(2, 6, 23, 0.06);
+    radial-gradient(900px circle at 18% 10%, rgba(14, 165, 233, 0.12), transparent 56%),
+    radial-gradient(900px circle at 82% 30%, rgba(99, 102, 241, 0.10), transparent 60%),
+    linear-gradient(to bottom, rgba(224, 242, 254, 0.86), rgba(248, 250, 252, 0.98)) !important;
+  border-bottom-color: rgb(191 219 254) !important;
+  box-shadow: 0 10px 28px rgba(2, 6, 23, 0.08);
 }
 
 /* Light-mode logo contrast */
 .theme-light .vixo-topbar .vixo-brand {
-  padding: 6px 10px;
-  border-radius: 14px;
-  background: rgba(2, 6, 23, 0.06);
-  border: 1px solid rgba(2, 6, 23, 0.10);
-  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.08);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  overflow: visible;
 }
 
 .theme-light .vixo-topbar .vixo-logo {
-  filter:
-    drop-shadow(0 2px 6px rgba(2, 6, 23, 0.40))
-    drop-shadow(0 0px 1px rgba(255, 255, 255, 0.45));
+  filter: none;
+  transform: scale(1.06);
+  transform-origin: left center;
+}
+
+.theme-light .vixo-topbar a.text-gray-300,
+.theme-light .vixo-topbar button.text-gray-300,
+.theme-light .vixo-topbar .text-gray-300 {
+  color: rgb(30 41 59) !important;
+}
+
+.theme-light .vixo-topbar a.hover\:bg-gray-800:hover,
+.theme-light .vixo-topbar button.hover\:bg-gray-800:hover {
+  background-color: rgb(226 232 240 / 0.85) !important;
+}
+
+.theme-light .vixo-topbar .border-gray-800,
+.theme-light .vixo-topbar .border-gray-700 {
+  border-color: rgb(203 213 225) !important;
 }
 
 .theme-light .vixo-chat-surface {
   /* Darker light-mode panels (sidebar/header/composer) */
   background: linear-gradient(to bottom, rgba(226, 232, 240, 0.92), rgba(241, 245, 249, 0.92)) !important;
   border-color: rgb(203 213 225) !important;
+}
+
+/* Light-theme chat sidebar (match soft white UI in screenshot) */
+.theme-light #chat_sidebar_panel {
+  background: linear-gradient(180deg, rgba(241, 245, 249, 0.96), rgba(248, 250, 252, 0.98)) !important;
+  border-color: rgb(203 213 225) !important;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08) !important;
+}
+
+.theme-light #chat_sidebar_panel .vixo-chat-room-link {
+  background: rgba(248, 250, 252, 0.96);
+  border-color: rgba(203, 213, 225, 0.95);
+}
+
+.theme-light #chat_sidebar_panel .vixo-chat-room-link:hover {
+  background: rgba(240, 249, 255, 0.98);
+  border-color: rgba(125, 211, 252, 0.78);
+}
+
+.theme-light #chat_sidebar_panel .vixo-chat-room-link-active {
+  background: linear-gradient(135deg, rgba(219, 234, 254, 0.98), rgba(224, 242, 254, 0.98));
+  border-color: rgba(147, 197, 253, 0.95);
+  box-shadow: 0 8px 18px rgba(59, 130, 246, 0.14);
+  color: rgb(30 41 59);
+}
+
+.theme-light #chat_sidebar_panel .vixo-chat-room-avatar {
+  border-color: rgba(148, 163, 184, 0.7);
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.9), rgba(79, 70, 229, 0.88));
+  color: rgb(255 255 255);
+}
+
+.theme-light #chat_sidebar_panel .vixo-chat-room-title {
+  color: rgb(51 65 85);
+}
+
+.theme-light #chat_sidebar_panel .vixo-chat-room-subtitle {
+  color: rgb(100 116 139);
+}
+
+.theme-light #chat_sidebar_panel .text-gray-400 {
+  color: rgb(100 116 139) !important;
+}
+
+.theme-light #chat_sidebar.fixed #chat_sidebar_panel {
+  background: linear-gradient(180deg, rgba(241, 245, 249, 0.98), rgba(248, 250, 252, 0.98)) !important;
+  border-color: rgb(203 213 225) !important;
+}
+
+.vixo-rv-floating-box {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.62);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow:
+    0 10px 26px rgba(2, 6, 23, 0.32),
+    0 0 0 1px rgba(148, 163, 184, 0.08) inset;
+}
+
+.vixo-rv-try-tag {
+  color: rgba(125, 211, 252, 0.95);
+}
+
+.vixo-rv-floating-btn {
+  background: linear-gradient(90deg, rgba(20, 184, 166, 0.95), rgba(99, 102, 241, 0.95));
+  box-shadow:
+    0 8px 22px rgba(20, 184, 166, 0.28),
+    0 8px 22px rgba(99, 102, 241, 0.22);
+}
+
+.vixo-rv-floating-btn:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.theme-light .vixo-rv-floating-box {
+  border-color: rgba(191, 219, 254, 0.95);
+  background:
+    linear-gradient(90deg, rgba(241, 245, 249, 0.98), rgba(224, 242, 254, 0.98));
+  box-shadow:
+    0 8px 20px rgba(30, 41, 59, 0.08),
+    0 0 0 1px rgba(191, 219, 254, 0.5) inset;
+}
+
+.theme-light .vixo-rv-try-tag {
+  color: rgba(71, 85, 105, 0.98);
+}
+
+.theme-light .vixo-rv-floating-btn {
+  background: linear-gradient(90deg, rgba(191, 219, 254, 0.95), rgba(199, 210, 254, 0.95));
+  box-shadow:
+    0 6px 16px rgba(59, 130, 246, 0.14),
+    0 6px 16px rgba(99, 102, 241, 0.12);
+}
+
+.theme-light .vixo-rv-floating-btn:hover {
+  filter: brightness(1.02);
+}
+
+.vixo-rv-shell {
+  min-height: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(1000px circle at 0% 0%, rgba(147, 51, 234, 0.2), transparent 55%),
+    radial-gradient(1000px circle at 100% 100%, rgba(6, 182, 212, 0.16), transparent 58%),
+    linear-gradient(135deg, rgba(5, 10, 30, 0.95), rgba(7, 17, 45, 0.95));
+}
+
+body.vixo-rv-page {
+  min-height: 100dvh;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+html.vixo-rv-page {
+  min-height: 100%;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+body.vixo-rv-page > .w-full.flex-1,
+body.vixo-rv-page > .w-full.flex-1 > .w-full,
+body.vixo-rv-page > .w-full.flex-1 > .w-full > .vixo-site-grid,
+body.vixo-rv-page main.self-stretch {
+  min-height: 0;
+}
+
+body.vixo-rv-page main.self-stretch {
+  height: 100%;
+}
+
+.vixo-rv-video-card {
+  position: relative;
+  height: 380px;
+  min-height: 380px;
+  border-radius: 0.75rem;
+  border: 0;
+  overflow: hidden;
+  background: linear-gradient(160deg, rgba(32, 19, 63, 0.7), rgba(20, 21, 48, 0.8));
+}
+
+.vixo-rv-video-card--me {
+  border-color: transparent;
+  background: linear-gradient(160deg, rgba(16, 41, 68, 0.72), rgba(16, 22, 46, 0.85));
+}
+
+.vixo-rv-media-controls {
+  position: absolute;
+  left: 0.7rem;
+  bottom: 0.8rem;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.45rem;
+  width: auto;
+  flex-wrap: nowrap;
+}
+
+@media (min-width: 641px) {
+  .vixo-rv-video-card--me .vixo-rv-media-controls {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+  }
+
+  .vixo-rv-video-card--me:hover .vixo-rv-media-controls,
+  .vixo-rv-video-card--me:focus-within .vixo-rv-media-controls {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.vixo-rv-media-btn {
+  width: 2.2rem;
+  height: 2.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(2, 6, 23, 0.7);
+  color: rgba(226, 232, 240, 0.96);
+  font-size: 1rem;
+  line-height: 1;
+  font-weight: 700;
+  padding: 0;
+}
+
+.vixo-rv-media-btn.vixo-rv-media-btn--off {
+  color: rgba(254, 202, 202, 0.95);
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(127, 29, 29, 0.35);
+}
+
+.vixo-rv-video {
+  width: 100%;
+  height: 100%;
+  min-height: 380px;
+  object-fit: cover;
+  background: rgba(2, 6, 23, 0.85);
+}
+
+.vixo-rv-label {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 2;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: rgba(240, 249, 255, 0.98);
+  background: rgba(2, 6, 23, 0.68);
+  border: 1px solid rgba(148, 163, 184, 0.36);
+  border-radius: 9999px;
+  letter-spacing: 0.01em;
+  padding: 0.2rem 0.6rem;
+  box-shadow: 0 4px 10px rgba(2, 6, 23, 0.28);
+}
+
+.vixo-rv-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem;
+  color: rgba(226, 232, 240, 0.86);
+  font-weight: 600;
+  background: rgba(2, 6, 23, 0.48);
+}
+
+.vixo-rv-placeholder-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  text-align: center;
+}
+
+.vixo-rv-placeholder-inner .vixo-rv-btn {
+  padding: 0.7rem 1.25rem;
+}
+
+.vixo-rv-chat-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  border: 0;
+  background: rgba(7, 14, 35, 0.84);
+  padding: 0;
+  height: 100%;
+  min-height: 380px;
+}
+
+.vixo-rv-chat-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#rv_status_panel,
+#rv_chat_messages {
+  min-height: 0;
+}
+
+#rv_chat_messages {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.vixo-rv-chat-composer {
+  margin-top: 0.9rem;
+  transform: translateY(10px);
+}
+
+.vixo-rv-chat-input {
+  min-height: 2.6rem;
+  line-height: 1.2;
+}
+
+.vixo-rv-chat-send {
+  min-height: 2.6rem;
+  min-width: 3.25rem;
+}
+
+@media (min-width: 1024px) {
+  .vixo-rv-cam-stack {
+    width: 100%;
+  }
+
+  .vixo-rv-cam-stack .vixo-rv-video-card,
+  .vixo-rv-cam-stack .vixo-rv-video {
+    height: 280px;
+    min-height: 280px;
+  }
+}
+
+#rv_online {
+  background: rgba(2, 6, 23, 0.45);
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  border-radius: 9999px;
+  padding: 0.2rem 0.65rem;
+}
+
+.vixo-rv-btn {
+  position: relative;
+  border-radius: 9999px;
+  border: 0;
+  background: rgba(17, 24, 39, 0.72);
+  color: #e5e7eb;
+  font-weight: 700;
+  font-size: 0.92rem;
+  padding: 0.6rem 1.2rem;
+  transition: opacity 220ms ease, transform 220ms ease, max-width 220ms ease, margin 220ms ease, padding 220ms ease;
+}
+
+.vixo-rv-btn[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%) translateY(4px);
+  opacity: 0;
+  pointer-events: none;
+  white-space: pre-line;
+  text-align: center;
+  line-height: 1.25;
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: #ffffff;
+  background: #000000;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.6rem;
+  padding: 0.4rem 0.55rem;
+  min-width: max-content;
+  z-index: 30;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.vixo-rv-btn[data-tooltip]:hover::after,
+.vixo-rv-btn[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.vixo-rv-btn.is-hidden {
+  opacity: 0;
+  transform: translateY(6px) scale(0.96);
+  pointer-events: none;
+  max-width: 0;
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 0;
+  padding-right: 0;
+  overflow: hidden;
+}
+
+.vixo-rv-btn.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.vixo-rv-btn--primary {
+  border: 0;
+  color: #fff;
+  background: linear-gradient(90deg, rgba(20, 184, 166, 0.96), rgba(99, 102, 241, 0.96));
+  box-shadow: 0 10px 24px rgba(45, 212, 191, 0.28);
+}
+
+.vixo-rv-btn--danger {
+  border-color: transparent;
+  color: rgba(254, 202, 202, 0.95);
+  background: rgba(127, 29, 29, 0.3);
+}
+
+.vixo-rv-btn--warn {
+  color: rgba(254, 202, 202, 0.97);
+  background: rgba(185, 28, 28, 0.34);
+  border: 1px solid rgba(248, 113, 113, 0.62);
+}
+
+@media (max-width: 640px) {
+  .vixo-rv-media-controls {
+    gap: 0.35rem;
+    bottom: 0.55rem;
+    left: 0.5rem;
+  }
+
+  .vixo-rv-media-btn {
+    width: 2rem;
+    height: 2rem;
+    font-size: 0.9rem;
+  }
+
+  .vixo-rv-video-card,
+  .vixo-rv-video,
+  .vixo-rv-chat-card {
+    height: 240px;
+    min-height: 240px;
+  }
+}
+
+/* Random Video page: light-theme surfaces only */
+.theme-light .vixo-rv-shell {
+  background:
+    radial-gradient(1200px circle at 0% 0%, rgba(191, 219, 254, 0.34), transparent 56%),
+    radial-gradient(1100px circle at 100% 100%, rgba(186, 230, 253, 0.30), transparent 58%),
+    linear-gradient(135deg, rgba(241, 245, 249, 0.98), rgba(248, 250, 252, 0.99));
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.theme-light .vixo-rv-video-card {
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  background: linear-gradient(160deg, rgba(239, 246, 255, 0.96), rgba(241, 245, 249, 0.96));
+}
+
+.theme-light .vixo-rv-video-card--me {
+  background: linear-gradient(160deg, rgba(224, 242, 254, 0.94), rgba(241, 245, 249, 0.95));
+}
+
+.theme-light .vixo-rv-video {
+  background: rgba(226, 232, 240, 0.8);
+}
+
+.theme-light .vixo-rv-label {
+  color: rgb(30 41 59);
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(148, 163, 184, 0.5);
+  box-shadow: 0 4px 10px rgba(148, 163, 184, 0.18);
+}
+
+.theme-light .vixo-rv-placeholder {
+  color: rgba(51, 65, 85, 0.92);
+  background: rgba(241, 245, 249, 0.72);
+}
+
+.theme-light .vixo-rv-chat-card {
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(203, 213, 225, 0.9);
+}
+
+.theme-light .vixo-rv-chat-wrap {
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  background: rgba(255, 255, 255, 0.82) !important;
+}
+
+.theme-light .vixo-rv-chat-input {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  color: rgb(30 41 59) !important;
+}
+
+.theme-light .vixo-rv-media-btn {
+  border-color: rgba(148, 163, 184, 0.75);
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(51, 65, 85, 0.98);
+}
+
+.theme-light #rv_online {
+  background: rgba(219, 234, 254, 0.9);
+  border-color: rgba(147, 197, 253, 0.95);
+  color: rgb(30 64 175);
+}
+
+.theme-light .vixo-rv-btn {
+  background: rgba(226, 232, 240, 0.95);
+  color: rgb(30 41 59);
+}
+
+.theme-light .vixo-rv-btn--primary {
+  color: #fff;
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.92), rgba(99, 102, 241, 0.92));
+  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.22);
+}
+
+.theme-light .vixo-rv-btn--danger {
+  color: rgba(153, 27, 27, 0.95);
+  background: rgba(254, 226, 226, 0.9);
+  border: 1px solid rgba(252, 165, 165, 0.85);
+}
+
+.theme-light .vixo-rv-btn--warn {
+  color: rgb(153 27 27);
+  background: rgba(254, 202, 202, 0.92);
+  border: 1px solid rgba(239, 68, 68, 0.88);
 }

@@ -10,7 +10,7 @@
         <!-- Full-card background -->
         <div class="absolute inset-0">
             {% if profile.cover_url %}
-                <img src="{{ profile.cover_url }}" alt="Profile background" class="absolute inset-0 w-full h-full object-cover" />
+                <img id="profile_cover_image" src="{{ profile.cover_url }}" alt="Profile background" class="absolute inset-0 w-full h-full object-cover" />
             {% else %}
                 <div class="absolute inset-0 bg-gradient-to-br from-purple-600/55 via-indigo-600/35 to-sky-600/55"></div>
             {% endif %}
@@ -62,13 +62,13 @@
                 {% endif %}
             </h1>
             <p class="text-gray-400">
-                <span class="{% if profile_user and profile_user.profile and profile_user.profile.is_founder_club %}founder{% endif %}">
-                    {% if profile_user and profile_user.profile and profile_user.profile.is_founder_club %}👑{% endif %}
+                <span class="{% if is_founder_effective %}founder{% endif %}">
+                    {% if is_founder_effective %}👑{% endif %}
                     @{{ profile.user.username }}
                 </span>
             </p>
 
-            {% if profile_user and profile_user.profile and profile_user.profile.is_founder_club %}
+            {% if is_founder_effective %}
                 <div class="mt-2">
                     <span class="inline-flex items-center gap-2 rounded-full border border-yellow-500/30 bg-yellow-500/10 px-3 py-1 text-[11px] font-extrabold text-yellow-200">
                         <span aria-hidden="true">👑</span>
@@ -150,22 +150,24 @@
                             class="w-full bg-gradient-to-r from-purple-500 via-indigo-500 to-sky-500 hover:from-purple-400 hover:via-indigo-400 hover:to-sky-400 text-white font-bold py-2 px-6 rounded-lg transition-colors">
                             {% if is_following %}
                                 Unfollow
-                            {% elif is_private and is_follow_requested %}
+                            {% elif is_follow_requested %}
                                 Requested
                             {% else %}
                                 Follow
                             {% endif %}
                         </button>
                     </form>
-                          <a
-                              href="{% url 'report-user' profile_user.username %}"
-                              hx-get="{% url 'report-user' profile_user.username %}?modal=1"
-                              hx-target="#global_modal_root"
-                              hx-swap="innerHTML"
-                              hx-push-url="false"
-                              class="block w-full text-center bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg transition-colors">
-                        Report
-                    </a>
+                          {% if not profile_user.is_superuser %}
+                              <a
+                                  href="{% url 'report-user' profile_user.username %}"
+                                  hx-get="{% url 'report-user' profile_user.username %}?modal=1"
+                                  hx-target="#global_modal_root"
+                                  hx-swap="innerHTML"
+                                  hx-push-url="false"
+                                  class="block w-full text-center bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg transition-colors">
+                            Report
+                        </a>
+                          {% endif %}
                 </div>
             {% endif %}
 
@@ -308,6 +310,22 @@
 
     {% if user.is_authenticated %}
         <script src="{% static 'js/profile_loader.js' %}" defer></script>
+        <script>
+            (function () {
+                try {
+                    const params = new URLSearchParams(window.location.search || '');
+                    const updated = (params.get('updated') || '').trim();
+                    if (!updated) return;
+
+                    const cover = document.getElementById('profile_cover_image');
+                    if (!cover) return;
+
+                    const u = new URL(cover.src, window.location.origin);
+                    u.searchParams.set('v', updated);
+                    cover.src = u.toString();
+                } catch {}
+            })();
+        </script>
     {% endif %}
 </wrapper>
 

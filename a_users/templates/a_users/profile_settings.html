@@ -50,6 +50,21 @@
                 {% endif %}
             </div>
         </div>
+
+        <div class="bg-gray-900/50 rounded-xl p-3.5 sm:p-5 border border-gray-700">
+            <div class="text-lg font-semibold text-gray-100 mb-2">Two-factor authentication (2FA)</div>
+            <p class="text-xs text-gray-400">Add one more verification step to secure your account.</p>
+
+            <div class="mt-4">
+                {% if mfa_enabled %}
+                    <a href="{{ mfa_settings_url }}" class="inline-flex w-full sm:w-auto justify-center items-center bg-gray-700 hover:bg-gray-600 text-white rounded-lg px-4 py-2 text-sm sm:text-base font-semibold transition-colors">Open 2FA settings</a>
+                    <p class="text-[11px] text-gray-500 mt-2">Set up authenticator app (TOTP) and recovery codes.</p>
+                {% else %}
+                    <p class="text-sm text-amber-300">2FA is currently unavailable on this server.</p>
+                    <p class="text-[11px] text-gray-500 mt-1">Ask admin to enable ALLAUTH_MFA_ENABLED and install MFA dependencies.</p>
+                {% endif %}
+            </div>
+        </div>
         </div>
 
         <div class="space-y-6">
@@ -98,9 +113,45 @@
             </form>
         </div>
 
+        <div class="bg-gray-900/50 rounded-xl p-3.5 sm:p-5 border border-gray-700">
+            <div class="text-lg font-semibold text-gray-100 mb-2">Preferred Location</div>
+            <p class="text-xs text-gray-400">Choose your city for local communities, events and nearby active rooms.</p>
+
+            <form method="post" action="{% url 'profile-settings' %}" class="mt-4 space-y-3">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="preferred_location" />
+
+                <div>
+                    <label class="text-xs text-gray-400" for="{{ location_form.location_query.id_for_label }}">City</label>
+                    {{ location_form.location_query }}
+                    {{ location_form.preferred_location_country }}
+                    {{ location_form.preferred_location_state }}
+                    {{ location_form.preferred_location_city }}
+                    <div id="settings_location_suggestions" class="hidden mt-2 rounded-xl border border-gray-700 bg-gray-900/95 max-h-44 overflow-auto"></div>
+                    {% if location_form.location_query.errors %}
+                        <div class="mt-1 text-xs text-red-400">{{ location_form.location_query.errors|first }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="text-xs text-gray-400">
+                    Current: {{ profile.preferred_location_city|default:'-' }}{% if profile.preferred_location_state %}, {{ profile.preferred_location_state }}{% endif %}{% if profile.preferred_location_country %}, {{ profile.preferred_location_country }}{% endif %}
+                </div>
+
+                {% if not location_can_change and location_next_available_at %}
+                    <div class="text-xs text-amber-300">
+                        You can update again after {{ location_next_available_at|date:"M d, Y h:i A" }}.
+                    </div>
+                {% endif %}
+
+                <button type="submit" class="inline-flex w-full sm:w-auto justify-center items-center bg-gray-700 hover:bg-gray-600 text-white rounded-lg px-4 py-2 text-sm font-semibold transition-colors" {% if not location_can_change %}disabled style="opacity:.55;cursor:not-allowed"{% endif %}>
+                    Save preferred location
+                </button>
+            </form>
+        </div>
+
         {% include 'a_users/partials/profile_privacy_section.html' %}
 
-        {% if profile.is_founder_club %}
+        {% if can_use_founder_ui %}
             <div class="bg-gray-900/50 rounded-xl p-3.5 sm:p-5 border border-gray-700">
                 <div class="text-lg font-semibold text-gray-100 mb-1">Glow Colors</div>
                 <p class="text-xs text-gray-400 mb-3">Pick one of 9 attractive thunder glow styles for your display name.</p>
@@ -139,6 +190,85 @@
         </div>
 
         <script>
+            (() => {
+                const input = document.getElementById('id_location_query');
+                const countryInput = document.getElementById('id_preferred_location_country');
+                const stateInput = document.getElementById('id_preferred_location_state');
+                const cityInput = document.getElementById('id_preferred_location_city');
+                const box = document.getElementById('settings_location_suggestions');
+                if (!input || !countryInput || !stateInput || !cityInput || !box) return;
+
+                const endpoint = "{% url 'profile-location-suggest' %}";
+                let timer = null;
+                let seq = 0;
+
+                const hide = () => {
+                    box.classList.add('hidden');
+                    box.innerHTML = '';
+                };
+
+                const render = (items) => {
+                    if (!items || !items.length) {
+                        hide();
+                        return;
+                    }
+                    box.innerHTML = '';
+                    items.forEach((item) => {
+                        const button = document.createElement('button');
+                        button.type = 'button';
+                        button.className = 'w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-gray-800';
+                        button.textContent = String(item.label || '');
+                        button.dataset.city = String(item.city || '');
+                        button.dataset.state = String(item.state || '');
+                        button.dataset.country = String(item.country || '');
+                        button.dataset.label = String(item.label || '');
+                        box.appendChild(button);
+                    });
+                    box.classList.remove('hidden');
+                };
+
+                const run = async () => {
+                    const q = (input.value || '').trim();
+                    if (q.length < 2) {
+                        hide();
+                        return;
+                    }
+                    const mySeq = ++seq;
+                    try {
+                        const res = await fetch(`${endpoint}?q=${encodeURIComponent(q)}`, { credentials: 'same-origin' });
+                        if (mySeq !== seq || !res.ok) return;
+                        const data = await res.json();
+                        if (mySeq !== seq) return;
+                        render(Array.isArray(data.results) ? data.results : []);
+                    } catch {
+                        hide();
+                    }
+                };
+
+                input.addEventListener('input', () => {
+                    countryInput.value = '';
+                    stateInput.value = '';
+                    cityInput.value = '';
+                    if (timer) clearTimeout(timer);
+                    timer = setTimeout(run, 220);
+                });
+
+                box.addEventListener('click', (ev) => {
+                    const button = ev.target.closest('button[data-city]');
+                    if (!button) return;
+                    input.value = button.getAttribute('data-label') || '';
+                    cityInput.value = button.getAttribute('data-city') || '';
+                    stateInput.value = button.getAttribute('data-state') || '';
+                    countryInput.value = button.getAttribute('data-country') || '';
+                    hide();
+                });
+
+                document.addEventListener('click', (ev) => {
+                    if (ev.target === input || box.contains(ev.target)) return;
+                    hide();
+                });
+            })();
+
             (() => {
                 const usernameInput = document.getElementById('id_username') || document.querySelector('input[name="username"]');
                 const usernameIcon = document.getElementById('username_status_icon');

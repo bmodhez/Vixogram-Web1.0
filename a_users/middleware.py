@@ -47,6 +47,28 @@ class FounderClubEnforcementMiddleware:
         if user is not None and getattr(user, 'is_authenticated', False):
             try:
                 profile = getattr(user, 'profile', None)
+                if profile and bool(getattr(user, 'is_superuser', False)):
+                    updates = []
+                    if not bool(getattr(profile, 'is_founder_club', False)):
+                        profile.is_founder_club = True
+                        updates.append('is_founder_club')
+                    if not getattr(profile, 'founder_club_granted_at', None):
+                        profile.founder_club_granted_at = timezone.now()
+                        updates.append('founder_club_granted_at')
+                    if getattr(profile, 'founder_club_revoked_at', None) is not None:
+                        profile.founder_club_revoked_at = None
+                        updates.append('founder_club_revoked_at')
+                    if getattr(profile, 'founder_club_reapply_available_at', None) is not None:
+                        profile.founder_club_reapply_available_at = None
+                        updates.append('founder_club_reapply_available_at')
+                    today = timezone.localdate()
+                    if getattr(profile, 'founder_club_last_checked', None) != today:
+                        profile.founder_club_last_checked = today
+                        updates.append('founder_club_last_checked')
+                    if updates:
+                        profile.save(update_fields=updates)
+                    return self.get_response(request)
+
                 if profile and bool(getattr(profile, 'is_founder_club', False)):
                     today = timezone.localdate()
                     last_checked = getattr(profile, 'founder_club_last_checked', None)

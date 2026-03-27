@@ -43,6 +43,9 @@ For UX: click '+' opens the emoji bar.
                 {% if message.author == user and chat_group.is_private %}
                     <button
                         type="button"
+                        data-message-info
+                        data-message-id="{{ message.id }}"
+                        data-message-info-url="{% url 'message-info' message.id %}?modal=1"
                         hx-get="{% url 'message-info' message.id %}?modal=1"
                         hx-target="#global_modal_root"
                         hx-swap="innerHTML"
@@ -83,10 +86,11 @@ For UX: click '+' opens the emoji bar.
                 {% endif %}
 
                 {% if user.is_staff and message.author != user and not message.author.is_superuser %}
-                    <form method="post" action="{% url 'admin-user-toggle-block' message.author.id %}">
+                    <form method="post" action="{% url 'admin-user-toggle-block' message.author.id %}" data-chat-block-toggle-form="1">
                         {% csrf_token %}
                         <input type="hidden" name="next" value="{% url 'chatroom' chat_group.group_name %}" />
                         <button type="submit"
+                            data-chat-block-toggle-btn="1"
                             class="w-full text-left px-3 py-2 text-[11px] text-gray-200 hover:bg-gray-800/60">
                             {% if message.author.profile.chat_blocked %}Unblock user{% else %}Block user{% endif %}
                         </button>

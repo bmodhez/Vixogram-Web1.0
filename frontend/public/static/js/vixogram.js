@@ -72,6 +72,18 @@
           ? '<span class="inline-flex items-center gap-2"><span aria-hidden="true">☀️</span><span class="hidden sm:inline">Light</span></span>'
           : '<span class="inline-flex items-center gap-2"><span aria-hidden="true">🌙</span><span class="hidden sm:inline">Dark</span></span>';
       }
+
+      const themedLogos = Array.from(document.querySelectorAll('[data-theme-logo]'));
+      themedLogos.forEach((img) => {
+        if (!img || !img.getAttribute) return;
+        const darkSrc = String(img.getAttribute('data-logo-dark') || '').trim();
+        const lightSrc = String(img.getAttribute('data-logo-light') || '').trim();
+        const nextSrc = (t === 'light' && lightSrc) ? lightSrc : darkSrc;
+        if (!nextSrc) return;
+        if (img.getAttribute('src') !== nextSrc) {
+          img.setAttribute('src', nextSrc);
+        }
+      });
     } catch {
       // ignore
     }
@@ -92,6 +104,10 @@
   applyTheme(getStoredTheme());
 
   function initThemeToggle() {
+    // Re-apply theme after DOM is ready so theme-dependent elements
+    // (like logos rendered in templates) always sync on refresh.
+    applyTheme(getStoredTheme());
+
     const btn = document.getElementById('theme_toggle');
     if (!btn) return;
     btn.addEventListener('click', (e) => {
@@ -905,6 +921,21 @@
     });
   }
 
+  // Expose image viewer close function globally for one-time photo countdown timer
+  window.closeImageViewer = window.closeImageViewer || (() => {
+    const modal = document.getElementById('image-viewer');
+    const img = document.getElementById('image-viewer-img');
+    if (!modal || !img) return;
+    try {
+      modal.classList.add('hidden');
+      modal.setAttribute('aria-hidden', 'true');
+      img.src = '';
+      img.alt = '';
+    } catch (e) {
+      // Silently ignore errors
+    }
+  });
+
   function initVideoViewer() {
     const modal = document.getElementById('video-viewer');
     const video = document.getElementById('video-viewer-video');
@@ -988,11 +1019,12 @@
         const title = (elt && elt.getAttribute) ? (elt.getAttribute('data-confirm-title') || 'Confirm') : 'Confirm';
         window.__openConfirm({
           title,
-          message: question,
+          message: String(question),
           onConfirm: () => {
             try {
-              if (typeof e.detail.issueRequest === 'function') e.detail.issueRequest(true);
-              else if (typeof e.detail.issueRequest === 'function') e.detail.issueRequest();
+              if (typeof e.detail.issueRequest === 'function') {
+                e.detail.issueRequest(true);
+              }
             } catch {
               // ignore
             }
@@ -1002,15 +1034,6 @@
         // ignore
       }
     });
-  }
-
-  function escapeHtml(str) {
-    return String(str)
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#039;');
   }
 
   function initAuthenticatedNotifiers(baseCfg) {
@@ -2128,6 +2151,31 @@
   function initGlobalAnnouncementSocket() {
     const banner = document.getElementById('global-announcement-banner');
     if (!banner) return;
+    const marqueeTrack = banner.querySelector('.vixo-marquee-track');
+
+    const setMarqueePaused = (paused) => {
+      if (!marqueeTrack) return;
+      if (paused) marqueeTrack.classList.add('is-paused');
+      else marqueeTrack.classList.remove('is-paused');
+    };
+
+    // Desktop hover is handled by CSS; this adds mobile/pen press-and-hold pause.
+    const bindMarqueePauseEvents = () => {
+      try {
+        banner.addEventListener('touchstart', () => setMarqueePaused(true), { passive: true });
+        banner.addEventListener('touchend', () => setMarqueePaused(false), { passive: true });
+        banner.addEventListener('touchcancel', () => setMarqueePaused(false), { passive: true });
+        banner.addEventListener('pointerdown', (event) => {
+          if (event && event.pointerType && event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
+          setMarqueePaused(true);
+        }, { passive: true });
+        banner.addEventListener('pointerup', () => setMarqueePaused(false), { passive: true });
+        banner.addEventListener('pointercancel', () => setMarqueePaused(false), { passive: true });
+      } catch {
+        // ignore
+      }
+    };
+    bindMarqueePauseEvents();
 
     // Prevent duplicates (in case this script is loaded twice).
     if (window.__globalAnnouncementSocketStarted) return;
@@ -2162,13 +2210,75 @@
       __gaReconnectTimer = setTimeout(() => { __gaReconnectTimer = null; connectFn(); }, delay);
     };
 
-    const applyState = (active, message) => {
+    const __GA_URL_RE = /((?:https?:\/\/|www\.)[^\s<]+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<]*)?)/gi;
+
+    const __gaNormalizeHref = (rawUrl) => {
+      const value = String(rawUrl || '').trim();
+      if (!value) return '';
+      return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    };
+
+    const __gaRenderMessage = (el, text) => {
+      if (!el) return;
+      const input = String(text || '');
+      __GA_URL_RE.lastIndex = 0;
+      let cursor = 0;
+      let match;
+
+      el.textContent = '';
+
+      while ((match = __GA_URL_RE.exec(input)) !== null) {
+        const start = match.index;
+        let token = match[0] || '';
+        let suffix = '';
+
+        while (token && /[),.;!?]$/.test(token)) {
+          suffix = token.slice(-1) + suffix;
+          token = token.slice(0, -1);
+        }
+
+        if (!token) continue;
+
+        if (start > cursor) {
+          el.appendChild(document.createTextNode(input.slice(cursor, start)));
+        }
+
+        const link = document.createElement('a');
+        link.href = __gaNormalizeHref(token);
+        link.textContent = token;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer nofollow';
+        link.className = 'text-cyan-300 hover:text-cyan-200 no-underline';
+        el.appendChild(link);
+
+        if (suffix) {
+          el.appendChild(document.createTextNode(suffix));
+        }
+
+        cursor = start + (match[0] || '').length;
+      }
+
+      if (cursor < input.length) {
+        el.appendChild(document.createTextNode(input.slice(cursor)));
+      }
+    };
+
+    const applyState = (active, prefix, message) => {
       const text = String(message || '');
+      const label = String(prefix || 'Team Vixogram:').trim() || 'Team Vixogram:';
       const shouldShow = Boolean(active) && text.trim().length > 0;
 
       try {
+        banner.querySelectorAll('.global-announcement-prefix').forEach((el) => {
+          el.textContent = label;
+        });
+      } catch {
+        // ignore
+      }
+
+      try {
         banner.querySelectorAll('.global-announcement-msg').forEach((el) => {
-          el.textContent = text;
+          __gaRenderMessage(el, text);
         });
       } catch {
         // ignore
@@ -2208,7 +2318,7 @@
         let payload;
         try { payload = JSON.parse(event.data); } catch { return; }
         if (!payload || payload.type !== 'global_announcement') return;
-        applyState(payload.active, payload.message);
+        applyState(payload.active, payload.prefix, payload.message);
       };
 
       socket.onclose = () => {
@@ -2532,6 +2642,7 @@
         let index = 0;
         let startedAt = 0;
         let tickTimer = null;
+        let safetyTimeout = null;
 
         // Hold-to-pause (desktop + mobile via Pointer Events)
         // Also suppress the synthetic click fired after a long-press release.
@@ -2602,7 +2713,7 @@
               </span>
             </button>
 
-            <div data-story-delete-confirm class="hidden absolute inset-0 z-[6] bg-black/70 backdrop-blur-[1px]">
+            <div data-story-delete-confirm class="hidden absolute inset-0 z-[60] bg-black/70 backdrop-blur-[1px]">
               <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-white/10 bg-gray-950/95 p-4 shadow-2xl shadow-black/60">
                 <div class="text-sm font-semibold text-white">Delete this story?</div>
                 <div class="mt-1 text-xs text-white/70" data-story-delete-countdown>Deleting in 5s…</div>
@@ -2671,7 +2782,7 @@
         const isInteractiveHoldIgnore = (target) => {
           try {
             if (!target || !target.closest) return false;
-            return !!target.closest('[data-story-menu-btn],[data-story-menu-panel],[data-story-delete-confirm],[data-story-delete-now],[data-story-delete-cancel]');
+            return !!target.closest('[data-story-close],[data-story-menu-btn],[data-story-menu-panel],[data-story-delete-confirm],[data-story-delete-now],[data-story-delete-cancel]');
           } catch {
             return false;
           }
@@ -2726,6 +2837,7 @@
         root.addEventListener('click', (e) => {
           try {
             if (Date.now() < (suppressClickUntil || 0)) {
+              if (isInteractiveHoldIgnore(e.target)) return;
               e.preventDefault();
               e.stopPropagation();
             }
@@ -2765,6 +2877,10 @@
             try { window.clearInterval(tickTimer); } catch {}
             tickTimer = null;
           }
+          if (safetyTimeout) {
+            try { window.clearTimeout(safetyTimeout); } catch {}
+            safetyTimeout = null;
+          }
         };
 
         let deleteTimer = null;
@@ -2785,16 +2901,22 @@
           cleanupTimers();
           try { window.removeEventListener('keydown', onKeyDown); } catch {}
           try {
+            // Immediate visual close: remove from DOM quickly.
             const panel = root.querySelector('[data-story-panel]');
             root.classList.add('opacity-0');
             if (panel) {
               panel.classList.add('opacity-0', 'translate-y-1', 'scale-[0.985]');
             }
           } catch {}
+          // Remove DOM element after short delay for fade animation.
           window.setTimeout(() => {
-            try { root.remove(); } catch {}
+            try {
+              if (root && root.parentNode) {
+                root.remove();
+              }
+            } catch {}
             try { document.body.style.overflow = ''; } catch {}
-          }, 190);
+          }, 200);
         };
 
         const setSegment = (i, pct) => {
@@ -2880,6 +3002,26 @@
           pausePlayback();
         };
 
+        const syncStoryAddMenuState = (state) => {
+          const canAdd = !!(state && state.can_add_story);
+          const msg = String((state && state.limit_message) || 'Free plan limited to 1 story.').trim() || 'Free plan limited to 1 story.';
+          try {
+            document.querySelectorAll('[data-story-add-link]').forEach((el) => {
+              try { el.classList.toggle('hidden', !canAdd); } catch {}
+            });
+            document.querySelectorAll('[data-story-add-disabled]').forEach((el) => {
+              try { el.classList.toggle('hidden', canAdd); } catch {}
+              try { el.setAttribute('title', msg); } catch {}
+            });
+            document.querySelectorAll('[data-story-add-limit]').forEach((el) => {
+              try { el.classList.toggle('hidden', canAdd); } catch {}
+              try { el.textContent = msg; } catch {}
+            });
+          } catch {
+            // ignore
+          }
+        };
+
         const performDelete = async () => {
           const storyId = getCurrentStoryId();
           if (!storyId) {
@@ -2920,6 +3062,21 @@
             showMiniToast('Delete failed.');
             hideDeleteConfirm();
             return;
+          }
+
+          let deleteData = null;
+          try {
+            deleteData = await res.json();
+          } catch {
+            deleteData = null;
+          }
+
+          try {
+            if (deleteData && deleteData.story_upload) {
+              syncStoryAddMenuState(deleteData.story_upload);
+            }
+          } catch {
+            // ignore
           }
 
           showMiniToast('Story deleted.');
@@ -3033,9 +3190,20 @@
             const pct = (elapsed / getItemDurationMs(item)) * 100;
             setSegment(index, pct);
             if (elapsed >= getItemDurationMs(item)) {
-              goNext();
+              goNext({ auto: true });
             }
           }, 50);
+
+          // Safety fallback: ensure story advances/closes even if tick interval fails.
+          window.setTimeout(() => {
+            if (index === items.length - 1) {
+              // Must be last story in viewer; auto-close.
+              close();
+            } else if (index < items.length - 1) {
+              // Not last story; ensure we advance.
+              goNext({ auto: true });
+            }
+          }, getItemDurationMs(item) + 500);
         };
 
         const goPrev = () => {
@@ -3051,14 +3219,16 @@
           show(index - 1);
         };
 
-        const goNext = () => {
-          if (Date.now() < (suppressClickUntil || 0)) return;
-          try {
-            if (menuPanel && !menuPanel.classList.contains('hidden')) return;
-            if (deleteConfirm && !deleteConfirm.classList.contains('hidden')) return;
-          } catch {}
+        const goNext = ({ auto = false } = {}) => {
+          if (!auto && Date.now() < (suppressClickUntil || 0)) return;
+          if (!auto) {
+            try {
+              if (menuPanel && !menuPanel.classList.contains('hidden')) return;
+              if (deleteConfirm && !deleteConfirm.classList.contains('hidden')) return;
+            } catch {}
+          }
           if (index >= items.length - 1) {
-            close();
+            if (auto) close();
             return;
           }
           show(index + 1);
@@ -3086,7 +3256,18 @@
           if (k === 'ArrowRight') { goNext(); return; }
         };
 
-        if (closeBtn) closeBtn.addEventListener('click', close);
+        if (closeBtn) {
+          closeBtn.addEventListener('pointerup', (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            close();
+          });
+          closeBtn.addEventListener('click', (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            close();
+          });
+        }
         if (menuBtn) {
           try { menuBtn.classList.toggle('hidden', !canDelete); } catch {}
           menuBtn.addEventListener('click', (e) => {
@@ -3113,6 +3294,11 @@
           });
         }
         if (deleteCancel) {
+          deleteCancel.addEventListener('pointerup', (e) => {
+            try { e.preventDefault(); } catch {}
+            try { e.stopPropagation(); } catch {}
+            hideDeleteConfirm();
+          });
           deleteCancel.addEventListener('click', (e) => {
             try { e.preventDefault(); } catch {}
             try { e.stopPropagation(); } catch {}
@@ -3247,3 +3433,18 @@
     initAuthenticatedNotifiers(baseCfg);
   });
 })();
+
+  // Expose image viewer close function globally for one-time photo countdown timer
+  window.closeImageViewer = window.closeImageViewer || (() => {
+    const modal = document.getElementById('image-viewer');
+    const img = document.getElementById('image-viewer-img');
+    if (!modal || !img) return;
+    try {
+      modal.classList.add('hidden');
+      modal.setAttribute('aria-hidden', 'true');
+      img.src = '';
+      img.alt = '';
+    } catch (e) {
+      // Silently ignore errors
+    }
+  });

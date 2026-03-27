@@ -24,8 +24,19 @@ class PrivateChatGroupAdmin(admin.ModelAdmin):
 
 @admin.register(GroupMessage)
 class GroupMessageAdmin(admin.ModelAdmin):
-	list_display = ('sr_no', 'id', 'group', 'author', 'created', 'body', 'file_caption', 'file')
-	list_filter = ('created',)
+	list_display = (
+		'sr_no',
+		'id',
+		'group',
+		'author',
+		'created',
+		'is_support_submission',
+		'support_submission_type',
+		'body',
+		'file_caption',
+		'file',
+	)
+	list_filter = ('created', 'is_support_submission', 'support_submission_type')
 	search_fields = ('body', 'author__username', 'group__group_name', 'group__room_code')
 
 	class VixoChangeList(ChangeList):

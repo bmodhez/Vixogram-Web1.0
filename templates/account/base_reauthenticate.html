@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+{% load allauth %}
+{% load i18n %}
+{% load static %}
+
+{% block head_title %}
+    {% trans "Confirm Access" %}
+{% endblock head_title %}
+
+{% block content %}
+<div class="w-full max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+    {% if messages %}
+        <div class="space-y-2 mb-4">
+            {% for message in messages %}
+                <div class="rounded-lg border border-gray-700 bg-gray-800/70 px-3 py-2 text-sm text-gray-100">{{ message }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <div class="vixo-reauth-phone-wrap">
+        <div class="vixo-reauth-phone">
+            <img src="{% static 'phonevirt.png' %}" alt="Phone" class="vixo-reauth-phone-img" />
+
+            <div class="vixo-reauth-screen">
+                <div class="vixo-reauth-screen-inner">
+                    <h1>{% trans "Confirm Access" %}</h1>
+                    <p class="vixo-reauth-sub">{% blocktranslate %}Please reauthenticate to safeguard your account.{% endblocktranslate %}</p>
+
+                    {% block reauthenticate_content %}{% endblock %}
+
+                    {% if reauthentication_alternatives %}
+                        <hr>
+                        <h2>{% translate "Alternative options" %}</h2>
+                        <div class="vixo-reauth-alt-grid">
+                            {% for alt in reauthentication_alternatives %}
+                                <a href="{{ alt.url }}" class="vixo-reauth-btn vixo-reauth-btn--secondary">{{ alt.description }}</a>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .vixo-reauth-phone-wrap { display:flex; justify-content:center; }
+    .vixo-reauth-phone { position:relative; width:min(100%, 430px); }
+    .vixo-reauth-phone-img { width:100%; height:auto; display:block; pointer-events:none; user-select:none; }
+    .vixo-reauth-screen {
+        position:absolute;
+        left:16.2%; right:16.2%; top:8.8%; bottom:8.8%;
+        border-radius:1.25rem;
+        overflow:hidden;
+        z-index:2;
+    }
+    .vixo-reauth-screen-inner {
+        height:100%;
+        overflow-y:auto;
+        padding:.95rem .8rem 1.05rem;
+        background:linear-gradient(180deg, rgba(2, 6, 23, 0.68), rgba(2, 6, 23, 0.5));
+        text-align:center;
+    }
+    .vixo-reauth-screen-inner h1 {
+        margin:0 0 .55rem;
+        font-size:1.2rem;
+        line-height:1.2;
+        font-weight:800;
+        color:#e5e7eb;
+    }
+    .vixo-reauth-screen-inner h2 {
+        margin:.65rem 0 .5rem;
+        font-size:1rem;
+        line-height:1.2;
+        font-weight:700;
+        color:#f3f4f6;
+    }
+    .vixo-reauth-sub,
+    .vixo-reauth-screen-inner p,
+    .vixo-reauth-screen-inner li,
+    .vixo-reauth-screen-inner label,
+    .vixo-reauth-screen-inner div {
+        color:#cbd5e1;
+    }
+    .vixo-reauth-screen-inner form { margin-top:.65rem; }
+    .vixo-reauth-screen-inner input,
+    .vixo-reauth-screen-inner select,
+    .vixo-reauth-screen-inner textarea {
+        width:100%;
+        border-radius:.75rem;
+        border:1px solid rgba(107, 114, 128, .8);
+        background:rgba(3, 7, 18, .75);
+        color:#f3f4f6;
+        padding:.62rem .75rem;
+        outline:none;
+    }
+    .vixo-reauth-screen-inner input:focus,
+    .vixo-reauth-screen-inner select:focus,
+    .vixo-reauth-screen-inner textarea:focus {
+        border-color:rgba(99, 102, 241, .75);
+        box-shadow:0 0 0 2px rgba(99, 102, 241, .25);
+    }
+    .vixo-reauth-btn,
+    .vixo-reauth-screen-inner button,
+    .vixo-reauth-screen-inner input[type='submit'] {
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        border-radius:.7rem;
+        border:1px solid rgba(79, 70, 229, .5);
+        background:linear-gradient(90deg, rgba(139, 92, 246, .95), rgba(79, 70, 229, .95));
+        color:#fff !important;
+        text-decoration:none;
+        padding:.52rem .86rem;
+        font-size:.86rem;
+        font-weight:700;
+        cursor:pointer;
+        margin-top:.45rem;
+    }
+    .vixo-reauth-btn--secondary {
+        border-color: rgba(107, 114, 128, .8);
+        background: rgba(31, 41, 55, .9);
+    }
+    .vixo-reauth-alt-grid {
+        display:flex;
+        flex-wrap:wrap;
+        justify-content:center;
+        gap:.45rem;
+    }
+    .vixo-reauth-screen-inner .errorlist,
+    .vixo-reauth-screen-inner .errorlist li,
+    .vixo-reauth-screen-inner .text-red-500,
+    .vixo-reauth-screen-inner .text-danger,
+    .vixo-reauth-screen-inner .alert-danger {
+        color:#ef4444 !important;
+        font-weight:700 !important;
+    }
+    .vixo-reauth-screen-inner hr {
+        border:0;
+        border-top:1px solid rgba(75,85,99,.8);
+        margin:.7rem 0;
+    }
+    .vixo-reauth-screen-inner::-webkit-scrollbar { width:6px; }
+    .vixo-reauth-screen-inner::-webkit-scrollbar-thumb { background: rgba(148,163,184,.35); border-radius:999px; }
+</style>
+{% endblock content %}

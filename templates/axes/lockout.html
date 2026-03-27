@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Account Locked | Vixogram</title>
+    <style>
+        :root {
+            --bg-1: #040a1b;
+            --bg-2: #0b1328;
+            --card: rgba(10, 18, 38, 0.9);
+            --border: rgba(148, 163, 184, 0.2);
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --danger: #f43f5e;
+            --accent: #22d3ee;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(1200px 600px at 10% -10%, rgba(34, 211, 238, 0.15), transparent 50%),
+                radial-gradient(1000px 500px at 90% 110%, rgba(244, 63, 94, 0.12), transparent 55%),
+                linear-gradient(180deg, var(--bg-1), var(--bg-2));
+            display: grid;
+            place-items: center;
+            padding: 24px;
+        }
+
+        .card {
+            width: 100%;
+            max-width: 560px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 26px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(4px);
+        }
+
+        .badge {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #fecdd3;
+            background: rgba(244, 63, 94, 0.15);
+            border: 1px solid rgba(244, 63, 94, 0.35);
+            border-radius: 999px;
+            padding: 6px 10px;
+        }
+
+        h1 {
+            margin: 14px 0 10px;
+            font-size: clamp(22px, 3vw, 30px);
+            line-height: 1.2;
+        }
+
+        p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.65;
+        }
+
+        .meta {
+            margin-top: 18px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px dashed rgba(148, 163, 184, 0.35);
+            color: #cbd5e1;
+            font-size: 14px;
+        }
+
+        .actions {
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            border: 1px solid transparent;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            color: #03111c;
+            background: linear-gradient(135deg, #22d3ee, #67e8f9);
+        }
+
+        .btn-ghost {
+            color: #cbd5e1;
+            border-color: rgba(148, 163, 184, 0.35);
+            background: rgba(2, 6, 23, 0.5);
+        }
+
+        .hint {
+            margin-top: 14px;
+            font-size: 13px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+    <main class="card" role="main" aria-live="polite">
+        <span class="badge">Security Lockout</span>
+        <h1>Too many login attempts</h1>
+        <p>
+            Your admin login is temporarily blocked to protect your account from brute-force attempts.
+            Please wait and try again later.
+        </p>
+
+        <div class="meta">
+            Lockout duration: <strong>{{ cooloff_hours }} hour{{ cooloff_hours|pluralize }}</strong>
+        </div>
+
+        <div class="actions">
+            <a class="btn btn-primary" href="{{ retry_path|default:'/' }}">Try again later</a>
+            <button class="btn btn-ghost" type="button" onclick="window.location.reload()">Refresh</button>
+        </div>
+
+        <div class="hint">
+            If this was not you, change your password and keep 2FA enabled.
+        </div>
+    </main>
+</body>
+</html>

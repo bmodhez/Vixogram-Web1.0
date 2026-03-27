@@ -63,6 +63,12 @@
       submitBtn.classList.toggle('cursor-not-allowed', !hasFile);
     };
 
+    const updateSelectButtonState = () => {
+      if (!selectBtn) return;
+      const hasFile = !!(input.files && input.files[0]);
+      selectBtn.textContent = hasFile ? 'Change image' : 'Select image';
+    };
+
     const destroy = () => {
       try {
         if (cropper) cropper.destroy();
@@ -90,6 +96,7 @@
         if (fileName) fileName.textContent = 'No image selected';
         wrap.classList.add('hidden');
         destroy();
+        updateSelectButtonState();
         updateSubmitState();
         return;
       }
@@ -151,9 +158,11 @@
         // Ignore
       }
 
+      updateSelectButtonState();
       updateSubmitState();
     });
 
+    updateSelectButtonState();
     updateSubmitState();
 
     if (resetBtn) {

@@ -147,6 +147,142 @@ VPN_PROXY_WARNING_MESSAGE = (
 )
 
 
+def _ws_counter_ttl() -> int:
+    try:
+        return max(30, int(getattr(settings, 'WS_CONNECTION_COUNTER_TTL', 120)))
+    except Exception:
+        return 120
+
+
+def _ws_bucket_from_scope(scope) -> str:
+    try:
+        path = str(scope.get('path') or '').strip()
+    except Exception:
+        path = ''
+
+    if path.startswith('/ws/chatroom/'):
+        return 'chatroom'
+    if path.startswith('/ws/online-status/'):
+        return 'online_status'
+    if path.startswith('/ws/notify/'):
+        return 'notifications'
+    if path.startswith('/ws/presence/'):
+        return 'profile_presence'
+    if path.startswith('/ws/global-announcement/'):
+        return 'global_announcement'
+    return 'other'
+
+
+def _ws_bucket_limit(bucket: str) -> int:
+    mapping = {
+        'chatroom': int(getattr(settings, 'WS_CHATROOM_CONNECTION_LIMIT', 0) or 0),
+        'online_status': int(getattr(settings, 'WS_ONLINE_STATUS_CONNECTION_LIMIT', 0) or 0),
+        'notifications': int(getattr(settings, 'WS_NOTIFICATIONS_CONNECTION_LIMIT', 0) or 0),
+        'profile_presence': int(getattr(settings, 'WS_PROFILE_PRESENCE_CONNECTION_LIMIT', 0) or 0),
+        'global_announcement': int(getattr(settings, 'WS_GLOBAL_ANNOUNCEMENT_CONNECTION_LIMIT', 0) or 0),
+    }
+    try:
+        return max(0, int(mapping.get(bucket, 0) or 0))
+    except Exception:
+        return 0
+
+
+def _ws_global_limit() -> int:
+    try:
+        return max(0, int(getattr(settings, 'WS_GLOBAL_CONNECTION_LIMIT', 0) or 0))
+    except Exception:
+        return 0
+
+
+def _ws_connect_rate_allowed(scope) -> bool:
+    try:
+        limit = max(0, int(getattr(settings, 'WS_CONNECT_RATE_LIMIT', 0) or 0))
+        period = max(1, int(getattr(settings, 'WS_CONNECT_RATE_PERIOD', 10) or 10))
+    except Exception:
+        return True
+
+    if limit <= 0:
+        return True
+
+    ip = get_client_ip_from_scope(scope)
+    key = make_key('ws_connect', ip)
+    try:
+        result = check_rate_limit(key, limit=limit, period_seconds=period)
+        return bool(result.allowed)
+    except Exception:
+        return True
+
+
+def _ws_try_enter(scope) -> tuple[bool, str, bool, bool]:
+    """Return (allowed, bucket, global_incremented, bucket_incremented)."""
+    bucket = _ws_bucket_from_scope(scope)
+    ttl = _ws_counter_ttl()
+    global_key = 'rtchat:ws:active:global'
+    bucket_key = f'rtchat:ws:active:{bucket}'
+
+    global_incremented = False
+    bucket_incremented = False
+
+    try:
+        cache.add(global_key, 0, timeout=ttl)
+    except Exception:
+        pass
+    try:
+        cache.add(bucket_key, 0, timeout=ttl)
+    except Exception:
+        pass
+
+    try:
+        global_now = int(cache.incr(global_key))
+        global_incremented = True
+    except Exception:
+        global_now = int(cache.get(global_key) or 0) + 1
+        cache.set(global_key, global_now, timeout=ttl)
+        global_incremented = True
+
+    try:
+        bucket_now = int(cache.incr(bucket_key))
+        bucket_incremented = True
+    except Exception:
+        bucket_now = int(cache.get(bucket_key) or 0) + 1
+        cache.set(bucket_key, bucket_now, timeout=ttl)
+        bucket_incremented = True
+
+    try:
+        cache.set(global_key, global_now, timeout=ttl)
+        cache.set(bucket_key, bucket_now, timeout=ttl)
+    except Exception:
+        pass
+
+    g_limit = _ws_global_limit()
+    b_limit = _ws_bucket_limit(bucket)
+    allowed = (g_limit <= 0 or global_now <= g_limit) and (b_limit <= 0 or bucket_now <= b_limit)
+    return allowed, bucket, global_incremented, bucket_incremented
+
+
+def _ws_leave(bucket: str | None, global_incremented: bool, bucket_incremented: bool) -> None:
+    ttl = _ws_counter_ttl()
+    global_key = 'rtchat:ws:active:global'
+    bucket_name = str(bucket or '').strip() or 'other'
+    bucket_key = f'rtchat:ws:active:{bucket_name}'
+
+    if global_incremented:
+        try:
+            g_now = int(cache.get(global_key) or 0)
+            g_new = max(0, g_now - 1)
+            cache.set(global_key, g_new, timeout=ttl)
+        except Exception:
+            pass
+
+    if bucket_incremented:
+        try:
+            b_now = int(cache.get(bucket_key) or 0)
+            b_new = max(0, b_now - 1)
+            cache.set(bucket_key, b_new, timeout=ttl)
+        except Exception:
+            pass
+
+
 class GlobalAnnouncementConsumer(WebsocketConsumer):
     """Site-wide global announcement banner updates (real-time).
 
@@ -160,17 +296,46 @@ class GlobalAnnouncementConsumer(WebsocketConsumer):
         try:
             ann = GlobalAnnouncement.objects.filter(pk=1).first()
             if not ann:
-                return {'active': False, 'message': ''}
+                return {'active': False, 'prefix': 'Team Vixogram:', 'message': ''}
+            prefix = (ann.prefix or '').strip() or 'Team Vixogram:'
             msg = (ann.message or '').strip()
             active = bool(ann.is_active and msg)
-            return {'active': active, 'message': msg if active else ''}
+            return {'active': active, 'prefix': prefix, 'message': msg if active else ''}
         except Exception:
-            return {'active': False, 'message': ''}
+            return {'active': False, 'prefix': 'Team Vixogram:', 'message': ''}
 
     def connect(self):
+        self._ws_bucket = None
+        self._ws_global_inc = False
+        self._ws_bucket_inc = False
+
+        if not _ws_connect_rate_allowed(self.scope):
+            try:
+                self.close(code=4429)
+            except Exception:
+                self.close()
+            return
+
+        allowed, bucket, g_inc, b_inc = _ws_try_enter(self.scope)
+        self._ws_bucket = bucket
+        self._ws_global_inc = g_inc
+        self._ws_bucket_inc = b_inc
+        if not allowed:
+            _ws_leave(self._ws_bucket, self._ws_global_inc, self._ws_bucket_inc)
+            self._ws_global_inc = False
+            self._ws_bucket_inc = False
+            try:
+                self.close(code=4429)
+            except Exception:
+                self.close()
+            return
+
         try:
             self.accept()
         except Exception:
+            _ws_leave(self._ws_bucket, self._ws_global_inc, self._ws_bucket_inc)
+            self._ws_global_inc = False
+            self._ws_bucket_inc = False
             return
 
         try:
@@ -185,6 +350,9 @@ class GlobalAnnouncementConsumer(WebsocketConsumer):
             return
 
     def disconnect(self, close_code):
+        _ws_leave(getattr(self, '_ws_bucket', None), bool(getattr(self, '_ws_global_inc', False)), bool(getattr(self, '_ws_bucket_inc', False)))
+        self._ws_global_inc = False
+        self._ws_bucket_inc = False
         try:
             async_to_sync(self.channel_layer.group_discard)(self.group_name, self.channel_name)
         except Exception:
@@ -208,11 +376,13 @@ class GlobalAnnouncementConsumer(WebsocketConsumer):
 
     def global_announcement_handler(self, event):
         try:
+            prefix = (event.get('prefix') or '').strip() or 'Team Vixogram:'
             msg = (event.get('message') or '').strip()
             active = bool(event.get('active') and msg)
             self.send(text_data=json.dumps({
                 'type': 'global_announcement',
                 'active': active,
+                'prefix': prefix,
                 'message': msg if active else '',
             }))
         except Exception:
@@ -845,6 +1015,31 @@ class ChatroomConsumer(WebsocketConsumer):
             except Exception:
                 pass
     def connect(self):
+        self._ws_bucket = None
+        self._ws_global_inc = False
+        self._ws_bucket_inc = False
+
+        if not _ws_connect_rate_allowed(self.scope):
+            try:
+                self.close(code=4429)
+            except Exception:
+                self.close()
+            return
+
+        allowed, bucket, g_inc, b_inc = _ws_try_enter(self.scope)
+        self._ws_bucket = bucket
+        self._ws_global_inc = g_inc
+        self._ws_bucket_inc = b_inc
+        if not allowed:
+            _ws_leave(self._ws_bucket, self._ws_global_inc, self._ws_bucket_inc)
+            self._ws_global_inc = False
+            self._ws_bucket_inc = False
+            try:
+                self.close(code=4429)
+            except Exception:
+                self.close()
+            return
+
         self.user = _resolve_authenticated_user(self.scope.get('user'))
         self.chatroom_name = self.scope['url_route']['kwargs']['chatroom_name']
 
@@ -983,6 +1178,9 @@ class ChatroomConsumer(WebsocketConsumer):
         
         
     def disconnect(self, close_code):
+        _ws_leave(getattr(self, '_ws_bucket', None), bool(getattr(self, '_ws_global_inc', False)), bool(getattr(self, '_ws_bucket_inc', False)))
+        self._ws_global_inc = False
+        self._ws_bucket_inc = False
         # Guard against disconnect being called for a partially initialized connection.
         if hasattr(self, 'room_group_name'):
             async_to_sync(self.channel_layer.group_discard)(
@@ -2172,6 +2370,31 @@ class OnlineStatusConsumer(WebsocketConsumer):
             return 0
 
     def connect(self):
+        self._ws_bucket = None
+        self._ws_global_inc = False
+        self._ws_bucket_inc = False
+
+        if not _ws_connect_rate_allowed(self.scope):
+            try:
+                self.close(code=4429)
+            except Exception:
+                self.close()
+            return
+
+        allowed, bucket, g_inc, b_inc = _ws_try_enter(self.scope)
+        self._ws_bucket = bucket
+        self._ws_global_inc = g_inc
+        self._ws_bucket_inc = b_inc
+        if not allowed:
+            _ws_leave(self._ws_bucket, self._ws_global_inc, self._ws_bucket_inc)
+            self._ws_global_inc = False
+            self._ws_bucket_inc = False
+            try:
+                self.close(code=4429)
+            except Exception:
+                self.close()
+            return
+
         self.user = _resolve_authenticated_user(self.scope.get('user'))
         if not getattr(self.user, 'is_authenticated', False):
             try:
@@ -2215,6 +2438,9 @@ class OnlineStatusConsumer(WebsocketConsumer):
         try:
             self.accept()
         except Exception:
+            _ws_leave(self._ws_bucket, self._ws_global_inc, self._ws_bucket_inc)
+            self._ws_global_inc = False
+            self._ws_bucket_inc = False
             return
 
         try:
@@ -2240,6 +2466,9 @@ class OnlineStatusConsumer(WebsocketConsumer):
         
         
     def disconnect(self, close_code):
+        _ws_leave(getattr(self, '_ws_bucket', None), bool(getattr(self, '_ws_global_inc', False)), bool(getattr(self, '_ws_bucket_inc', False)))
+        self._ws_global_inc = False
+        self._ws_bucket_inc = False
         try:
             new_count = self._dec_conn()
         except Exception:
@@ -2348,6 +2577,31 @@ class NotificationsConsumer(WebsocketConsumer):
     """
 
     def connect(self):
+        self._ws_bucket = None
+        self._ws_global_inc = False
+        self._ws_bucket_inc = False
+
+        if not _ws_connect_rate_allowed(self.scope):
+            try:
+                self.close(code=4429)
+            except Exception:
+                self.close()
+            return
+
+        allowed, bucket, g_inc, b_inc = _ws_try_enter(self.scope)
+        self._ws_bucket = bucket
+        self._ws_global_inc = g_inc
+        self._ws_bucket_inc = b_inc
+        if not allowed:
+            _ws_leave(self._ws_bucket, self._ws_global_inc, self._ws_bucket_inc)
+            self._ws_global_inc = False
+            self._ws_bucket_inc = False
+            try:
+                self.close(code=4429)
+            except Exception:
+                self.close()
+            return
+
         self.user = _resolve_authenticated_user(self.scope.get('user'))
         if not getattr(self.user, 'is_authenticated', False):
             try:
@@ -2371,9 +2625,15 @@ class NotificationsConsumer(WebsocketConsumer):
         try:
             self.accept()
         except Exception:
+            _ws_leave(self._ws_bucket, self._ws_global_inc, self._ws_bucket_inc)
+            self._ws_global_inc = False
+            self._ws_bucket_inc = False
             return
 
     def disconnect(self, close_code):
+        _ws_leave(getattr(self, '_ws_bucket', None), bool(getattr(self, '_ws_global_inc', False)), bool(getattr(self, '_ws_bucket_inc', False)))
+        self._ws_global_inc = False
+        self._ws_bucket_inc = False
         try:
             async_to_sync(self.channel_layer.group_discard)(
                 self.group_name, self.channel_name
@@ -2544,6 +2804,31 @@ class ProfilePresenceConsumer(WebsocketConsumer):
     """Realtime online/offline for a single user's profile page."""
 
     def connect(self):
+        self._ws_bucket = None
+        self._ws_global_inc = False
+        self._ws_bucket_inc = False
+
+        if not _ws_connect_rate_allowed(self.scope):
+            try:
+                self.close(code=4429)
+            except Exception:
+                self.close()
+            return
+
+        allowed, bucket, g_inc, b_inc = _ws_try_enter(self.scope)
+        self._ws_bucket = bucket
+        self._ws_global_inc = g_inc
+        self._ws_bucket_inc = b_inc
+        if not allowed:
+            _ws_leave(self._ws_bucket, self._ws_global_inc, self._ws_bucket_inc)
+            self._ws_global_inc = False
+            self._ws_bucket_inc = False
+            try:
+                self.close(code=4429)
+            except Exception:
+                self.close()
+            return
+
         self.user = _resolve_authenticated_user(self.scope.get('user'))
         if not getattr(self.user, 'is_authenticated', False):
             self.close()
@@ -2621,6 +2906,9 @@ class ProfilePresenceConsumer(WebsocketConsumer):
             pass
 
     def disconnect(self, close_code):
+        _ws_leave(getattr(self, '_ws_bucket', None), bool(getattr(self, '_ws_global_inc', False)), bool(getattr(self, '_ws_bucket_inc', False)))
+        self._ws_global_inc = False
+        self._ws_bucket_inc = False
         try:
             if getattr(self, 'group_name', None):
                 async_to_sync(self.channel_layer.group_discard)(

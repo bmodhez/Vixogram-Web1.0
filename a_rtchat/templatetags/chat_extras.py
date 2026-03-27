@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import re
 
 from django import template
@@ -11,6 +12,65 @@ _MENTION_RE = re.compile(r"(^|\s)@(?P<name>[A-Za-z0-9_.-]{1,32})\b")
 
 
 register = template.Library()
+
+
+_URL_TOKEN_RE = re.compile(
+    r"((?:https?:\/\/|www\.)[^\s<]+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<]*)?)",
+    flags=re.IGNORECASE,
+)
+_MARKDOWN_LINK_RE = re.compile(
+    r"\[(?P<label>[^\]\n]{1,80})\]\((?P<url>(?:https?:\/\/|www\.)[^\s)]+)\)",
+    flags=re.IGNORECASE,
+)
+
+
+def _normalize_link_href(raw_url: str) -> str:
+    value = str(raw_url or '').strip()
+    if not value:
+        return ''
+    if re.match(r'^https?://', value, flags=re.IGNORECASE):
+        return value
+    return f"https://{value}"
+
+
+def _strip_url_trailing_punct(token: str) -> tuple[str, str]:
+    value = str(token or '')
+    suffix = ''
+    while value and value[-1] in '),.;!?':
+        suffix = value[-1] + suffix
+        value = value[:-1]
+    return value, suffix
+
+
+def _linkify_plain_segment(text: str) -> str:
+    if not text:
+        return ''
+
+    out = []
+    cursor = 0
+    for match in _URL_TOKEN_RE.finditer(text):
+        start, end = match.span()
+        token = match.group(0) or ''
+        url_token, suffix = _strip_url_trailing_punct(token)
+        if not url_token:
+            continue
+
+        if start > cursor:
+            out.append(html.escape(text[cursor:start]))
+
+        href = html.escape(_normalize_link_href(url_token), quote=True)
+        label = html.escape(url_token)
+        out.append(
+            f'<a href="{href}" target="_blank" rel="noopener noreferrer nofollow">{label}</a>'
+        )
+        if suffix:
+            out.append(html.escape(suffix))
+        cursor = end
+
+    if cursor < len(text):
+        out.append(html.escape(text[cursor:]))
+
+    return ''.join(out)
 
 
 @register.filter(name='highlight_mentions')
@@ -35,6 +95,44 @@ def highlight_mentions(value):
         )
 
     return mark_safe(_MENTION_RE.sub(_repl, text))
+
+
+@register.filter(name='rich_announcement')
+def rich_announcement(value):
+    """Render banner text with support for named links.
+
+    Supported format for custom label links:
+    [Your Text](https://example.com)
+
+    Plain URLs are still auto-linkified.
+    """
+    if value is None:
+        return ''
+
+    text = str(value)
+    out = []
+    cursor = 0
+
+    for match in _MARKDOWN_LINK_RE.finditer(text):
+        start, end = match.span()
+        if start > cursor:
+            out.append(_linkify_plain_segment(text[cursor:start]))
+
+        label = (match.group('label') or '').strip()
+        url = (match.group('url') or '').strip()
+        if label and url:
+            href = html.escape(_normalize_link_href(url), quote=True)
+            out.append(
+                f'<a href="{href}" target="_blank" rel="noopener noreferrer nofollow">{html.escape(label)}</a>'
+            )
+        else:
+            out.append(html.escape(match.group(0) or ''))
+        cursor = end
+
+    if cursor < len(text):
+        out.append(_linkify_plain_segment(text[cursor:]))
+
+    return mark_safe(''.join(out))
 
 
 def _split_query(url: str) -> tuple[str, str]:

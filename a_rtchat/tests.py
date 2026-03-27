@@ -37,7 +37,7 @@ class AdminUserBanTests(TestCase):
 		self.client.force_login(staff)
 
 		url = reverse('admin-user-ban', kwargs={'user_id': target.id})
-		resp = self.client.post(url, data={'minutes': '10'})
+		resp = self.client.post(url, data={'minutes': '10', 'note': 'Repeated spam links'})
 		self.assertEqual(resp.status_code, 302)
 
 		target.refresh_from_db()
@@ -48,6 +48,7 @@ class AdminUserBanTests(TestCase):
 				user=target,
 				action=ChatBanHistory.ACTION_BAN,
 				duration_minutes=10,
+				note='Repeated spam links',
 			).exists()
 		)
 
@@ -62,6 +63,17 @@ class AdminUserBanTests(TestCase):
 				action=ChatBanHistory.ACTION_UNBAN,
 			).exists()
 		)
+
+	def test_staff_can_open_ban_modal(self):
+		staff = User.objects.create_user(username='staff_modal', password='pass12345', is_staff=True)
+		target = User.objects.create_user(username='target_modal', password='pass12345')
+		self.client.force_login(staff)
+
+		url = reverse('admin-user-ban-modal', kwargs={'user_id': target.id})
+		resp = self.client.get(url)
+		self.assertEqual(resp.status_code, 200)
+		self.assertContains(resp, 'Ban @target_modal')
+		self.assertContains(resp, 'Reason (optional)')
 
 
 class PrivateRoomMemberLimitTests(TestCase):

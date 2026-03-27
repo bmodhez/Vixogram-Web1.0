@@ -28,7 +28,7 @@
                     {% if message.author == user %}
                         You have exited the group
                     {% else %}
-                        This member has exited the group
+                        {% with dn=message.author.profile.name|default:message.author.username %}{{ dn }}{% endwith %} has exited the group
                     {% endif %}
                 </span>
                 <span class="text-gray-500">•</span>
@@ -204,7 +204,7 @@
                     >
                         <img src="{{ message.author.profile.avatar }}" class="w-6 h-6 rounded-full object-cover border border-white/10">
                         {% if message.author.is_superuser %}
-                            <span data-vixo-name="{{ message.author.profile.name|default:message.author.username|escape }}" class="text-[14px] font-semibold text-gray-100 vixo-superuser-name-shock {% if message.author.profile.name_glow_color and message.author.profile.name_glow_color != 'none' %}vixo-user-glow-{{ message.author.profile.name_glow_color }}{% endif %}" title="Verified superuser">
+                            <span data-vixo-name="{{ message.author.profile.name|default:message.author.username|escape }}" class="text-[14px] font-semibold text-gray-100 {% if message.author.profile.name_glow_color and message.author.profile.name_glow_color != 'none' %}vixo-superuser-name-shock vixo-user-glow-{{ message.author.profile.name_glow_color }}{% endif %}" title="Verified superuser">
                                 {{ message.author.profile.name|default:message.author.username }}
                             </span>
                             <span class="vixo-superuser-verified-badge" aria-label="Verified" title="Verified superuser">✓</span>
@@ -217,7 +217,7 @@
                 {% else %}
                     <span class="text-[14px] font-semibold inline-flex items-center gap-2">
                         {% if message.author.is_superuser %}
-                            <span data-vixo-name="{{ message.author.profile.name|default:message.author.username|escape }}" class="text-gray-100 vixo-superuser-name-shock {% if message.author.profile.name_glow_color and message.author.profile.name_glow_color != 'none' %}vixo-user-glow-{{ message.author.profile.name_glow_color }}{% endif %}" title="Verified superuser">
+                            <span data-vixo-name="{{ message.author.profile.name|default:message.author.username|escape }}" class="text-gray-100 {% if message.author.profile.name_glow_color and message.author.profile.name_glow_color != 'none' %}vixo-superuser-name-shock vixo-user-glow-{{ message.author.profile.name_glow_color }}{% endif %}" title="Verified superuser">
                                 {{ message.author.profile.name|default:message.author.username }}
                             </span>
                             <span class="vixo-superuser-verified-badge" aria-label="Verified" title="Verified superuser">✓</span>

@@ -12,7 +12,7 @@
 
         onReady(() => {
             const s = document.createElement('script');
-            s.src = '/static/js/chat.js?v=20260220b';
+            s.src = '/static/js/chat.js?v=20260325b';
             // Dynamic scripts execute asynchronously by default; ensure predictable ordering.
             s.async = false;
             document.head.appendChild(s);

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ipaddress import ip_address, ip_network
+
 from django.conf import settings
 from django.contrib import messages
 from django.http import Http404, JsonResponse
@@ -17,6 +19,48 @@ VPN_PROXY_WARNING_MESSAGE = (
 )
 VPN_PROXY_CLIENT_BLOCKED_SESSION_KEY = 'vixo_vpn_proxy_client_blocked'
 VPN_PROXY_CLIENT_REPORT_PATH = '/api/security/network-client-report/'
+
+
+class AdminIPAllowlistMiddleware:
+    """Allow access to admin URL only from configured IPs/CIDRs."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def _is_allowed(self, client_ip: str, allowed_list: list[str]) -> bool:
+        if not client_ip:
+            return False
+        try:
+            parsed_ip = ip_address(client_ip)
+        except Exception:
+            return False
+
+        for item in allowed_list:
+            entry = str(item or '').strip()
+            if not entry:
+                continue
+            try:
+                if '/' in entry:
+                    if parsed_ip in ip_network(entry, strict=False):
+                        return True
+                elif parsed_ip == ip_address(entry):
+                    return True
+            except Exception:
+                # Ignore malformed entries and continue.
+                continue
+        return False
+
+    def __call__(self, request):
+        path = (request.path or '')
+        admin_prefix = str(getattr(settings, 'ADMIN_URL_PREFIX', '/admin/'))
+
+        if path.startswith(admin_prefix):
+            allowed = list(getattr(settings, 'ADMIN_ALLOWED_IPS', []) or [])
+            client_ip = get_client_ip(request)
+            if not self._is_allowed(client_ip, allowed):
+                return HttpResponse('Forbidden', status=403)
+
+        return self.get_response(request)
 
 
 class MaintenanceModeMiddleware:
@@ -124,11 +168,12 @@ class VpnProxyEnforcementMiddleware:
     def __call__(self, request):
         path = (request.path or '')
         blocked = False
+        admin_prefix = str(getattr(settings, 'ADMIN_URL_PREFIX', '/admin/'))
 
         try:
             enabled = bool(getattr(settings, 'VPN_PROXY_GUARD_ENABLED', True))
             if enabled:
-                if path.startswith('/admin/'):
+                if path.startswith(admin_prefix) or path.startswith('/admin/'):
                     blocked = False
                 else:
                     try:
@@ -228,5 +273,51 @@ class ForceCustom404Middleware:
             if 'application/json' in ctype:
                 return response
             return _render_404()
+
+        return response
+
+
+class SecurityHeadersMiddleware:
+    """Apply defensive browser security headers.
+
+    Note: Browser DevTools/console cannot be fully disabled for end users,
+    so we harden what the browser is allowed to execute/load instead.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+
+        # Keep framing disabled unless explicitly set elsewhere.
+        response.setdefault('X-Frame-Options', 'DENY')
+        response.setdefault('X-Content-Type-Options', 'nosniff')
+        response.setdefault('X-Permitted-Cross-Domain-Policies', 'none')
+        response.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
+
+        # App needs mic/camera for call features; allow only same-origin.
+        response.setdefault(
+            'Permissions-Policy',
+            'camera=(self), microphone=(self), geolocation=(self), payment=(), usb=(), serial=(), bluetooth=()'
+        )
+
+        # CSP reduces damage from injected scripts and data exfiltration.
+        # Inline scripts are currently used by templates, so unsafe-inline is kept.
+        # Tighten further later by moving inline scripts to static files + nonce/hash.
+        csp = (
+            "default-src 'self'; "
+            "base-uri 'self'; "
+            "frame-ancestors 'none'; "
+            "form-action 'self'; "
+            "object-src 'none'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://unpkg.com https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; "
+            "font-src 'self' https://fonts.gstatic.com data:; "
+            "img-src 'self' data: blob: https:; "
+            "media-src 'self' blob: https:; "
+            "connect-src 'self' ws: wss: https:;"
+        )
+        response.setdefault('Content-Security-Policy', csp)
 
         return response
