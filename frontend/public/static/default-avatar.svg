@@ -1,5 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="User avatar">
-  <circle cx="64" cy="64" r="60" fill="#4B5563"/>
-  <circle cx="64" cy="52" r="20" fill="#F3F4F6"/>
-  <path d="M24 112c6-24 26-36 40-36s34 12 40 36" fill="#F3F4F6"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" aria-label="User avatar" role="img" viewBox="0 0 128 128"><circle cx="64" cy="64" r="60" fill="#4B5563"/><circle cx="64" cy="52" r="20" fill="#F3F4F6"/><path fill="#F3F4F6" d="M24 112c6-24 26-36 40-36s34 12 40 36"/></svg>
