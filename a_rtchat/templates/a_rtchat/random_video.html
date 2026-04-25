@@ -30,6 +30,13 @@
     min-height: 0 !important;
   }
 
+  @media (max-width: 640px) {
+    body.vixo-rv-page main.self-stretch {
+      overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+
   #rv_chat_wrap {
     overflow: hidden;
   }

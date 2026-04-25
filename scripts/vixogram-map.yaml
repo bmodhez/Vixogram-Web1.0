@@ -1,0 +1,18 @@
+name: vixogram-map
+defaultService: https://www.googleapis.com/compute/v1/projects/project-5dbe4f5e-ef55-4237-abc/global/backendServices/vixogram-backend
+hostRules:
+- hosts:
+  - www.vixogram.tech
+  pathMatcher: www-service
+- hosts:
+  - vixogram.tech
+  pathMatcher: apex-redirect
+pathMatchers:
+- name: www-service
+  defaultService: https://www.googleapis.com/compute/v1/projects/project-5dbe4f5e-ef55-4237-abc/global/backendServices/vixogram-backend
+- name: apex-redirect
+  defaultUrlRedirect:
+    hostRedirect: www.vixogram.tech
+    httpsRedirect: true
+    redirectResponseCode: MOVED_PERMANENTLY_DEFAULT
+    stripQuery: false

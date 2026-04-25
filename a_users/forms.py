@@ -15,6 +15,7 @@ from .username_policy import validate_public_username
 
 BIO_MAX_LENGTH = 200
 ONBOARDING_BIO_MAX_LENGTH = 120
+AVATAR_MAX_BYTES = 500 * 1024
 
 
 def mask_bio_text(value: str) -> str:
@@ -77,8 +78,8 @@ class ProfileForm(forms.ModelForm):
 
         # Enforce a small upload limit for avatar as well.
         try:
-            if hasattr(f, 'size') and int(f.size) > 2 * 1024 * 1024:
-                raise forms.ValidationError('Avatar image must be under 2MB.')
+            if hasattr(f, 'size') and int(f.size) > AVATAR_MAX_BYTES:
+                raise forms.ValidationError('Avatar image must be under 500KB.')
         except forms.ValidationError:
             raise
         except Exception:
@@ -147,8 +148,8 @@ class OnboardingAvatarForm(forms.ModelForm):
             return f
 
         try:
-            if hasattr(f, 'size') and int(f.size) > 2 * 1024 * 1024:
-                raise forms.ValidationError('Avatar image must be under 2MB.')
+            if hasattr(f, 'size') and int(f.size) > AVATAR_MAX_BYTES:
+                raise forms.ValidationError('Avatar image must be under 500KB.')
         except forms.ValidationError:
             raise
         except Exception:

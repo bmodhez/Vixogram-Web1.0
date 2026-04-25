@@ -76,6 +76,23 @@ class Profile(models.Model):
         db_index=True,
     )
     avatar_pending_local = models.CharField(max_length=500, blank=True, default='')
+    COVER_REVIEW_NONE = 'none'
+    COVER_REVIEW_PENDING = 'pending'
+    COVER_REVIEW_APPROVED = 'approved'
+    COVER_REVIEW_REJECTED = 'rejected'
+    COVER_REVIEW_CHOICES = [
+        ('none', 'None'),
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+    cover_review_status = models.CharField(
+        max_length=10,
+        choices=COVER_REVIEW_CHOICES,
+        default='none',
+        db_index=True,
+    )
+    cover_pending_local = models.CharField(max_length=500, blank=True, default='')
 
     chat_blocked = models.BooleanField(default=False)
     chat_banned_until = models.DateTimeField(null=True, blank=True)
@@ -206,6 +223,33 @@ class Profile(models.Model):
             return None
 
 
+class ProfileAvatarSubmission(Profile):
+    """Proxy model used to expose avatar moderation queue in Django admin."""
+
+    class Meta:
+        proxy = True
+        verbose_name = 'Profile photo submission'
+        verbose_name_plural = 'Profile photo submissions'
+
+
+class ProfileBannerSubmission(Profile):
+    """Proxy model used to expose banner/cover moderation queue in Django admin."""
+
+    class Meta:
+        proxy = True
+        verbose_name = 'Banner photo submission'
+        verbose_name_plural = 'Banner photo submissions'
+
+
+class VixoPoints(Profile):
+    """Proxy model to manage/show user referral points in Django admin."""
+
+    class Meta:
+        proxy = True
+        verbose_name = 'Vixo Points'
+        verbose_name_plural = 'Vixo Points'
+
+
 """Premium/Pro subscription models (disabled for now).
 
 We are intentionally keeping the planned subscription + payment models in the codebase
@@ -267,6 +311,51 @@ class Story(models.Model):
 
     def __str__(self):
         return f"Story({self.id}) u={self.user_id}"
+
+
+class StorySubmission(models.Model):
+    """Manual moderation queue for story uploads before publish."""
+
+    REVIEW_NONE = 'none'
+    REVIEW_PENDING = 'pending'
+    REVIEW_APPROVED = 'approved'
+    REVIEW_REJECTED = 'rejected'
+    REVIEW_CHOICES = [
+        ('none', 'None'),
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='story_submissions')
+    pending_local = models.CharField(max_length=500, blank=True, default='')
+    review_status = models.CharField(max_length=10, choices=REVIEW_CHOICES, default='pending', db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_story_submissions',
+    )
+    approved_story = models.ForeignKey(
+        Story,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='submission_source',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['review_status', '-created_at'], name='storysub_status_created_idx'),
+            models.Index(fields=['user', '-created_at'], name='storysub_user_created_idx'),
+        ]
+
+    def __str__(self):
+        return f"StorySubmission({self.id}) u={self.user_id} {self.review_status}"
 
 
 class StoryView(models.Model):

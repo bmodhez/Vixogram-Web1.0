@@ -33,7 +33,7 @@
         })();
     </script>
     <script src="{% static 'js/mobile_ads.js' %}"></script>
-    <script src="{% static 'js/desktop_ads_refresh.js' %}"></script>
+    <script src="{% static 'js/desktop_ads_refresh.js' %}?v=20260411f"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
@@ -61,7 +61,7 @@
     </style>
     {% endif %}
 </head>
-<body class="min-h-screen flex flex-col text-white antialiased tracking-tight bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 {% block body_class %}{% endblock %}{% if request.resolver_match and request.resolver_match.url_name|default:''|slice:':8' == 'account_' or request.resolver_match.url_name|default:''|slice:':11' == 'onboarding-' %} vixo-auth-page{% endif %}">
+<body data-vixo-ad-refresh-seconds="{{ AD_REFRESH_SECONDS|default:45 }}" class="min-h-screen flex flex-col text-white antialiased tracking-tight bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 {% block body_class %}{% endblock %}{% if request.resolver_match and request.resolver_match.url_name|default:''|slice:':8' == 'account_' or request.resolver_match.url_name|default:''|slice:':11' == 'onboarding-' %} vixo-auth-page{% endif %}">
     <audio id="notif_sound" preload="auto" class="hidden" src="{% static 'notification.mp3' %}"></audio>
     <audio id="incoming_sound" preload="auto" class="hidden" src="{% static 'incoming.wav' %}"></audio>
     {% if request.resolver_match and request.resolver_match.url_name|default:''|slice:':8' == 'account_' %}
@@ -363,6 +363,32 @@
         <div id="toast-container" class="fixed top-16 right-3 sm:top-20 sm:right-6 z-50 w-[min(24rem,calc(100vw-3rem))] space-y-3 pointer-events-none">
             {% for message in messages %}
                 {% with msg_text=message|stringformat:"s" msg_lower=msg_text|lower %}
+                    {% if "profile pic has been submitted successfully for review" in msg_lower %}
+                        <div id="profile-upload-feedback-modal" class="fixed inset-0 z-[65] flex items-center justify-center p-4 sm:p-6">
+                            <div class="absolute inset-0 bg-gray-950/75 backdrop-blur-sm" data-profile-feedback-close></div>
+                            <div class="vixo-modal-card relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-emerald-400/35 bg-gradient-to-br from-[#081428] via-[#0e1e3b] to-[#0f172a] text-gray-100 shadow-2xl shadow-black/40">
+                                <div aria-hidden="true" class="h-[2px] w-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-sky-400"></div>
+                                <div class="p-5 sm:p-6">
+                                    <div class="flex items-start gap-3">
+                                        <div class="mt-1 h-2.5 w-2.5 flex-none rounded-full bg-emerald-400"></div>
+                                        <div class="min-w-0 flex-1">
+                                            <h3 class="text-base font-extrabold tracking-wide text-emerald-300">Profile Pic Submitted</h3>
+                                            <p class="mt-2 whitespace-pre-line text-sm leading-6 text-gray-200">{{ message }}</p>
+                                        </div>
+                                        <button type="button" class="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60 transition" aria-label="Dismiss" data-profile-feedback-close>
+                                            <span aria-hidden="true">×</span>
+                                        </button>
+                                    </div>
+                                    <div class="mt-5 flex justify-end">
+                                        <button type="button" class="inline-flex items-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400 transition" data-profile-feedback-close>
+                                            Okay
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+
                     {% if "this photo violates our community guidelines." in msg_lower and "please upload a different photo." in msg_lower %}
                         <div id="profile-upload-feedback-modal" class="fixed inset-0 z-[65] flex items-center justify-center p-4 sm:p-6">
                             <div class="absolute inset-0 bg-gray-950/75 backdrop-blur-sm" data-profile-feedback-close></div>
@@ -391,6 +417,7 @@
 
                     {% if "confirmation email sent" not in msg_lower and "successfully signed in" not in msg_lower %}
                         {% if "this photo violates our community guidelines." not in msg_lower or "please upload a different photo." not in msg_lower %}
+                        {% if "profile pic has been submitted successfully for review" not in msg_lower %}
                         {% with tags=message.tags %}
                             <div
                                 class="toast pointer-events-auto flex items-start gap-3 rounded-xl border border-gray-800 bg-gray-900/90 px-4 py-3 text-sm text-gray-100 shadow-lg shadow-black/20 transition duration-200 ease-out"
@@ -413,6 +440,7 @@
                             </div>
                         {% endwith %}
                         {% endif %}
+                        {% endif %}
                     {% endif %}
                 {% endwith %}
             {% endfor %}
@@ -432,8 +460,10 @@
                             <div class="sticky top-24">
                                 <div class="rounded-2xl border border-gray-800 bg-gray-900/50 p-3 text-center">
                                     <div class="text-[10px] uppercase tracking-widest text-gray-400">Advertisement</div>
-                                    <div data-vixo-side-ad-slot="left" class="mt-3 min-h-[600px] min-w-[160px] rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
-                                        Place Ad (160×600)
+                                    <div data-vixo-side-ad-slot="left" data-adsterra-key="d900f1ccc4e8a4fda5de0bb314d6fce2" data-adsterra-width="160" data-adsterra-height="600" class="mt-3 min-h-[600px] min-w-[160px] rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
+                                        <div class="w-[160px] h-[600px] overflow-hidden mx-auto flex items-center justify-center text-[11px] text-gray-500">
+                                            Loading ad...
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -454,8 +484,10 @@
                             <div class="sticky top-24">
                                 <div class="rounded-2xl border border-gray-800 bg-gray-900/50 p-3 text-center">
                                     <div class="text-[10px] uppercase tracking-widest text-gray-400">Advertisement</div>
-                                    <div data-vixo-side-ad-slot="right" class="mt-3 min-h-[600px] min-w-[160px] rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
-                                        Place Ad (160×600)
+                                    <div data-vixo-side-ad-slot="right" data-adsterra-key="d900f1ccc4e8a4fda5de0bb314d6fce2" data-adsterra-width="160" data-adsterra-height="600" class="mt-3 min-h-[600px] min-w-[160px] rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
+                                        <div class="w-[160px] h-[600px] overflow-hidden mx-auto flex items-center justify-center text-[11px] text-gray-500">
+                                            Loading ad...
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -494,8 +526,10 @@
 
                                     <!-- Desktop banner -->
                                     <div class="mt-3 hidden sm:block">
-                                        <div data-vixo-footer-ad-slot="desktop" class="min-h-[90px] w-full max-w-[728px] mx-auto rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
-                                            Place Ad (728×90)
+                                        <div data-vixo-footer-ad-slot="desktop" data-adsterra-key="49e06399a35cfefe08dca05e40231b6b" data-adsterra-width="728" data-adsterra-height="90" class="min-h-[90px] w-full max-w-[728px] mx-auto rounded-xl border border-gray-800 bg-gray-950/40 flex items-center justify-center text-xs text-gray-500">
+                                            <div class="w-[728px] h-[90px] max-w-full overflow-hidden mx-auto flex items-center justify-center text-[11px] text-gray-500">
+                                                Loading ad...
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

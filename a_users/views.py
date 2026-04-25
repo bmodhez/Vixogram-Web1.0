@@ -17,7 +17,7 @@ from django.views.decorators.http import require_POST
 from django.db.models import Q
 from django.core.cache import cache
 
-from .models import Profile, Story, StoryView, StoryLike, DEFAULT_AVATAR_DATA_URI
+from .models import Profile, Story, StorySubmission, StoryView, StoryLike, DEFAULT_AVATAR_DATA_URI
 from .forms import ProfileForm
 from .forms import ReportUserForm
 from .forms import ProfilePrivacyForm
@@ -67,6 +67,43 @@ except Exception:  # pragma: no cover
 
 
 logger = logging.getLogger(__name__)
+AVATAR_MAX_BYTES = 500 * 1024
+
+
+def _avatar_file_exceeds_limit(uploaded_file) -> bool:
+    """Return True when uploaded avatar is larger than 500KB.
+
+    Uses both declared size and chunk-byte counting for safety.
+    """
+    if uploaded_file is None:
+        return False
+
+    try:
+        declared_size = int(getattr(uploaded_file, 'size', 0) or 0)
+        if declared_size > AVATAR_MAX_BYTES:
+            return True
+    except Exception:
+        pass
+
+    try:
+        total = 0
+        for chunk in uploaded_file.chunks():
+            total += len(chunk)
+            if total > AVATAR_MAX_BYTES:
+                try:
+                    uploaded_file.seek(0)
+                except Exception:
+                    pass
+                return True
+        try:
+            uploaded_file.seek(0)
+        except Exception:
+            pass
+    except Exception:
+        # If we cannot inspect file safely, fail closed for security.
+        return True
+
+    return False
 
 
 @login_required
@@ -1009,26 +1046,58 @@ def story_add_view(request):
                 messages.error(request, msg)
                 return redirect('profile')
 
-            if int(max_active or 1) == 1:
-                _delete_existing_active_stories()
+            uploaded_story = form.cleaned_data.get('image')
+            if not uploaded_story:
+                msg = 'Please choose an image.'
+                if is_htmx and is_modal:
+                    ctx = {
+                        'form': form,
+                        'duration_seconds': int(getattr(Story, 'DURATION_SECONDS', 10)),
+                        'ttl_hours': int(getattr(Story, 'TTL_HOURS', 24)),
+                    }
+                    resp = render(request, 'a_users/partials/story_add_modal.html', ctx)
+                    try:
+                        extra = f"""
+                        <script>
+                          try {{
+                            document.body.dispatchEvent(new CustomEvent('vixo:toast', {{ detail: {{ message: {msg!r}, kind: 'error', durationMs: 3000 }} }}));
+                          }} catch (e) {{}}
+                        </script>
+                        """.strip().encode('utf-8')
+                    except Exception:
+                        extra = b''
+                    return HttpResponse(resp.content + extra)
+                messages.error(request, msg)
+                return redirect('profile')
 
-            story = form.save(commit=False)
-            story.user = request.user
             try:
-                story.save()
-            except Exception as exc:
-                logger.exception('Story upload failed for user_id=%s', getattr(request.user, 'id', None))
-                msg = 'Could not upload story right now. Please try again in a moment.'
-                exc_msg = (str(exc) or '').strip()
-                # Keep moderation messages user-friendly if they are intentional business errors.
-                if exc_msg in {'Upload rejected by Vixogram Team', 'Upload is under review'}:
-                    msg = exc_msg
+                pending_dir = os.path.join(settings.BASE_DIR, 'media', 'pending_stories')
+                os.makedirs(pending_dir, exist_ok=True)
+                ext = os.path.splitext(str(getattr(uploaded_story, 'name', '') or ''))[1].lower() or '.jpg'
+                filename = f'story_pending_{request.user.id}_{uuid.uuid4().hex[:10]}{ext}'
+                pending_path = os.path.join(pending_dir, filename)
+
+                with open(pending_path, 'wb') as fh:
+                    if hasattr(uploaded_story, 'chunks'):
+                        for chunk in uploaded_story.chunks():
+                            fh.write(chunk)
+                    else:
+                        fh.write(uploaded_story.read())
 
                 try:
-                    form.add_error('image', msg)
+                    if hasattr(uploaded_story, 'seek'):
+                        uploaded_story.seek(0)
                 except Exception:
                     pass
 
+                StorySubmission.objects.create(
+                    user=request.user,
+                    pending_local=pending_path,
+                    review_status='pending',
+                )
+            except Exception:
+                logger.exception('Story submission queue write failed for user_id=%s', getattr(request.user, 'id', None))
+                msg = 'Could not submit story right now. Please try again in a moment.'
                 if is_htmx and is_modal:
                     ctx = {
                         'form': form,
@@ -1047,7 +1116,6 @@ def story_add_view(request):
                     except Exception:
                         extra = b''
                     return HttpResponse(resp.content + extra)
-
                 messages.error(request, msg)
                 return redirect('profile')
 
@@ -1058,13 +1126,13 @@ def story_add_view(request):
                     <div></div>
                     <script>
                       try {
-                        document.body.dispatchEvent(new CustomEvent('vixo:toast', { detail: { message: 'Story added.', kind: 'success', durationMs: 2500 } }));
+                        document.body.dispatchEvent(new CustomEvent('vixo:toast', { detail: { message: 'Story submitted for review.', kind: 'success', durationMs: 2500 } }));
                       } catch (e) {}
                       try { document.body.dispatchEvent(new Event('vixo:closeGlobalModal')); } catch (e) {}
                     </script>
                     """.strip()
                 )
-            messages.success(request, 'Story added. It will auto-expire in 24 hours.')
+            messages.success(request, 'Story submitted for review. It will appear after Vixo Team approval.')
             return redirect('profile')
     else:
         form = StoryForm()
@@ -1752,6 +1820,15 @@ def onboarding_photo_view(request):
         if action == 'skip':
             return redirect('onboarding-about')
 
+        avatar_file = request.FILES.get('image')
+        if avatar_file is not None and _avatar_file_exceeds_limit(avatar_file):
+            messages.error(request, 'Avatar image must be under 500KB.')
+            form = OnboardingAvatarForm(request.POST, request.FILES, instance=profile)
+            return render(request, 'a_users/onboarding/photo.html', {
+                'form': form,
+                'profile': profile,
+            })
+
         form = OnboardingAvatarForm(request.POST, request.FILES, instance=profile)
         if action == 'upload' and not request.FILES.get('image'):
             try:
@@ -1765,7 +1842,29 @@ def onboarding_photo_view(request):
 
         if form.is_valid():
             try:
-                form.save()
+                uploaded = request.FILES.get('image')
+                if uploaded:
+                    profile.avatar_review_status = 'pending'
+                    profile.avatar_pending_local = ''
+                    profile.save(update_fields=['avatar_review_status', 'avatar_pending_local'])
+
+                    temp_dir = os.path.join(settings.BASE_DIR, 'media', 'pending_avatars')
+                    os.makedirs(temp_dir, exist_ok=True)
+                    ext = os.path.splitext(uploaded.name)[1].lower() or '.jpg'
+                    temp_filename = f'pending_{profile.pk}_{uuid.uuid4().hex[:8]}{ext}'
+                    temp_path = os.path.join(temp_dir, temp_filename)
+                    with open(temp_path, 'wb') as fh:
+                        for chunk in uploaded.chunks():
+                            fh.write(chunk)
+
+                    Profile.objects.filter(pk=profile.pk).update(
+                        avatar_review_status='pending',
+                        avatar_pending_local=temp_path,
+                    )
+                messages.success(
+                    request,
+                    'Success! Your profile pic has been submitted successfully for review. Please wait for a while for being approved by the Vixo Team.',
+                )
                 return redirect('onboarding-about')
             except Exception as exc:
                 exc_msg = (str(exc) or '').strip().lower()
@@ -1852,45 +1951,88 @@ def profile_edit_view(request):
 
         else:
             form = ProfileForm(request.POST, request.FILES, instance=profile)
+            avatar_file = request.FILES.get('image')
+            if avatar_file is not None and _avatar_file_exceeds_limit(avatar_file):
+                can_change, next_at = username_form.can_change_now()
+                messages.error(request, 'Avatar image must be under 500KB.')
+                return render(request, 'a_users/profile_edit.html', {
+                    'form': form,
+                    'profile': profile,
+                    'username_form': username_form,
+                    'username_can_change': can_change,
+                    'username_next_available_at': next_at,
+                    'username_cooldown_days': int(getattr(settings, 'USERNAME_CHANGE_COOLDOWN_DAYS', 21) or 21),
+                })
+
             if form.is_valid():
                 has_new_avatar = bool(request.FILES.get('image'))
+                has_new_cover = bool(request.FILES.get('cover_image'))
 
-                if has_new_avatar:
-                    # --- Async NudeNet moderation path ---
-                    # Save form fields (displayname, bio, cover_image) but keep the
-                    # current avatar unchanged until NudeNet approves it.
-                    uploaded_file = request.FILES['image']
+                if has_new_avatar or has_new_cover:
+                    # Save text fields but keep current media unchanged until admin approval.
+                    avatar_file = request.FILES.get('image')
+                    cover_file = request.FILES.get('cover_image')
+                    approved_image_name = (
+                        Profile.objects
+                        .filter(pk=profile.pk)
+                        .values_list('image', flat=True)
+                        .first()
+                    )
+                    approved_cover_name = (
+                        Profile.objects
+                        .filter(pk=profile.pk)
+                        .values_list('cover_image', flat=True)
+                        .first()
+                    )
                     instance = form.save(commit=False)
-                    instance.image = profile.image  # restore original; NudeNet will update it later
+                    if approved_image_name:
+                        instance.image.name = str(approved_image_name)
+                    else:
+                        instance.image = None
+                    if approved_cover_name:
+                        instance.cover_image.name = str(approved_cover_name)
+                    else:
+                        instance.cover_image = None
                     instance.save()
 
-                    # Write temp file locally for the Celery worker.
-                    temp_dir = os.path.join(settings.BASE_DIR, 'media', 'pending_avatars')
-                    os.makedirs(temp_dir, exist_ok=True)
-                    ext = os.path.splitext(uploaded_file.name)[1].lower() or '.jpg'
-                    temp_filename = f'pending_{profile.pk}_{uuid.uuid4().hex[:8]}{ext}'
-                    temp_path = os.path.join(temp_dir, temp_filename)
-                    with open(temp_path, 'wb') as fh:
-                        for chunk in uploaded_file.chunks():
-                            fh.write(chunk)
+                    update_kwargs = {}
 
-                    Profile.objects.filter(pk=profile.pk).update(
-                        avatar_review_status='pending',
-                        avatar_pending_local=temp_path,
-                    )
+                    if avatar_file is not None:
+                        avatar_dir = os.path.join(settings.BASE_DIR, 'media', 'pending_avatars')
+                        os.makedirs(avatar_dir, exist_ok=True)
+                        avatar_ext = os.path.splitext(avatar_file.name)[1].lower() or '.jpg'
+                        avatar_filename = f'pending_{profile.pk}_{uuid.uuid4().hex[:8]}{avatar_ext}'
+                        avatar_path = os.path.join(avatar_dir, avatar_filename)
+                        with open(avatar_path, 'wb') as fh:
+                            for chunk in avatar_file.chunks():
+                                fh.write(chunk)
+                        update_kwargs['avatar_review_status'] = 'pending'
+                        update_kwargs['avatar_pending_local'] = avatar_path
 
-                    from .tasks import moderate_avatar_task
-                    try:
-                        moderate_avatar_task.delay(profile.pk)
-                    except Exception:
-                        # Broker unavailable (e.g. Redis not running locally) —
-                        # run moderation inline so the upload still works.
-                        logging.getLogger(__name__).warning(
-                            'Celery broker unreachable; running moderate_avatar_task inline for profile %s.',
-                            profile.pk,
+                    if cover_file is not None:
+                        cover_dir = os.path.join(settings.BASE_DIR, 'media', 'pending_covers')
+                        os.makedirs(cover_dir, exist_ok=True)
+                        cover_ext = os.path.splitext(cover_file.name)[1].lower() or '.jpg'
+                        cover_filename = f'pending_cover_{profile.pk}_{uuid.uuid4().hex[:8]}{cover_ext}'
+                        cover_path = os.path.join(cover_dir, cover_filename)
+                        with open(cover_path, 'wb') as fh:
+                            for chunk in cover_file.chunks():
+                                fh.write(chunk)
+                        update_kwargs['cover_review_status'] = 'pending'
+                        update_kwargs['cover_pending_local'] = cover_path
+
+                    if update_kwargs:
+                        Profile.objects.filter(pk=profile.pk).update(**update_kwargs)
+
+                    if has_new_avatar and has_new_cover:
+                        messages.success(request, 'Success! Your profile pic and banner photo have been submitted for review by the Vixo Team.')
+                    elif has_new_cover:
+                        messages.success(request, 'Success! Your banner photo has been submitted successfully for review. Please wait for approval by the Vixo Team.')
+                    else:
+                        messages.success(
+                            request,
+                            'Success! Your profile pic has been submitted successfully for review. Please wait for a while for being approved by the Vixo Team.',
                         )
-                        moderate_avatar_task(profile.pk)
-
                     return redirect('profile-edit')
 
                 else:

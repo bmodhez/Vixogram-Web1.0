@@ -287,6 +287,19 @@ class SecurityHeadersMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
 
+    @staticmethod
+    def _merge_sources(base: list[str], extra: list[str] | tuple[str, ...] | None) -> str:
+        out: list[str] = []
+        seen: set[str] = set()
+
+        for src in list(base or []) + list(extra or []):
+            val = str(src or '').strip()
+            if not val or val in seen:
+                continue
+            seen.add(val)
+            out.append(val)
+        return ' '.join(out)
+
     def __call__(self, request):
         response = self.get_response(request)
 
@@ -305,18 +318,40 @@ class SecurityHeadersMiddleware:
         # CSP reduces damage from injected scripts and data exfiltration.
         # Inline scripts are currently used by templates, so unsafe-inline is kept.
         # Tighten further later by moving inline scripts to static files + nonce/hash.
+        script_src = self._merge_sources(
+            ["'self'", "'unsafe-inline'", 'https://cdn.tailwindcss.com', 'https://unpkg.com', 'https://cdn.jsdelivr.net'],
+            getattr(settings, 'AD_SCRIPT_SRC_EXTRA', []),
+        )
+        style_src = self._merge_sources(
+            ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://unpkg.com'],
+            getattr(settings, 'AD_STYLE_SRC_EXTRA', []),
+        )
+        img_src = self._merge_sources(
+            ["'self'", 'data:', 'blob:', 'https:'],
+            getattr(settings, 'AD_IMG_SRC_EXTRA', []),
+        )
+        connect_src = self._merge_sources(
+            ["'self'", 'ws:', 'wss:', 'https:'],
+            getattr(settings, 'AD_CONNECT_SRC_EXTRA', []),
+        )
+        frame_src = self._merge_sources(
+            ["'self'"],
+            getattr(settings, 'AD_FRAME_SRC_EXTRA', []),
+        )
+
         csp = (
             "default-src 'self'; "
             "base-uri 'self'; "
             "frame-ancestors 'none'; "
             "form-action 'self'; "
             "object-src 'none'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://unpkg.com https://cdn.jsdelivr.net; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; "
+            f"script-src {script_src}; "
+            f"style-src {style_src}; "
             "font-src 'self' https://fonts.gstatic.com data:; "
-            "img-src 'self' data: blob: https:; "
+            f"img-src {img_src}; "
             "media-src 'self' blob: https:; "
-            "connect-src 'self' ws: wss: https:;"
+            f"connect-src {connect_src}; "
+            f"frame-src {frame_src};"
         )
         response.setdefault('Content-Security-Policy', csp)
 

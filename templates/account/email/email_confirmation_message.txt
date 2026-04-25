@@ -1,7 +1,7 @@
-Hello from vixogram.social!
+Hello from vixogram.tech!
 
-You're receiving this email because user {{ user_display }} has given your email address to register an account on vixogram.social.
+You're receiving this email because user {{ user_display }} has given your email address to register an account on vixogram.tech.
 
 To confirm this is correct, go to {{ activate_url }}
 
-Thank you for using vixogram.social
+Thank you for using vixogram.tech

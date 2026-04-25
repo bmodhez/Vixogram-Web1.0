@@ -32,12 +32,14 @@ class GroupMessageAdmin(admin.ModelAdmin):
 		'created',
 		'is_support_submission',
 		'support_submission_type',
-		'body',
-		'file_caption',
+		'body_masked',
+		'file_caption_masked',
 		'file',
 	)
 	list_filter = ('created', 'is_support_submission', 'support_submission_type')
-	search_fields = ('body', 'author__username', 'group__group_name', 'group__room_code')
+	search_fields = ('author__username', 'group__group_name', 'group__room_code')
+	readonly_fields = ('body_masked', 'file_caption_masked')
+	exclude = ('body', 'file_caption')
 
 	class VixoChangeList(ChangeList):
 		def get_results(self, request):
@@ -63,6 +65,20 @@ class GroupMessageAdmin(admin.ModelAdmin):
 		except Exception:
 			n = None
 		return f'{n:02d}' if n else ''
+
+	@admin.display(description='Body')
+	def body_masked(self, obj):
+		text = str(getattr(obj, 'body', '') or '').strip()
+		if not text:
+			return '-'
+		return f'[ENCRYPTED] ({len(text)} chars)'
+
+	@admin.display(description='File caption')
+	def file_caption_masked(self, obj):
+		text = str(getattr(obj, 'file_caption', '') or '').strip()
+		if not text:
+			return '-'
+		return f'[ENCRYPTED] ({len(text)} chars)'
 
 
 @admin.register(ModerationEvent)

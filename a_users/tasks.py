@@ -25,78 +25,16 @@ _NUDENET_THRESHOLD = 0.5  # confidence score threshold
 
 @shared_task(bind=True, max_retries=0, ignore_result=True)
 def moderate_avatar_task(self, profile_pk: int) -> None:
-    """Run NudeNet on the pending avatar temp file.
+    """Deprecated: avatar moderation is manual via Django admin queue.
 
-    Approved  → upload to default_storage (Cloudinary/local), update Profile.image.
-    Rejected  → discard temp file, keep old avatar.
-    Either way → update avatar_review_status so the frontend can poll and show result.
+    We intentionally keep this task as a no-op so background workers can never
+    auto-approve and upload profile pictures to Cloudinary.
     """
-    from .models import Profile
-
-    profile = Profile.objects.filter(pk=profile_pk).first()
-    if not profile:
-        return
-
-    temp_path = (getattr(profile, 'avatar_pending_local', '') or '').strip()
-    if not temp_path or not os.path.exists(temp_path):
-        Profile.objects.filter(pk=profile_pk).update(avatar_review_status='none', avatar_pending_local='')
-        return
-
-    # --- NudeNet moderation ---
-    is_safe = True
-    try:
-        from nudenet import NudeDetector
-        detector = NudeDetector()
-        detections = detector.detect(temp_path)
-        for det in (detections or []):
-            if (
-                det.get('class') in _NUDENET_UNSAFE_CLASSES
-                and float(det.get('score', 0)) >= _NUDENET_THRESHOLD
-            ):
-                is_safe = False
-                break
-    except Exception:
-        # NudeNet unavailable or errored — approve by default so user is never blocked
-        logger.warning('NudeNet check failed for profile %s; approving by default.', profile_pk, exc_info=True)
-        is_safe = True
-
-    if is_safe:
-        # Upload to default storage (Cloudinary when enabled, else local)
-        try:
-            from django.core.files import File
-            from django.core.files.storage import default_storage
-
-            old_image_name = (getattr(getattr(profile, 'image', None), 'name', None) or '').strip() or None
-            ext = os.path.splitext(temp_path)[1].lower() or '.jpg'
-            dest_name = f'avatars/avatar_{profile_pk}{ext}'
-
-            with open(temp_path, 'rb') as f:
-                saved_name = default_storage.save(dest_name, File(f, name=os.path.basename(dest_name)))
-
-            Profile.objects.filter(pk=profile_pk).update(
-                image=saved_name,
-                avatar_review_status='approved',
-                avatar_pending_local='',
-            )
-
-            # Remove old avatar from storage
-            if old_image_name:
-                try:
-                    default_storage.delete(old_image_name)
-                except Exception:
-                    pass
-        except Exception:
-            logger.exception('Avatar upload failed after NudeNet approval for profile %s', profile_pk)
-            Profile.objects.filter(pk=profile_pk).update(avatar_review_status='approved', avatar_pending_local='')
-    else:
-        Profile.objects.filter(pk=profile_pk).update(avatar_review_status='rejected', avatar_pending_local='')
-
-    # Cleanup temp file regardless of outcome
-    try:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-    except Exception:
-        pass
+    logger.info(
+        'moderate_avatar_task is disabled (manual admin approval required). profile=%s',
+        profile_pk,
+    )
+    return
 
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, retry_kwargs={"max_retries": 5})

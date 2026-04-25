@@ -1,0 +1,6 @@
+name: vixogram-http-redirect-map
+defaultUrlRedirect:
+  hostRedirect: www.vixogram.tech
+  httpsRedirect: true
+  redirectResponseCode: MOVED_PERMANENTLY_DEFAULT
+  stripQuery: false

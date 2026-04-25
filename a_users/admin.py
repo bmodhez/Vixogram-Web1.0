@@ -1,7 +1,15 @@
 import csv
+import os
+from datetime import timedelta
 
-from django.contrib import admin
+from django.conf import settings
+from django.contrib import admin, messages
+from django.core.files.base import File
+from django.db import models
 from django.http import HttpResponse
+from django.shortcuts import redirect
+from django.urls import path, reverse
+from django.utils.html import format_html
 from django.utils import timezone
 
 try:
@@ -11,13 +19,153 @@ except Exception:  # pragma: no cover
 	async_to_sync = None
 	get_channel_layer = None
 
-from .models import BetaFeature, ChatBanHistory, Profile, Story, SupportEnquiry, UserDevice, UserReport
+from .models import BetaFeature, ChatBanHistory, Profile, ProfileAvatarSubmission, ProfileBannerSubmission, Story, StorySubmission, SupportEnquiry, UserDevice, UserReport, VixoPoints
 from .location_ip import geoip_city_country
 
 try:
 	from a_rtchat.models import Notification
 except Exception:  # pragma: no cover
 	Notification = None
+
+
+def _notify_profile_avatar_review_result(*, profile, approved: bool) -> None:
+	"""Persist + emit realtime notification for avatar moderation result."""
+	try:
+		user = getattr(profile, 'user', None)
+		user_id = int(getattr(user, 'id', 0) or 0)
+		if user_id <= 0:
+			return
+	except Exception:
+		return
+
+	if approved:
+		preview = 'Your profile pic has been approved by the Vixo Team.'
+	else:
+		preview = 'Your profile pic was rejected by the Vixo Team. Please upload a different photo.'
+
+	url = '/profile/edit/'
+
+	if Notification is not None:
+		try:
+			Notification.objects.create(
+				user_id=user_id,
+				from_user=None,
+				type='support',
+				preview=preview[:180],
+				url=url,
+			)
+		except Exception:
+			pass
+
+	try:
+		if async_to_sync is None or get_channel_layer is None:
+			return
+		channel_layer = get_channel_layer()
+		if channel_layer is None:
+			return
+		async_to_sync(channel_layer.group_send)(
+			f"notify_user_{user_id}",
+			{
+				'type': 'support_notify_handler',
+				'preview': preview[:180],
+				'url': url,
+			},
+		)
+	except Exception:
+		pass
+
+
+def _notify_profile_banner_review_result(*, profile, approved: bool) -> None:
+	"""Persist + emit realtime notification for banner moderation result."""
+	try:
+		user = getattr(profile, 'user', None)
+		user_id = int(getattr(user, 'id', 0) or 0)
+		if user_id <= 0:
+			return
+	except Exception:
+		return
+
+	if approved:
+		preview = 'Your banner photo has been approved by the Vixo Team.'
+	else:
+		preview = 'Your banner photo was rejected by the Vixo Team. Please upload a different photo.'
+
+	url = '/profile/edit/'
+
+	if Notification is not None:
+		try:
+			Notification.objects.create(
+				user_id=user_id,
+				from_user=None,
+				type='support',
+				preview=preview[:180],
+				url=url,
+			)
+		except Exception:
+			pass
+
+	try:
+		if async_to_sync is None or get_channel_layer is None:
+			return
+		channel_layer = get_channel_layer()
+		if channel_layer is None:
+			return
+		async_to_sync(channel_layer.group_send)(
+			f"notify_user_{user_id}",
+			{
+				'type': 'support_notify_handler',
+				'preview': preview[:180],
+				'url': url,
+			},
+		)
+	except Exception:
+		pass
+
+
+def _notify_story_review_result(*, user_id: int, approved: bool) -> None:
+	"""Persist + emit realtime notification for story moderation result."""
+	try:
+		uid = int(user_id or 0)
+		if uid <= 0:
+			return
+	except Exception:
+		return
+
+	if approved:
+		preview = 'Your story has been approved by the Vixo Team.'
+	else:
+		preview = 'Your story was rejected by the Vixo Team. Please upload a different image.'
+
+	url = '/profile/'
+
+	if Notification is not None:
+		try:
+			Notification.objects.create(
+				user_id=uid,
+				from_user=None,
+				type='support',
+				preview=preview[:180],
+				url=url,
+			)
+		except Exception:
+			pass
+
+	try:
+		if async_to_sync is None or get_channel_layer is None:
+			return
+		channel_layer = get_channel_layer()
+		if channel_layer is None:
+			return
+		async_to_sync(channel_layer.group_send)(
+			f"notify_user_{uid}",
+			{
+				'type': 'support_notify_handler',
+				'preview': preview[:180],
+				'url': url,
+			},
+		)
+	except Exception:
+		pass
 
 
 @admin.register(Profile)
@@ -120,6 +268,590 @@ class ProfileAdmin(admin.ModelAdmin):
 		if lat is None or lng is None:
 			return '-'
 		return f'{lat}, {lng}'
+
+
+@admin.register(VixoPoints)
+class VixoPointsAdmin(admin.ModelAdmin):
+	list_display = ('user', 'displayname', 'referral_points')
+	search_fields = ('user__username', 'displayname')
+	ordering = ('-referral_points', 'user__username')
+	readonly_fields = ('user', 'displayname', 'referral_points')
+
+	def has_add_permission(self, request):
+		return False
+
+
+@admin.register(ProfileAvatarSubmission)
+class ProfileAvatarSubmissionAdmin(admin.ModelAdmin):
+	list_display = ('user', 'queue_status', 'submitted_at', 'pending_preview', 'row_actions')
+	list_filter = ('avatar_review_status',)
+	search_fields = ('user__username', 'displayname', 'avatar_pending_local')
+	actions = ('approve_selected_submissions', 'reject_selected_submissions')
+	ordering = ('-id',)
+
+	def get_urls(self):
+		urls = super().get_urls()
+		custom_urls = [
+			path(
+				'<int:object_id>/approve/',
+				self.admin_site.admin_view(self.approve_single_submission_view),
+				name=f'{self.model._meta.app_label}_{self.model._meta.model_name}_approve',
+			),
+			path(
+				'<int:object_id>/reject/',
+				self.admin_site.admin_view(self.reject_single_submission_view),
+				name=f'{self.model._meta.app_label}_{self.model._meta.model_name}_reject',
+			),
+		]
+		return custom_urls + urls
+
+	def has_add_permission(self, request):
+		return False
+
+	def get_queryset(self, request):
+		qs = super().get_queryset(request).select_related('user')
+		return qs.filter(avatar_review_status='pending').exclude(avatar_pending_local='')
+
+	@admin.display(description='Queue status')
+	def queue_status(self, obj):
+		return 'Pending review'
+
+	@admin.display(description='Submitted at')
+	def submitted_at(self, obj):
+		path = str(getattr(obj, 'avatar_pending_local', '') or '').strip()
+		if not path:
+			return '-'
+		try:
+			ts = os.path.getmtime(path)
+			return timezone.datetime.fromtimestamp(ts, tz=timezone.get_current_timezone())
+		except Exception:
+			return '-'
+
+	@admin.display(description='Pending image')
+	def pending_preview(self, obj):
+		path = str(getattr(obj, 'avatar_pending_local', '') or '').strip()
+		if not path:
+			return '-'
+		name = os.path.basename(path)
+		if not name:
+			return '-'
+		base = str(getattr(settings, 'MEDIA_URL', '/media/') or '/media/')
+		if not base.endswith('/'):
+			base += '/'
+		img_url = f"{base}pending_avatars/{name}"
+		return format_html(
+			'<a href="{}" target="_blank" rel="noopener">'
+			'<img src="{}" alt="pending avatar" style="width:48px;height:48px;object-fit:cover;border-radius:9999px;border:1px solid #ddd;" />'
+			'</a>',
+			img_url,
+			img_url,
+		)
+
+	@admin.display(description='Actions')
+	def row_actions(self, obj):
+		approve_url = reverse(
+			f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_approve',
+			args=[obj.pk],
+		)
+		reject_url = reverse(
+			f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_reject',
+			args=[obj.pk],
+		)
+		return format_html(
+			'<div style="display:flex;gap:8px;align-items:center;">'
+			'<a class="button" href="{}" style="background:#16a34a;border-color:#15803d;color:#fff;">Approve</a>'
+			'<a class="button" href="{}" style="background:#dc2626;border-color:#b91c1c;color:#fff;" '
+			'onclick="return confirm(\'Reject this profile pic submission?\');">Reject</a>'
+			'</div>',
+			approve_url,
+			reject_url,
+		)
+
+	def _apply_approved_avatar(self, profile) -> bool:
+		path = str(getattr(profile, 'avatar_pending_local', '') or '').strip()
+		if not path or not os.path.exists(path):
+			Profile.objects.filter(pk=profile.pk).update(
+				avatar_review_status='rejected',
+				avatar_pending_local='',
+			)
+			return False
+
+		ext = os.path.splitext(path)[1].lower() or '.jpg'
+		file_name = f"avatar_reviewed_{profile.user_id}_{int(timezone.now().timestamp())}{ext}"
+		try:
+			with open(path, 'rb') as fh:
+				profile.image.save(file_name, File(fh), save=True)
+		except Exception:
+			return False
+
+		Profile.objects.filter(pk=profile.pk).update(
+			avatar_review_status='approved',
+			avatar_pending_local='',
+		)
+		try:
+			os.remove(path)
+		except Exception:
+			pass
+		return True
+
+	def approve_single_submission_view(self, request, object_id: int, *args, **kwargs):
+		profile = self.get_queryset(request).filter(pk=object_id).first()
+		if not profile:
+			self.message_user(request, 'Submission not found or already processed.', level=messages.WARNING)
+			return redirect(reverse(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist'))
+
+		if self._apply_approved_avatar(profile):
+			_notify_profile_avatar_review_result(profile=profile, approved=True)
+			self.message_user(request, f'Approved @{getattr(getattr(profile, "user", None), "username", profile.pk)} profile pic submission.')
+		else:
+			self.message_user(request, 'Could not approve submission (missing or invalid file).', level=messages.WARNING)
+
+		return redirect(reverse(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist'))
+
+	def reject_single_submission_view(self, request, object_id: int, *args, **kwargs):
+		profile = self.get_queryset(request).filter(pk=object_id).first()
+		if not profile:
+			self.message_user(request, 'Submission not found or already processed.', level=messages.WARNING)
+			return redirect(reverse(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist'))
+
+		path = str(getattr(profile, 'avatar_pending_local', '') or '').strip()
+		Profile.objects.filter(pk=profile.pk).update(
+			avatar_review_status='rejected',
+			avatar_pending_local='',
+		)
+		if path:
+			try:
+				os.remove(path)
+			except Exception:
+				pass
+		_notify_profile_avatar_review_result(profile=profile, approved=False)
+		self.message_user(request, f'Rejected @{getattr(getattr(profile, "user", None), "username", profile.pk)} profile pic submission.')
+		return redirect(reverse(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist'))
+
+	@admin.action(description='Approve selected submissions')
+	def approve_selected_submissions(self, request, queryset):
+		ok = 0
+		failed = 0
+		for profile in queryset:
+			if self._apply_approved_avatar(profile):
+				ok += 1
+				_notify_profile_avatar_review_result(profile=profile, approved=True)
+			else:
+				failed += 1
+		if ok:
+			self.message_user(request, f'Approved {ok} profile pic submission(s).')
+		if failed:
+			self.message_user(request, f'{failed} submission(s) could not be approved (missing or invalid file).', level=messages.WARNING)
+
+	@admin.action(description='Reject selected submissions')
+	def reject_selected_submissions(self, request, queryset):
+		rejected = 0
+		for profile in queryset:
+			path = str(getattr(profile, 'avatar_pending_local', '') or '').strip()
+			Profile.objects.filter(pk=profile.pk).update(
+				avatar_review_status='rejected',
+				avatar_pending_local='',
+			)
+			if path:
+				try:
+					os.remove(path)
+				except Exception:
+					pass
+			rejected += 1
+			_notify_profile_avatar_review_result(profile=profile, approved=False)
+		self.message_user(request, f'Rejected {rejected} profile pic submission(s).')
+
+
+@admin.register(ProfileBannerSubmission)
+class ProfileBannerSubmissionAdmin(admin.ModelAdmin):
+	list_display = ('user', 'queue_status', 'submitted_at', 'pending_preview', 'row_actions')
+	list_filter = ('cover_review_status',)
+	search_fields = ('user__username', 'displayname', 'cover_pending_local')
+	actions = ('approve_selected_submissions', 'reject_selected_submissions')
+	ordering = ('-id',)
+
+	def get_urls(self):
+		urls = super().get_urls()
+		custom_urls = [
+			path(
+				'<int:object_id>/approve/',
+				self.admin_site.admin_view(self.approve_single_submission_view),
+				name=f'{self.model._meta.app_label}_{self.model._meta.model_name}_approve',
+			),
+			path(
+				'<int:object_id>/reject/',
+				self.admin_site.admin_view(self.reject_single_submission_view),
+				name=f'{self.model._meta.app_label}_{self.model._meta.model_name}_reject',
+			),
+		]
+		return custom_urls + urls
+
+	def has_add_permission(self, request):
+		return False
+
+	def get_queryset(self, request):
+		qs = super().get_queryset(request).select_related('user')
+		return qs.filter(cover_review_status='pending').exclude(cover_pending_local='')
+
+	@admin.display(description='Queue status')
+	def queue_status(self, obj):
+		return 'Pending review'
+
+	@admin.display(description='Submitted at')
+	def submitted_at(self, obj):
+		path = str(getattr(obj, 'cover_pending_local', '') or '').strip()
+		if not path:
+			return '-'
+		try:
+			ts = os.path.getmtime(path)
+			return timezone.datetime.fromtimestamp(ts, tz=timezone.get_current_timezone())
+		except Exception:
+			return '-'
+
+	@admin.display(description='Pending image')
+	def pending_preview(self, obj):
+		path = str(getattr(obj, 'cover_pending_local', '') or '').strip()
+		if not path:
+			return '-'
+		name = os.path.basename(path)
+		if not name:
+			return '-'
+		base = str(getattr(settings, 'MEDIA_URL', '/media/') or '/media/')
+		if not base.endswith('/'):
+			base += '/'
+		img_url = f"{base}pending_covers/{name}"
+		return format_html(
+			'<a href="{}" target="_blank" rel="noopener">'
+			'<img src="{}" alt="pending banner" style="width:96px;height:48px;object-fit:cover;border-radius:8px;border:1px solid #ddd;" />'
+			'</a>',
+			img_url,
+			img_url,
+		)
+
+	@admin.display(description='Actions')
+	def row_actions(self, obj):
+		approve_url = reverse(
+			f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_approve',
+			args=[obj.pk],
+		)
+		reject_url = reverse(
+			f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_reject',
+			args=[obj.pk],
+		)
+		return format_html(
+			'<div style="display:flex;gap:8px;align-items:center;">'
+			'<a class="button" href="{}" style="background:#16a34a;border-color:#15803d;color:#fff;">Approve</a>'
+			'<a class="button" href="{}" style="background:#dc2626;border-color:#b91c1c;color:#fff;" '
+			'onclick="return confirm(\'Reject this banner photo submission?\');">Reject</a>'
+			'</div>',
+			approve_url,
+			reject_url,
+		)
+
+	def _apply_approved_cover(self, profile) -> bool:
+		path = str(getattr(profile, 'cover_pending_local', '') or '').strip()
+		if not path or not os.path.exists(path):
+			Profile.objects.filter(pk=profile.pk).update(
+				cover_review_status='rejected',
+				cover_pending_local='',
+			)
+			return False
+
+		ext = os.path.splitext(path)[1].lower() or '.jpg'
+		file_name = f"cover_reviewed_{profile.user_id}_{int(timezone.now().timestamp())}{ext}"
+		try:
+			with open(path, 'rb') as fh:
+				profile.cover_image.save(file_name, File(fh), save=True)
+		except Exception:
+			return False
+
+		Profile.objects.filter(pk=profile.pk).update(
+			cover_review_status='approved',
+			cover_pending_local='',
+		)
+		try:
+			os.remove(path)
+		except Exception:
+			pass
+		return True
+
+	def approve_single_submission_view(self, request, object_id: int, *args, **kwargs):
+		profile = self.get_queryset(request).filter(pk=object_id).first()
+		if not profile:
+			self.message_user(request, 'Submission not found or already processed.', level=messages.WARNING)
+			return redirect(reverse(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist'))
+
+		if self._apply_approved_cover(profile):
+			_notify_profile_banner_review_result(profile=profile, approved=True)
+			self.message_user(request, f'Approved @{getattr(getattr(profile, "user", None), "username", profile.pk)} banner photo submission.')
+		else:
+			self.message_user(request, 'Could not approve submission (missing or invalid file).', level=messages.WARNING)
+
+		return redirect(reverse(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist'))
+
+	def reject_single_submission_view(self, request, object_id: int, *args, **kwargs):
+		profile = self.get_queryset(request).filter(pk=object_id).first()
+		if not profile:
+			self.message_user(request, 'Submission not found or already processed.', level=messages.WARNING)
+			return redirect(reverse(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist'))
+
+		path = str(getattr(profile, 'cover_pending_local', '') or '').strip()
+		Profile.objects.filter(pk=profile.pk).update(
+			cover_review_status='rejected',
+			cover_pending_local='',
+		)
+		if path:
+			try:
+				os.remove(path)
+			except Exception:
+				pass
+		_notify_profile_banner_review_result(profile=profile, approved=False)
+		self.message_user(request, f'Rejected @{getattr(getattr(profile, "user", None), "username", profile.pk)} banner photo submission.')
+		return redirect(reverse(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist'))
+
+	@admin.action(description='Approve selected submissions')
+	def approve_selected_submissions(self, request, queryset):
+		ok = 0
+		failed = 0
+		for profile in queryset:
+			if self._apply_approved_cover(profile):
+				ok += 1
+				_notify_profile_banner_review_result(profile=profile, approved=True)
+			else:
+				failed += 1
+		if ok:
+			self.message_user(request, f'Approved {ok} banner photo submission(s).')
+		if failed:
+			self.message_user(request, f'{failed} submission(s) could not be approved (missing or invalid file).', level=messages.WARNING)
+
+	@admin.action(description='Reject selected submissions')
+	def reject_selected_submissions(self, request, queryset):
+		rejected = 0
+		for profile in queryset:
+			path = str(getattr(profile, 'cover_pending_local', '') or '').strip()
+			Profile.objects.filter(pk=profile.pk).update(
+				cover_review_status='rejected',
+				cover_pending_local='',
+			)
+			if path:
+				try:
+					os.remove(path)
+				except Exception:
+					pass
+			rejected += 1
+			_notify_profile_banner_review_result(profile=profile, approved=False)
+		self.message_user(request, f'Rejected {rejected} banner photo submission(s).')
+
+
+@admin.register(StorySubmission)
+class StorySubmissionAdmin(admin.ModelAdmin):
+	list_display = ('id', 'user', 'queue_status', 'submitted_at', 'pending_preview', 'row_actions')
+	list_filter = ('review_status', 'created_at')
+	search_fields = ('user__username', 'pending_local')
+	actions = ('approve_selected_submissions', 'reject_selected_submissions')
+	ordering = ('-created_at',)
+
+	def get_urls(self):
+		urls = super().get_urls()
+		custom_urls = [
+			path(
+				'<int:object_id>/approve/',
+				self.admin_site.admin_view(self.approve_single_submission_view),
+				name=f'{self.model._meta.app_label}_{self.model._meta.model_name}_approve',
+			),
+			path(
+				'<int:object_id>/reject/',
+				self.admin_site.admin_view(self.reject_single_submission_view),
+				name=f'{self.model._meta.app_label}_{self.model._meta.model_name}_reject',
+			),
+		]
+		return custom_urls + urls
+
+	def has_add_permission(self, request):
+		return False
+
+	def get_queryset(self, request):
+		qs = super().get_queryset(request).select_related('user')
+		return qs.filter(review_status='pending').exclude(pending_local='')
+
+	@admin.display(description='Queue status')
+	def queue_status(self, obj):
+		return 'Pending review'
+
+	@admin.display(description='Submitted at')
+	def submitted_at(self, obj):
+		path = str(getattr(obj, 'pending_local', '') or '').strip()
+		if not path:
+			return '-'
+		try:
+			ts = os.path.getmtime(path)
+			return timezone.datetime.fromtimestamp(ts, tz=timezone.get_current_timezone())
+		except Exception:
+			return '-'
+
+	@admin.display(description='Pending image')
+	def pending_preview(self, obj):
+		path = str(getattr(obj, 'pending_local', '') or '').strip()
+		if not path:
+			return '-'
+		name = os.path.basename(path)
+		if not name:
+			return '-'
+		base = str(getattr(settings, 'MEDIA_URL', '/media/') or '/media/')
+		if not base.endswith('/'):
+			base += '/'
+		img_url = f"{base}pending_stories/{name}"
+		return format_html(
+			'<a href="{}" target="_blank" rel="noopener">'
+			'<img src="{}" alt="pending story" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid #ddd;" />'
+			'</a>',
+			img_url,
+			img_url,
+		)
+
+	@admin.display(description='Actions')
+	def row_actions(self, obj):
+		approve_url = reverse(
+			f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_approve',
+			args=[obj.pk],
+		)
+		reject_url = reverse(
+			f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_reject',
+			args=[obj.pk],
+		)
+		return format_html(
+			'<div style="display:flex;gap:8px;align-items:center;">'
+			'<a class="button" href="{}" style="background:#16a34a;border-color:#15803d;color:#fff;">Approve</a>'
+			'<a class="button" href="{}" style="background:#dc2626;border-color:#b91c1c;color:#fff;" '
+			'onclick="return confirm(\'Reject this story submission?\');">Reject</a>'
+			'</div>',
+			approve_url,
+			reject_url,
+		)
+
+	def _create_approved_story(self, submission, reviewed_by=None):
+		path = str(getattr(submission, 'pending_local', '') or '').strip()
+		if not path or not os.path.exists(path):
+			StorySubmission.objects.filter(pk=submission.pk).update(
+				review_status='rejected',
+				pending_local='',
+				reviewed_at=timezone.now(),
+				reviewed_by=reviewed_by,
+			)
+			return None
+
+		ext = os.path.splitext(path)[1].lower() or '.jpg'
+		file_name = f"story_reviewed_{submission.user_id}_{int(timezone.now().timestamp())}{ext}"
+		story = Story(user=submission.user)
+		try:
+			with open(path, 'rb') as fh:
+				story.image.save(file_name, File(fh), save=True)
+		except Exception:
+			return None
+
+		# Keep only the newest active story for this user.
+		now = timezone.now()
+		cutoff = now - timedelta(hours=getattr(Story, 'TTL_HOURS', 24))
+		active_qs = (
+			Story.objects
+			.filter(user=submission.user)
+			.filter(
+				models.Q(expires_at__gt=now)
+				| models.Q(expires_at__isnull=True, created_at__gte=cutoff)
+			)
+			.order_by('-created_at', '-id')
+		)
+		for s in active_qs[1:]:
+			try:
+				s.delete()
+			except Exception:
+				pass
+
+		StorySubmission.objects.filter(pk=submission.pk).update(
+			review_status='approved',
+			pending_local='',
+			reviewed_at=timezone.now(),
+			reviewed_by=reviewed_by,
+			approved_story=story,
+		)
+		try:
+			os.remove(path)
+		except Exception:
+			pass
+		return story
+
+	def approve_single_submission_view(self, request, object_id: int, *args, **kwargs):
+		submission = self.get_queryset(request).filter(pk=object_id).first()
+		if not submission:
+			self.message_user(request, 'Submission not found or already processed.', level=messages.WARNING)
+			return redirect(reverse(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist'))
+
+		story = self._create_approved_story(submission, reviewed_by=getattr(request, 'user', None))
+		if story is not None:
+			_notify_story_review_result(user_id=submission.user_id, approved=True)
+			self.message_user(request, f'Approved @{getattr(submission.user, "username", submission.user_id)} story submission.')
+		else:
+			self.message_user(request, 'Could not approve story submission (missing or invalid file).', level=messages.WARNING)
+
+		return redirect(reverse(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist'))
+
+	def reject_single_submission_view(self, request, object_id: int, *args, **kwargs):
+		submission = self.get_queryset(request).filter(pk=object_id).first()
+		if not submission:
+			self.message_user(request, 'Submission not found or already processed.', level=messages.WARNING)
+			return redirect(reverse(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist'))
+
+		path = str(getattr(submission, 'pending_local', '') or '').strip()
+		StorySubmission.objects.filter(pk=submission.pk).update(
+			review_status='rejected',
+			pending_local='',
+			reviewed_at=timezone.now(),
+			reviewed_by=getattr(request, 'user', None),
+		)
+		if path:
+			try:
+				os.remove(path)
+			except Exception:
+				pass
+		_notify_story_review_result(user_id=submission.user_id, approved=False)
+		self.message_user(request, f'Rejected @{getattr(submission.user, "username", submission.user_id)} story submission.')
+		return redirect(reverse(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist'))
+
+	@admin.action(description='Approve selected submissions')
+	def approve_selected_submissions(self, request, queryset):
+		ok = 0
+		failed = 0
+		for submission in queryset:
+			story = self._create_approved_story(submission, reviewed_by=getattr(request, 'user', None))
+			if story is not None:
+				ok += 1
+				_notify_story_review_result(user_id=submission.user_id, approved=True)
+			else:
+				failed += 1
+		if ok:
+			self.message_user(request, f'Approved {ok} story submission(s).')
+		if failed:
+			self.message_user(request, f'{failed} submission(s) could not be approved (missing or invalid file).', level=messages.WARNING)
+
+	@admin.action(description='Reject selected submissions')
+	def reject_selected_submissions(self, request, queryset):
+		rejected = 0
+		for submission in queryset:
+			path = str(getattr(submission, 'pending_local', '') or '').strip()
+			StorySubmission.objects.filter(pk=submission.pk).update(
+				review_status='rejected',
+				pending_local='',
+				reviewed_at=timezone.now(),
+				reviewed_by=getattr(request, 'user', None),
+			)
+			if path:
+				try:
+					os.remove(path)
+				except Exception:
+					pass
+			rejected += 1
+			_notify_story_review_result(user_id=submission.user_id, approved=False)
+		self.message_user(request, f'Rejected {rejected} story submission(s).')
 
 
 @admin.register(UserDevice)

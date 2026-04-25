@@ -584,3 +584,270 @@ html.vixo-chat-page *::-webkit-scrollbar-track {
   background-position: center;
   background-repeat: no-repeat;
 }
+
+/* Random Video page buttons */
+.vixo-rv-placeholder-inner .vixo-rv-btn {
+  padding: 0.7rem 1.25rem;
+}
+
+.vixo-rv-chat-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  border: 0;
+  background: rgba(7, 14, 35, 0.84);
+  padding: 0;
+  height: 100%;
+  min-height: 380px;
+}
+
+.vixo-rv-chat-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#rv_status_panel,
+#rv_chat_messages {
+  min-height: 0;
+}
+
+#rv_chat_messages {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.vixo-rv-chat-composer {
+  margin-top: 0.35rem;
+  transform: none;
+}
+
+.vixo-rv-chat-input {
+  min-height: 2.6rem;
+  line-height: 1.2;
+}
+
+.vixo-rv-chat-send {
+  min-height: 2.6rem;
+  min-width: 3.25rem;
+}
+
+@media (min-width: 1024px) {
+  .vixo-rv-cam-stack {
+    width: 100%;
+  }
+
+  .vixo-rv-cam-stack .vixo-rv-video-card,
+  .vixo-rv-cam-stack .vixo-rv-video {
+    height: 280px;
+    min-height: 280px;
+  }
+}
+
+#rv_online {
+  background: rgba(2, 6, 23, 0.45);
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  border-radius: 9999px;
+  padding: 0.2rem 0.65rem;
+}
+
+.vixo-rv-btn {
+  position: relative;
+  border-radius: 9999px;
+  border: 0;
+  background: rgba(17, 24, 39, 0.72);
+  color: #e5e7eb;
+  font-weight: 700;
+  font-size: 0.92rem;
+  padding: 0.6rem 1.2rem;
+  transition: opacity 220ms ease, transform 220ms ease, max-width 220ms ease, margin 220ms ease, padding 220ms ease;
+}
+
+.vixo-rv-btn[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%) translateY(4px);
+  opacity: 0;
+  pointer-events: none;
+  white-space: pre-line;
+  text-align: center;
+  line-height: 1.25;
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: #ffffff;
+  background: #000000;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.6rem;
+  padding: 0.4rem 0.55rem;
+  min-width: max-content;
+  z-index: 30;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.vixo-rv-btn[data-tooltip]:hover::after,
+.vixo-rv-btn[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.vixo-rv-btn.is-hidden {
+  opacity: 0;
+  transform: translateY(6px) scale(0.96);
+  pointer-events: none;
+  max-width: 0;
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 0;
+  padding-right: 0;
+  overflow: hidden;
+}
+
+.vixo-rv-btn.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.vixo-rv-btn--primary {
+  border: 0;
+  color: #fff;
+  background: linear-gradient(90deg, rgba(20, 184, 166, 0.96), rgba(99, 102, 241, 0.96));
+  box-shadow: 0 10px 24px rgba(45, 212, 191, 0.28);
+}
+
+.vixo-rv-btn--danger {
+  border-color: transparent;
+  color: rgba(254, 202, 202, 0.95);
+  background: rgba(127, 29, 29, 0.3);
+}
+
+.vixo-rv-btn--warn {
+  color: rgba(254, 202, 202, 0.97);
+  background: rgba(185, 28, 28, 0.34);
+  border: 1px solid rgba(248, 113, 113, 0.62);
+}
+
+@media (max-width: 640px) {
+  .vixo-rv-cam-stack {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .vixo-rv-media-controls {
+    gap: 0.35rem;
+    bottom: 0.55rem;
+    left: 0.5rem;
+  }
+
+  .vixo-rv-media-btn {
+    width: 2rem;
+    height: 2rem;
+    font-size: 0.9rem;
+  }
+
+  .vixo-rv-video-card,
+  .vixo-rv-video {
+    height: clamp(160px, 28vh, 210px);
+    min-height: 160px;
+  }
+
+  .vixo-rv-chat-card {
+    height: clamp(180px, 32vh, 240px);
+    min-height: 180px;
+  }
+
+  .vixo-rv-chat-composer {
+    margin-top: 0.2rem;
+    padding-bottom: calc(0.2rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Random Video page: light-theme surfaces only */
+.theme-light .vixo-rv-shell {
+  background:
+    radial-gradient(1200px circle at 0% 0%, rgba(191, 219, 254, 0.34), transparent 56%),
+    radial-gradient(1100px circle at 100% 100%, rgba(186, 230, 253, 0.30), transparent 58%),
+    linear-gradient(135deg, rgba(241, 245, 249, 0.98), rgba(248, 250, 252, 0.99));
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.theme-light .vixo-rv-video-card {
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  background: linear-gradient(160deg, rgba(239, 246, 255, 0.96), rgba(241, 245, 249, 0.96));
+}
+
+.theme-light .vixo-rv-video-card--me {
+  background: linear-gradient(160deg, rgba(224, 242, 254, 0.94), rgba(241, 245, 249, 0.95));
+}
+
+.theme-light .vixo-rv-video {
+  background: rgba(226, 232, 240, 0.8);
+}
+
+.theme-light .vixo-rv-label {
+  color: rgb(30 41 59);
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(148, 163, 184, 0.5);
+  box-shadow: 0 4px 10px rgba(148, 163, 184, 0.18);
+}
+
+.theme-light .vixo-rv-placeholder {
+  color: rgba(51, 65, 85, 0.92);
+  background: rgba(241, 245, 249, 0.72);
+}
+
+.theme-light .vixo-rv-chat-card {
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(203, 213, 225, 0.9);
+}
+
+.theme-light .vixo-rv-chat-wrap {
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  background: rgba(255, 255, 255, 0.82) !important;
+}
+
+.theme-light .vixo-rv-chat-input {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  color: rgb(30 41 59) !important;
+}
+
+.theme-light .vixo-rv-media-btn {
+  border-color: rgba(148, 163, 184, 0.75);
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(51, 65, 85, 0.98);
+}
+
+.theme-light #rv_online {
+  background: rgba(219, 234, 254, 0.9);
+  border-color: rgba(147, 197, 253, 0.95);
+  color: rgb(30 64 175);
+}
+
+.theme-light .vixo-rv-btn {
+  background: rgba(226, 232, 240, 0.95);
+  color: rgb(30 41 59);
+}
+
+.theme-light .vixo-rv-btn--primary {
+  color: #fff;
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.92), rgba(99, 102, 241, 0.92));
+  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.22);
+}
+
+.theme-light .vixo-rv-btn--danger {
+  color: rgba(153, 27, 27, 0.95);
+  background: rgba(254, 226, 226, 0.9);
+  border: 1px solid rgba(252, 165, 165, 0.85);
+}
+
+.theme-light .vixo-rv-btn--warn {
+  color: rgb(153 27 27);
+  background: rgba(254, 202, 202, 0.92);
+  border: 1px solid rgba(239, 68, 68, 0.88);
+}

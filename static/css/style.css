@@ -2438,8 +2438,8 @@ body.vixo-rv-page main.self-stretch {
 }
 
 .vixo-rv-chat-composer {
-  margin-top: 0.9rem;
-  transform: translateY(10px);
+  margin-top: 0.35rem;
+  transform: none;
 }
 
 .vixo-rv-chat-input {
@@ -2550,6 +2550,11 @@ body.vixo-rv-page main.self-stretch {
 }
 
 @media (max-width: 640px) {
+  .vixo-rv-cam-stack {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
   .vixo-rv-media-controls {
     gap: 0.35rem;
     bottom: 0.55rem;
@@ -2563,10 +2568,19 @@ body.vixo-rv-page main.self-stretch {
   }
 
   .vixo-rv-video-card,
-  .vixo-rv-video,
+  .vixo-rv-video {
+    height: clamp(160px, 28vh, 210px);
+    min-height: 160px;
+  }
+
   .vixo-rv-chat-card {
-    height: 240px;
-    min-height: 240px;
+    height: clamp(180px, 32vh, 240px);
+    min-height: 180px;
+  }
+
+  .vixo-rv-chat-composer {
+    margin-top: 0.2rem;
+    padding-bottom: calc(0.2rem + env(safe-area-inset-bottom, 0px));
   }
 }
 

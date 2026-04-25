@@ -247,6 +247,11 @@ ALLOWED_HOSTS.extend(
     [
         "vixogram-connect.onrender.com",
         "vixogram.onrender.com",
+        "vixogram.tech",
+        "www.vixogram.tech",
+        'http://127.0.0.1:8000',
+        'http://localhost:8000',
+        
     ]
 )
 
@@ -292,6 +297,8 @@ CSRF_TRUSTED_ORIGINS.extend(
     [
         "https://vixogram-connect.onrender.com",
         "https://vixogram.onrender.com",
+        "https://vixogram.tech",
+        "https://www.vixogram.tech",
     ]
 )
 
@@ -319,7 +326,7 @@ if ENVIRONMENT == "production" or (_render_origin and _render_origin.startswith(
     SESSION_COOKIE_SECURE = True
 
     # SecurityMiddleware hardening (safe defaults; override via env if needed).
-    SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", default=(ENVIRONMENT == "production"))
+    SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", default=True)
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_REFERRER_POLICY = (os.environ.get("SECURE_REFERRER_POLICY") or "same-origin").strip() or "same-origin"
 
@@ -510,6 +517,23 @@ MOBILE_AD_CHAT_FEED_CTA_URL = os.environ.get('MOBILE_AD_CHAT_FEED_CTA_URL', '')
 MOBILE_AD_CHAT_FEED_IMAGE_URL = os.environ.get('MOBILE_AD_CHAT_FEED_IMAGE_URL', '')
 MOBILE_AD_CHAT_FEED_ADVERTISER = os.environ.get('MOBILE_AD_CHAT_FEED_ADVERTISER', '')
 
+# --- Ad/verification hooks (env-driven; no hardcoded partner script in code) ---
+# Example (Monetag):
+# - MONETAG_META_CONTENT: value from <meta name="monetag" content="...">
+# - MONETAG_HEAD_SCRIPT_SRC: URL from partner "insert code" script src
+MONETAG_META_CONTENT = (os.environ.get('MONETAG_META_CONTENT') or '').strip()
+MONETAG_HEAD_SCRIPT_SRC = (os.environ.get('MONETAG_HEAD_SCRIPT_SRC') or '').strip()
+
+# CSP extension lists for external ad providers.
+# Use space/comma separated values, e.g.:
+# AD_SCRIPT_SRC_EXTRA=https://example-ad.net https://cdn.example-ad.net
+AD_SCRIPT_SRC_EXTRA = _env_csv('AD_SCRIPT_SRC_EXTRA', default='')
+AD_STYLE_SRC_EXTRA = _env_csv('AD_STYLE_SRC_EXTRA', default='')
+AD_IMG_SRC_EXTRA = _env_csv('AD_IMG_SRC_EXTRA', default='')
+AD_CONNECT_SRC_EXTRA = _env_csv('AD_CONNECT_SRC_EXTRA', default='')
+AD_FRAME_SRC_EXTRA = _env_csv('AD_FRAME_SRC_EXTRA', default='')
+AD_REFRESH_SECONDS = max(10, int(os.environ.get('AD_REFRESH_SECONDS') or 45))
+
 # --- IPL Live Score integration (backend-only API calls) ---
 IPL_RAPIDAPI_KEY = (os.environ.get('IPL_RAPIDAPI_KEY') or '').strip()
 IPL_RAPIDAPI_HOST = (os.environ.get('IPL_RAPIDAPI_HOST') or 'cricbuzz-cricket.p.rapidapi.com').strip()
@@ -574,6 +598,11 @@ USE_REDIS_CACHE = _env_bool(
     default=(ENVIRONMENT == 'production' and bool((REDIS_URL or '').strip())),
 )
 
+USE_REDIS_CHANNEL_LAYER = _env_bool(
+    'USE_REDIS_CHANNEL_LAYER',
+    default=(ENVIRONMENT == 'production' and bool((REDIS_URL or '').strip())),
+)
+
 if USE_REDIS_CACHE and REDIS_URL:
     CACHES = {
         'default': {
@@ -597,7 +626,7 @@ else:
     }
 
 # Local/dev: don't depend on Redis (prevents WS disconnects when Redis isn't running).
-if ENVIRONMENT == 'production' and REDIS_URL:
+if USE_REDIS_CHANNEL_LAYER and REDIS_URL:
     _redis_host_entry: object
     _channel_capacity = int(os.environ.get('CHANNEL_LAYER_CAPACITY', '2000'))
     _channel_expiry = int(os.environ.get('CHANNEL_LAYER_EXPIRY', '60'))

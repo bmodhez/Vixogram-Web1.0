@@ -35,6 +35,9 @@ def site_contact(request):
     return {
         'CONTACT_EMAIL': (getattr(settings, 'CONTACT_EMAIL', '') or '').strip(),
         'CONTACT_INSTAGRAM_URL': (getattr(settings, 'CONTACT_INSTAGRAM_URL', '') or '').strip(),
+        'MONETAG_META_CONTENT': (getattr(settings, 'MONETAG_META_CONTENT', '') or '').strip(),
+        'MONETAG_HEAD_SCRIPT_SRC': (getattr(settings, 'MONETAG_HEAD_SCRIPT_SRC', '') or '').strip(),
+        'AD_REFRESH_SECONDS': int(getattr(settings, 'AD_REFRESH_SECONDS', 45) or 45),
     }
 
 

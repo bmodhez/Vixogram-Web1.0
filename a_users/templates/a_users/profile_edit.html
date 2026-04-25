@@ -93,6 +93,12 @@
                                     id="current_cover_fallback"
                                     class="absolute inset-0 bg-gradient-to-r from-purple-600/40 via-indigo-600/30 to-sky-600/40{% if profile.cover_url %} hidden{% endif %}"
                                 ></div>
+                                {% if profile.cover_review_status == 'pending' %}
+                                <div class="absolute inset-0 pointer-events-none" style="background: repeating-linear-gradient(45deg, rgba(245,158,11,0.7) 0px, rgba(245,158,11,0.7) 10px, rgba(17,24,39,0.78) 10px, rgba(17,24,39,0.78) 20px);"></div>
+                                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                    <span class="text-[10px] font-bold text-white px-2 py-1 rounded bg-black/35" style="text-shadow: 0 1px 3px #000;">Banner Under Review</span>
+                                </div>
+                                {% endif %}
                                 <div class="absolute inset-0 bg-gradient-to-b from-black/10 via-black/20 to-black/60"></div>
                             </div>
                             <div class="px-4 py-3 text-xs text-gray-400">Upload a custom background image (max 1MB).</div>
@@ -248,6 +254,94 @@
 {{ block.super }}
 <script>
 (() => {
+    const PROFILE_SUCCESS_PHRASE = 'profile pic has been submitted successfully for review';
+    const BANNER_SUCCESS_PHRASE = 'banner photo';
+
+    const openCenterSuccessModal = (messageText, titleText) => {
+        const existing = document.getElementById('avatar-submit-success-modal');
+        if (existing) {
+            return;
+        }
+
+        const overlay = document.createElement('div');
+        overlay.id = 'avatar-submit-success-modal';
+        overlay.className = 'fixed inset-0 z-[65] flex items-center justify-center p-4 sm:p-6';
+        overlay.innerHTML = `
+            <div class="absolute inset-0 bg-gray-950/75 backdrop-blur-sm" data-avatar-submit-close></div>
+            <div class="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-emerald-400/35 bg-gradient-to-br from-[#081428] via-[#0e1e3b] to-[#0f172a] text-gray-100 shadow-2xl shadow-black/40">
+                <div aria-hidden="true" class="h-[2px] w-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-sky-400"></div>
+                <div class="p-5 sm:p-6">
+                    <div class="flex items-start gap-3">
+                        <div class="mt-1 h-2.5 w-2.5 flex-none rounded-full bg-emerald-400"></div>
+                        <div class="min-w-0 flex-1">
+                            <h3 class="text-base font-extrabold tracking-wide text-emerald-300"></h3>
+                            <p class="mt-2 whitespace-pre-line text-sm leading-6 text-gray-200"></p>
+                        </div>
+                        <button type="button" class="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/60 transition" aria-label="Dismiss" data-avatar-submit-close>
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="mt-5 flex justify-end">
+                        <button type="button" class="inline-flex items-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400 transition" data-avatar-submit-close>
+                            Okay
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const msgEl = overlay.querySelector('p');
+        const titleEl = overlay.querySelector('h3');
+        if (msgEl) {
+            msgEl.textContent = String(messageText || '').trim();
+        }
+        if (titleEl) {
+            titleEl.textContent = String(titleText || 'Submission Sent');
+        }
+
+        const close = () => {
+            try { overlay.remove(); } catch {}
+        };
+        overlay.querySelectorAll('[data-avatar-submit-close]').forEach((el) => {
+            el.addEventListener('click', close);
+        });
+
+        document.body.appendChild(overlay);
+    };
+
+    const moveAvatarSuccessToastToCenter = () => {
+        const container = document.getElementById('toast-container');
+        if (!container) {
+            return;
+        }
+        const toasts = Array.from(container.querySelectorAll('.toast'));
+        let foundText = '';
+        let foundTitle = 'Submission Sent';
+        toasts.forEach((toast) => {
+            const textNode = toast.querySelector('.flex-1');
+            let text = String((textNode && textNode.textContent) || toast.textContent || '').trim();
+            // Defensive cleanup: ignore close-icon glyphs if they leaked into copied text.
+            text = text.replace(/^\s*[x×]\s*/i, '').replace(/\s*[x×]\s*$/i, '').trim();
+            const lower = text.toLowerCase();
+            const isProfile = lower.includes(PROFILE_SUCCESS_PHRASE);
+            const isBanner = lower.includes(BANNER_SUCCESS_PHRASE) && lower.includes('submitted');
+            if (isProfile || isBanner) {
+                foundText = text;
+                foundTitle = isProfile
+                    ? 'Profile Pic Submitted'
+                    : (lower.includes('profile pic') ? 'Profile + Banner Submitted' : 'Banner Photo Submitted');
+                try { toast.remove(); } catch {}
+            }
+        });
+        if (foundText) {
+            openCenterSuccessModal(foundText, foundTitle);
+        }
+    };
+
+    // Run once on load (server-rendered messages) and shortly after in case JS rehydrates toasts.
+    moveAvatarSuccessToastToCenter();
+    setTimeout(moveAvatarSuccessToastToCenter, 60);
+
     // Username availability check (2s debounce)
     const usernameInput = document.getElementById('id_username') || document.querySelector('input[name="username"]');
     const usernameIcon = document.getElementById('username_status_icon');
@@ -698,14 +792,12 @@
     const avatarPreview = document.getElementById('current_avatar_preview');
     const profileForm = fileInput.closest('form');
     const DEFAULT_LOADING_TEXT = 'Saving changes…';
-    const AVATAR_REVIEW_LOADING_TEXT = 'Pic is under review please wait for a while';
 
     if (!modal || !closeBtn || !cancelBtn || !applyBtn || !cropArea || !cropImg || !zoomInput) return;
 
     const syncLoadingText = () => {
         if (!profileForm) return;
-        const hasAvatarFile = Boolean(fileInput.files && fileInput.files.length);
-        profileForm.setAttribute('data-loading-text', hasAvatarFile ? AVATAR_REVIEW_LOADING_TEXT : DEFAULT_LOADING_TEXT);
+        profileForm.setAttribute('data-loading-text', DEFAULT_LOADING_TEXT);
     };
     syncLoadingText();
 

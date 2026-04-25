@@ -1,0 +1,7 @@
+﻿status:
+  latestCreatedRevisionName: vixogram-web-00018-fk2
+  latestReadyRevisionName: vixogram-web-00018-fk2
+  traffic:
+  - latestRevision: true
+    percent: 100
+    revisionName: vixogram-web-00018-fk2

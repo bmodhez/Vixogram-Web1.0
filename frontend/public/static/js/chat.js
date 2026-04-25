@@ -1896,6 +1896,60 @@
     const loadOlderWrap = document.getElementById('chat_load_older_wrap');
     const onlineCountEl = document.getElementById('room-online-count');
     const onlineCountMirrors = Array.from(document.querySelectorAll('[data-online-count-mirror]'));
+    let __composerClearGuard = null;
+
+    function __teardownComposerClearGuard() {
+        if (!__composerClearGuard) return;
+        try {
+            if (__composerClearGuard.observer) __composerClearGuard.observer.disconnect();
+        } catch {
+            // ignore
+        }
+        try {
+            if (__composerClearGuard.timeout) clearTimeout(__composerClearGuard.timeout);
+        } catch {
+            // ignore
+        }
+        __composerClearGuard = null;
+    }
+
+    function __armComposerClearGuard(submittedBody) {
+        if (!input || !messagesEl) return;
+        const expected = String(submittedBody || '').trim();
+        if (!expected) return;
+
+        __teardownComposerClearGuard();
+
+        const maybeClear = () => {
+            const current = String(input.value || '').trim();
+            if (current !== expected) return;
+            try {
+                resetComposerAfterSend();
+            } catch {
+                input.value = '';
+                if (typedMsInput) typedMsInput.value = '';
+            }
+        };
+
+        let observer = null;
+        try {
+            observer = new MutationObserver((mutationList) => {
+                const hasAddedNodes = mutationList.some((m) => m && m.addedNodes && m.addedNodes.length > 0);
+                if (!hasAddedNodes) return;
+                maybeClear();
+                __teardownComposerClearGuard();
+            });
+            observer.observe(messagesEl, { childList: true });
+        } catch {
+            observer = null;
+        }
+
+        const timeout = setTimeout(() => {
+            __teardownComposerClearGuard();
+        }, 10000);
+
+        __composerClearGuard = { observer, timeout };
+    }
 
     let __loadingOlder = false;
 
@@ -2149,10 +2203,24 @@
             if (!event.detail.successful) return;
             typingStartedAt = null;
             if (typedMsInput) typedMsInput.value = '';
+            if (!editingMessageId) {
+                try { resetComposerAfterSend(); } catch {}
+            }
         });
     }
 
     if (form) {
+        // Guard against multi-handler races: clear only when a new message node appears.
+        form.addEventListener('submit', () => {
+            if (editingMessageId) return;
+            const fileInput = document.getElementById('chat_file_input');
+            const inUploadMode = !!(fileInput && fileInput.files && fileInput.files.length);
+            if (inUploadMode) return;
+            const body = (input && input.value ? input.value : '').trim();
+            if (!body) return;
+            __armComposerClearGuard(body);
+        }, true);
+
         // Capture submit before HTMX when editing.
         form.addEventListener('submit', async (e) => {
             if (!editingMessageId) return;
